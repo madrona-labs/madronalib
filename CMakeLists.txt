@@ -319,6 +319,8 @@ if(APPLE)
     set(HEADERS_INCLUDE_DIR "include/madronalib")
 elseif(WIN32)
     set(HEADERS_INCLUDE_DIR "include")
+else()
+    set(HEADERS_INCLUDE_DIR "include/madronalib")  # Linux
 endif()
 
 install(FILES include/madronalib.h DESTINATION ${HEADERS_INCLUDE_DIR})
@@ -351,19 +353,20 @@ endif()
 # cJSON, aes256 and others added as source
 
 if(APPLE)
-  target_link_libraries(madronalib "-framework Carbon")
-  target_link_libraries(madronalib "-framework CoreServices")
-  target_link_libraries(madronalib "-framework CoreMIDI")
-  target_link_libraries(madronalib "-framework AudioToolbox")
-  target_link_libraries(madronalib "-framework AudioUnit")
-  target_link_libraries(madronalib "-framework CoreAudio")
-  target_link_libraries(madronalib "-framework Foundation")
-  target_link_libraries(madronalib "-framework OpenGL")
-  target_link_libraries(madronalib "-framework GLUT")
-else(APPLE)
-  # target_link_libraries(madronalib ${DNSSD_LIBRARIES})
-  target_link_libraries(madronalib winmm.lib)
+  target_link_libraries(madronalib PRIVATE "-framework Carbon")
+  target_link_libraries(madronalib PRIVATE "-framework CoreServices")
+  target_link_libraries(madronalib PRIVATE "-framework CoreMIDI")
+  target_link_libraries(madronalib PRIVATE "-framework AudioToolbox")
+  target_link_libraries(madronalib PRIVATE "-framework AudioUnit")
+  target_link_libraries(madronalib PRIVATE "-framework CoreAudio")
+  target_link_libraries(madronalib PRIVATE "-framework Foundation")
+  target_link_libraries(madronalib PRIVATE "-framework OpenGL")
+  target_link_libraries(madronalib PRIVATE "-framework GLUT")
+elseif(WIN32)
+  # target_link_libraries(madronalib PRIVATE ${DNSSD_LIBRARIES})
+  target_link_libraries(madronalib PRIVATE winmm.lib)
 endif()
+# Linux linking handled earlier via LINUX_ASOUND/LINUX_JACK/LINUX_PULSE
 
 #--------------------------------------------------------------------
 # function to build RtAudio / RtMidi example
