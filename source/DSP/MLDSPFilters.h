@@ -63,9 +63,7 @@ struct Lopass
   State state{};
 
   inline void clear() { state.fill(0.f); }
-  
-  WIP
-  // WIP
+
   // template<typename T> T lopassCalc(T x)
   // this will do x1 (float) and x4 (SIMD) versions
   // further templates will use x4 version to create Banks of COLS, ROWS
@@ -73,6 +71,7 @@ struct Lopass
   // get internal coefficients for a given omega and k.
   // omega: the frequency divided by the sample rate.
   // k: 1/Q, where k=0 is maximum resonance.
+  
   static Coeffs makeCoeffs(float omega, float k)
   {
     float piOmega = kPi * omega;
