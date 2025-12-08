@@ -405,6 +405,30 @@ function(make_example EXAMPLE_APP_NAME EXAMPLE_SOURCE_FILE)
     endif()
 endfunction()
 
+#--------------------------------------------------------------------
+# function to build simple console example
+#--------------------------------------------------------------------
+
+function(make_console_example EXAMPLE_APP_NAME EXAMPLE_SOURCE_FILE EXAMPLE_SUBDIR)
+
+    set(
+        EXAMPLE_SOURCES
+        ${ML_ROOT}/examples/${EXAMPLE_SUBDIR}/${EXAMPLE_SOURCE_FILE}
+    )
+
+    add_executable(${EXAMPLE_APP_NAME} ${EXAMPLE_SOURCES})
+
+    target_include_directories(${EXAMPLE_APP_NAME} PRIVATE
+        ${ML_ROOT}/external
+        )
+
+    target_link_libraries(${EXAMPLE_APP_NAME} PRIVATE madronalib)
+
+    set_target_properties(${EXAMPLE_APP_NAME}
+        PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+endfunction()
 
 #--------------------------------------------------------------------
 # build all examples
@@ -417,6 +441,10 @@ if(BUILD_EXAMPLES)
   make_example(MIDIExample midi.cpp)
   make_example(ControllersToAudioExample controllers-to-audio.cpp)
   make_example(SineExample sine.cpp)
+
+  # OSC examples (simple console apps)
+  make_console_example(osc-listener osc-listener.cpp osc)
+  make_console_example(osc-sender osc-sender.cpp osc)
 endif()
 
 #--------------------------------------------------------------------
