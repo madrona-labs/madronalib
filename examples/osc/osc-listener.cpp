@@ -3,23 +3,23 @@
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
 // Simple OSC listener example - prints received OSC messages to console.
+// Uses madronalib's AudioTask for consistent structure with other examples.
+//
 // Usage: osc-listener [port]
 //   port: UDP port to listen on (default: 8002)
 
 #include <iostream>
-#include <csignal>
-#include <atomic>
+#include <cstdlib>
 
+#include "madronalib.h"
 #include "MLOSCReceiver.h"
+#include "MLAudioTask.h"
 
 using namespace ml;
 
-std::atomic<bool> running{true};
-
-void signalHandler(int)
-{
-  running = false;
-}
+constexpr int kInputChannels = 0;
+constexpr int kOutputChannels = 1;
+constexpr int kSampleRate = 48000;
 
 void printValue(const Value& v)
 {
@@ -56,6 +56,19 @@ void printValue(const Value& v)
   }
 }
 
+struct OSCListenerState
+{
+  OSCReceiver receiver;
+};
+
+void oscListenerProcess(AudioContext* ctx, void* state)
+{
+  // OSC messages are handled asynchronously by the receiver's callback.
+  // This process function just keeps the AudioTask running.
+  // Output silence (AudioTask requires output, but we don't use it)
+  ctx->outputs[0] = DSPVector(0.f);
+}
+
 int main(int argc, char* argv[])
 {
   int port = 8002;
@@ -70,12 +83,11 @@ int main(int argc, char* argv[])
     }
   }
 
-  std::signal(SIGINT, signalHandler);
-  std::signal(SIGTERM, signalHandler);
+  // Set up state
+  OSCListenerState state;
 
-  OSCReceiver receiver;
-
-  receiver.setMessageCallback([](Path address, std::vector<Value> args) {
+  // Set up message callback to print received messages
+  state.receiver.setMessageCallback([](Path address, std::vector<Value> args) {
     std::cout << "/" << address.toText();
     if (!args.empty())
     {
@@ -89,23 +101,25 @@ int main(int argc, char* argv[])
     std::cout << std::endl;
   });
 
-  if (!receiver.open(port))
+  if (!state.receiver.open(port))
   {
     std::cerr << "Failed to open OSC receiver on port " << port << std::endl;
     return 1;
   }
 
   std::cout << "Listening for OSC messages on port " << port << std::endl;
-  std::cout << "Press Ctrl+C to quit" << std::endl;
+  std::cout << "Press any key to quit" << std::endl;
   std::cout << "---" << std::endl;
 
-  while (running)
-  {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  }
+  // Create audio context and task
+  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioTask task(&ctx, oscListenerProcess, &state);
+
+  // Run until user presses a key
+  int result = task.runConsoleApp();
 
   std::cout << "\nShutting down..." << std::endl;
-  receiver.close();
+  state.receiver.close();
 
-  return 0;
+  return result;
 }
