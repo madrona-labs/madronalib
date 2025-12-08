@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "MLMessage.h"
 #include "MLQueue.h"
 #include "MLTimer.h"
@@ -15,6 +17,10 @@
 
 namespace ml
 {
+
+// Callback type for optional message logging
+// Parameters: actor name (if registered), message, is_enqueue (true) or dispatch (false)
+using ActorLogCallback = std::function<void(Path actorName, const Message&, bool isEnqueue)>;
 
 class Actor;
 class ActorRegistry
@@ -43,12 +49,22 @@ class Actor
   Queue<Message> messageQueue_{kDefaultMessageQueueSize};
   Timer queueTimer_;
 
+  // Optional logging callback (static, shared by all actors)
+  static ActorLogCallback logCallback_;
+
+  // Actor's registered name (for logging identification)
+  Path registeredName_;
+
  protected:
   size_t getMessagesAvailable() { return messageQueue_.elementsAvailable(); }
 
  public:
   Actor() = default;
   virtual ~Actor() = default;
+
+  // Set/clear global log callback for message debugging
+  static void setLogCallback(ActorLogCallback cb) { logCallback_ = cb; }
+  static void clearLogCallback() { logCallback_ = nullptr; }
 
   void resizeQueue(size_t n) { messageQueue_.resize(n); }
 
@@ -78,6 +94,10 @@ class Actor
   // enqueueMessage just pushes the message onto the queue.
   void enqueueMessage(Message m)
   {
+    if (logCallback_)
+    {
+      logCallback_(registeredName_, m, true);  // true = enqueue
+    }
     // queue returns true unless full.
     if (!(messageQueue_.push(m)))
     {
@@ -98,6 +118,10 @@ class Actor
   {
     while (Message m = messageQueue_.pop())
     {
+      if (logCallback_)
+      {
+        logCallback_(registeredName_, m, false);  // false = dispatch
+      }
       onMessage(m);
     }
   }

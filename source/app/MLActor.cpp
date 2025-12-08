@@ -6,9 +6,16 @@
 
 using namespace ml;
 
+// Define static member for optional logging callback
+ActorLogCallback Actor::logCallback_{nullptr};
+
 Actor* ActorRegistry::getActor(Path actorName) { return actors_[actorName]; }
 
-void ActorRegistry::doRegister(Path actorName, Actor* a) { actors_[actorName] = a; }
+void ActorRegistry::doRegister(Path actorName, Actor* a)
+{
+  actors_[actorName] = a;
+  a->registeredName_ = actorName;  // Store name for logging identification
+}
 
 void ActorRegistry::doRemove(Actor* actorToRemove)
 {
