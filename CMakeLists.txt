@@ -137,16 +137,12 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/sse2neon)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/app)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/DSP)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/matrix)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/networking)
-
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-if(APPLE)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf)
-else()
-endif()
+# OSC support - cross-platform
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf)
 
 #--------------------------------------------------------------------
 # collect sources and headers
@@ -178,15 +174,12 @@ file(GLOB RTAUDIO_HEADERS "external/rtaudio/*.h")
 file(GLOB RTMIDI_SOURCES "external/rtmidi/*.cpp")
 file(GLOB RTMIDI_HEADERS "external/rtmidi/*.h")
 
-if(APPLE)
+# Platform-specific OSC socket implementations
+if(APPLE OR UNIX)
     file(GLOB OSC_SOURCES_NATIVE "external/oscpack/ip/posix/*.cpp")
-else()
-   #TODO OSC for windows
-   file(GLOB OSC_SOURCES_NATIVE "external/oscpack/ip/win32/*.cpp")
+elseif(WIN32)
+    file(GLOB OSC_SOURCES_NATIVE "external/oscpack/ip/win32/*.cpp")
 endif()
-
-file(GLOB NETWORKING_SOURCES "source/networking/*.cpp")
-file(GLOB NETWORKING_HEADERS "source/networking/*.h")
 
 set(OSC_HEADERS
     ${OSC_HEADERS_IP}
@@ -222,15 +215,11 @@ set(madronalib_SOURCES
 
     message("RTMIDI_SOURCES: " ${RTMIDI_SOURCES} )
 
-if(APPLE)
-  list(APPEND madronalib_SOURCES ${NETWORKING_SOURCES} )
-  list(APPEND madronalib_SOURCES ${OSC_SOURCES_IP} )
-  list(APPEND madronalib_SOURCES ${OSC_SOURCES_OSC} )
-  list(APPEND madronalib_SOURCES ${OSC_SOURCES_ZEROCONF} )
-  list(APPEND madronalib_SOURCES ${OSC_SOURCES_NATIVE} )
-else()
-  #TODO OSC for windows
-endif()
+# OSC support - cross-platform
+list(APPEND madronalib_SOURCES ${OSC_SOURCES_IP} )
+list(APPEND madronalib_SOURCES ${OSC_SOURCES_OSC} )
+list(APPEND madronalib_SOURCES ${OSC_SOURCES_ZEROCONF} )
+list(APPEND madronalib_SOURCES ${OSC_SOURCES_NATIVE} )
 
 # send binary output to the current build/bin
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -339,11 +328,7 @@ install(FILES
     ${HEADERS_INCLUDE_DIR}
   )
 
-if(APPLE)
-    install(FILES ${NETWORKING_HEADERS} DESTINATION ${HEADERS_INCLUDE_DIR})
-else()
-    #TODO OSC For win / Linux
-endif()
+# OSC headers are installed as part of APP_HEADERS (now in source/app/)
 
 #--------------------------------------------------------------------
 # Add platform libraries
@@ -461,10 +446,6 @@ set(madronalib_SOURCES_internal
     ${MATRIX_SOURCES}
     ${MATRIX_HEADERS}
     )
-
-if(APPLE)
-  list(APPEND madronalib_SOURCES_internal ${NETWORKING_SOURCES} )
-endif()
 
 # Adding clang-format target if executable is found
 find_program(CLANG_FORMAT "clang-format")
