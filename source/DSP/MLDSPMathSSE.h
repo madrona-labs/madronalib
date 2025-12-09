@@ -10,6 +10,7 @@
 // SSE 4.1 required
 #include <smmintrin.h>
 
+#include <cstdint>
 #include <float.h>
 #include <assert.h>
 
