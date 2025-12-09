@@ -35,6 +35,7 @@
 #include <emmintrin.h>
 #endif
 
+#include <cstdint>
 #include <float.h>
 
 #pragma once
