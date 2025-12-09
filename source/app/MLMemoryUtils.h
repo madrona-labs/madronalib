@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <assert.h>
+#include <limits>
 
 namespace ml
 {
