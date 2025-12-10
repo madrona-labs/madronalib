@@ -9,6 +9,7 @@
 #pragma once
 
 #include "MLActor.h"
+#include "MLFileLogger.h"
 #include "MLOSCSender.h"
 #include "MLSharedResource.h"
 
@@ -42,6 +43,11 @@ class ActorLogger
   void clearFilter() { filterPath_ = Path(); }
   Path getFilter() const { return filterPath_; }
 
+  // File output control (routes Actor logs to FileLogger)
+  void enableFileOutput(bool enable = true);
+  void disableFileOutput() { fileOutputEnabled_ = false; }
+  bool isFileOutputEnabled() const { return fileOutputEnabled_; }
+
  private:
   void handleLogCallback(Path actorName, const Message& m, bool isEnqueue);
 
@@ -49,6 +55,7 @@ class ActorLogger
   bool enabled_{false};
   bool logEnqueue_{true};
   bool logDispatch_{true};
+  bool fileOutputEnabled_{false};
   Path filterPath_;
 };
 
