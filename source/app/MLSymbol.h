@@ -34,6 +34,7 @@
 #include <cstring>
 #include <iostream>
 #include <unordered_map>
+#include <mutex>
 
 #include "MLHash.h"
 #include "MLText.h"
