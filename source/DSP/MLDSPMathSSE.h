@@ -102,10 +102,6 @@ inline bool isSIMDAligned(float* p)
 
 #define vecSet1 _mm_set1_ps
 
-// low-level store and load a vector to/from a float*.
-// the pointer must be aligned or the program will crash!
-// void vecStore(float* pDest, DSPVector v);
-// DSPVector vecLoad(float* pSrc);
 #define vecStore _mm_store_ps
 #define vecLoad _mm_load_ps
 

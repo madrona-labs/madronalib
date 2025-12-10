@@ -64,7 +64,6 @@ struct Lopass
 
   inline void clear() { state.fill(0.f); }
   
-  WIP
   // WIP
   // template<typename T> T lopassCalc(T x)
   // this will do x1 (float) and x4 (SIMD) versions
