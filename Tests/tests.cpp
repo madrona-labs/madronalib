@@ -7,7 +7,7 @@
 #ifdef _WINDOWS
 
 #define CATCH_CONFIG_RUNNER
-#include "testUtils.h"
+#include "MLTestUtils.h"
 #include "catch.hpp"
 
 // Windows hack to pause console output so we can read it.
@@ -22,7 +22,7 @@ int main(int argc, char** argv)
 #else
 
 #define CATCH_CONFIG_MAIN
-#include "testUtils.h"
+#include "MLTestUtils.h"
 #include "catch.hpp"
 
 #endif
