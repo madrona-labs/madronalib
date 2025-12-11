@@ -98,7 +98,7 @@ class Value
   template <size_t N>
   std::array<float, N> getFloatArray() const
   {
-    std::array<float, N> r;
+    std::array<float, N> r{0.f};
     if (type_ == kFloatArray)
     {
       memcpy(r.data(), dataPtr_, sizeInBytes_);

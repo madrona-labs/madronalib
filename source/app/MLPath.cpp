@@ -19,9 +19,9 @@ Path runtimePath(const char* str)
   Path p;
   if (!str) return p;
 
-  constexpr char separator = '/';
   auto it = TextFragment::Iterator(str);
   const char* segmentStartPtr = str;
+  const char separator = '/';
 
   do
   {
