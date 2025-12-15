@@ -136,10 +136,10 @@ class Value
   static constexpr size_t kHeaderBytes{16};
   static constexpr size_t kLocalDataBytes = kStructSizeInBytes - kHeaderBytes;
 
+  uint8_t localData_[kLocalDataBytes];
   uint8_t* dataPtr_{localData_};
   Type type_{kUndefined};
   uint32_t sizeInBytes_{0};
-  uint8_t localData_[kLocalDataBytes];
 
   // private utilities
   void copyOrAllocate(Type type, const uint8_t* pSrc, size_t bytes);
