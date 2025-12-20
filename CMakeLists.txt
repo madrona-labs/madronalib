@@ -140,6 +140,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/matrix)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # OSC support - cross-platform
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf)
@@ -166,7 +167,10 @@ file(GLOB OSC_HEADERS_ZEROCONF "external/oscpack/zeroconf/*.h")
 
 file(GLOB OSC_SOURCES_IP "external/oscpack/ip/*.cpp")
 file(GLOB OSC_SOURCES_OSC "external/oscpack/osc/*.cpp")
-file(GLOB OSC_SOURCES_ZEROCONF "external/oscpack/zeroconf/*.cpp")
+# Zeroconf is POSIX-only (uses sys/select.h, DNS-SD)
+if(NOT WIN32)
+    file(GLOB OSC_SOURCES_ZEROCONF "external/oscpack/zeroconf/*.cpp")
+endif()
 
 file(GLOB RTAUDIO_SOURCES "external/rtaudio/*.cpp")
 file(GLOB RTAUDIO_HEADERS "external/rtaudio/*.h")
@@ -218,7 +222,9 @@ set(madronalib_SOURCES
 # OSC support - cross-platform
 list(APPEND madronalib_SOURCES ${OSC_SOURCES_IP} )
 list(APPEND madronalib_SOURCES ${OSC_SOURCES_OSC} )
-list(APPEND madronalib_SOURCES ${OSC_SOURCES_ZEROCONF} )
+if(NOT WIN32)
+    list(APPEND madronalib_SOURCES ${OSC_SOURCES_ZEROCONF} )
+endif()
 list(APPEND madronalib_SOURCES ${OSC_SOURCES_NATIVE} )
 
 # send binary output to the current build/bin
@@ -348,8 +354,8 @@ if(APPLE)
   target_link_libraries(madronalib PRIVATE "-framework OpenGL")
   target_link_libraries(madronalib PRIVATE "-framework GLUT")
 elseif(WIN32)
-  # target_link_libraries(madronalib PRIVATE ${DNSSD_LIBRARIES})
-  target_link_libraries(madronalib PRIVATE winmm.lib)
+  # winmm for multimedia timer, ws2_32 for Winsock2 (OSC networking)
+  target_link_libraries(madronalib PRIVATE winmm.lib ws2_32.lib)
 endif()
 # Linux linking handled earlier via LINUX_ASOUND/LINUX_JACK/LINUX_PULSE
 
