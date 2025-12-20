@@ -385,10 +385,10 @@ TEST_CASE("madronalib/core/vec-math", "[vec-math]")
 {
   SIMDVectorFloat v1{2.0f, 3.f, 4.f};
   
-  std::cout << "v1: " << v1 << "\n";
+  //std::cout << "v1: " << v1 << "\n";
   
   SIMDVectorFloat v2 = v1 * 2.f;
   
-  std::cout << "v2: " << v2 << "\n";
+  //std::cout << "v2: " << v2 << "\n";
 
 }

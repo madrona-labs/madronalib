@@ -27,13 +27,6 @@ bool operator==(testType l, testType r)
 
 TEST_CASE("madronalib/core/values/core", "[values]")
 {
-  // Memory layout
-  Value v;
-  auto valueHeaderPtr = reinterpret_cast<char*>(&v);
-  auto valueDataPtr = reinterpret_cast<const char*>(v.data());
-  size_t dataOffsetBytes = valueDataPtr - valueHeaderPtr;
-  REQUIRE(dataOffsetBytes == Value::getHeaderBytes());
-  
   // std::array<float> converters
   std::array<float, 5> far1{2, 4, 3, 2, 9};
   Value far1Val (far1);

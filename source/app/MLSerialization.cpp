@@ -62,6 +62,7 @@ struct ValueBinaryHeader
   unsigned int size : Value::kMaxDataSizeBits;
 };
 
+// make sure all the values in our Type enum fit into the type field
 static_assert((2 << ValueBinaryHeader::kTypeBits) >= Value::kNumTypes);
 
 size_t getBinarySize(const Value& v) { return sizeof(ValueBinaryHeader) + v.size(); }

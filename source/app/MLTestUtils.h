@@ -7,6 +7,7 @@
 #include <deque>
 #include <thread>
 #include <iostream>
+#include <numeric>
 
 #include "MLDSPProjections.h"
 

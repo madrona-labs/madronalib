@@ -127,20 +127,22 @@ class Value
   static constexpr size_t kMaxDataSizeBits{28};
   static constexpr size_t kMaxDataBytes = 1 << (kMaxDataSizeBits - 1);
   static constexpr size_t getLocalDataMaxBytes() { return kLocalDataBytes; }
-  static constexpr size_t getHeaderBytes() { return kHeaderBytes; }
 
- private:
-  // kHeaderBytes should be the size of everything except the local data. This is verified in
-  // valueTest.cpp.
+  // we set the size of the Value object here. Whatever bytes are not needed for the
+  // pointer, type and size are used for local storage.
   static constexpr size_t kStructSizeInBytes{64};
-  static constexpr size_t kHeaderBytes{16};
-  static constexpr size_t kLocalDataBytes = kStructSizeInBytes - kHeaderBytes;
+  
+ private:
 
+  static constexpr size_t kHeaderSize = sizeof(uint8_t*) + sizeof(Type) + sizeof(uint32_t);
+  static constexpr size_t kLocalDataBytes = kStructSizeInBytes - kHeaderSize;
+
+  // the data
   uint8_t localData_[kLocalDataBytes];
   uint8_t* dataPtr_{localData_};
   Type type_{kUndefined};
   uint32_t sizeInBytes_{0};
-
+  
   // private utilities
   void copyOrAllocate(Type type, const uint8_t* pSrc, size_t bytes);
   void copyOrMove(Type newType, uint8_t* pSrc, size_t bytes);
@@ -158,6 +160,8 @@ class Value
   // friend in MLSerialization
   friend Value readBinaryToValue(const uint8_t*& readPtr);
 };
+
+static_assert(sizeof(Value) == Value::kStructSizeInBytes);
 
 std::ostream& operator<<(std::ostream& out, const ml::Value& r);
 
