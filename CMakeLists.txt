@@ -8,7 +8,7 @@
 # set min version and deployment target -- before project
 #--------------------------------------------------------------------
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.20)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
@@ -54,35 +54,52 @@ endif()
 # Compiler flags
 #--------------------------------------------------------------------
 
- set(CMAKE_CXX_STANDARD 17)
- set(CMAKE_CXX_STANDARD_REQUIRED True)
- set(CMAKE_CXX_VISIBILITY_PRESET hidden)
- set(CMAKE_VISIBILITY_INLINES_HIDDEN OFF)
- 
- #set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
- #set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN OFF)
 
- if(APPLE)
-   # For now, explicitly disable C++17 alignment feature
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-aligned-new")
- elseif(WIN32)
-   # no unknown pragma warning
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4068")
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:alignedNew-")
- endif()
- 
-if(MSVC)
-    # For Visual Studio
+#--------------------------------------------------------------------
+# Platform-specific compiler flags
+#--------------------------------------------------------------------
+
+if(APPLE)
+    # Disable C++17 aligned new feature for compatibility
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-aligned-new")
+    
+    # Debug info in Release builds
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g")
+    
+elseif(WIN32)
+    # Suppress unknown pragma warnings and disable aligned new
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4068 /Zc:alignedNew-")
+    
+    # Debug info in Release builds (for profiling/debugging)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
+    
+    # Release build optimizations for DSP performance
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2")      # Optimize for speed
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /fp:fast") # Fast floating-point
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oi")      # Intrinsic functions
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Ot")      # Favor fast code
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /GL")      # Whole program optimization
+    
+    # Link-time code generation (companion to /GL)
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
+    set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
+    
 else()
-    # For GCC/Clang and other compilers
+    # GCC/Clang on Linux
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g")
 endif()
 
-if(MSVC)
-    # arcane thing about setting runtime library flags
-    cmake_policy(SET CMP0091 NEW)
+#--------------------------------------------------------------------
+# MSVC runtime library configuration
+#--------------------------------------------------------------------
 
+if(MSVC)
+    # Use static runtime library (/MT)
+    cmake_policy(SET CMP0091 NEW)
     add_compile_options(
         $<$<CONFIG:>:/MT>
         $<$<CONFIG:Debug>:/MTd>

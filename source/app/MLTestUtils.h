@@ -1,6 +1,8 @@
 //  madronalib
 //  tests.h
 
+#pragma once
+
 #include <chrono>
 #include <deque>
 #include <thread>
@@ -19,7 +21,15 @@ namespace testUtils {
 // TODO this could be its own module with tests
 template <class T> struct Stats
 {
-  static constexpr size_t kMaxSampleSize{1000};
+  static constexpr size_t kMaxSampleSize{500};
+  
+  void clear()
+  {
+    recentSamples.clear();
+    mCount = 0;
+    m_min = 0;
+    m_max = 0;
+  }
   
   void accumulate(T x)
   {
@@ -58,9 +68,17 @@ template <class T> struct Stats
     return mCount;
   }
   
+  // returns the mean of all samples collected since creation or clear()
   T mean() const
   {
     return (mCount > 0) ? m_newM : T();
+  }
+  
+  // returns the mean of recent samples. Good for running display.
+  T getRecentMean() const
+  {
+    auto sum = std::accumulate(recentSamples.begin(), recentSamples.end(), 0);
+    return sum;
   }
   
   T median()
@@ -98,8 +116,8 @@ template <class T> struct Stats
   {
     T medianValue = median();
     T stdDev = standardDeviation();
-    T loBounds = medianValue - stdDev;
-    T hiBounds = medianValue + stdDev;
+    T loBounds = medianValue - stdDev*2.f;
+    T hiBounds = medianValue + stdDev*2.f;
     
     recentSamples.erase(std::remove_if(recentSamples.begin(),
                                        recentSamples.end(),
@@ -110,8 +128,8 @@ template <class T> struct Stats
   
   int mCount{0};
   T m_oldM, m_newM, m_oldS, m_newS;
-  T m_min{0.};
-  T m_max{0.};
+  T m_min{0};
+  T m_max{0};
   std::deque< T > recentSamples;
 };
 
@@ -141,7 +159,7 @@ template <class T> inline TimedResult<T> timeIterations(std::function<T(void)> f
   // run once in order to prime cache
   result += func();
   
-  // roughly time the function
+  // run the function 1000x to get a rough time
   constexpr int kRoughTimeIters{1000};
   auto roughStart = high_resolution_clock::now();
   for(int i=0; i<kRoughTimeIters; ++i)

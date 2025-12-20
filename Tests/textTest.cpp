@@ -6,7 +6,7 @@
 
 #include "catch.hpp"
 #include "madronalib.h"
-#include "testUtils.h"
+#include "MLTestUtils.h"
 
 using namespace ml;
 
@@ -23,20 +23,6 @@ TEST_CASE("madronalib/core/text", "[text]")
   TextFragment t5("///hello/world/get///", kobayashi, "/segments");
 
   std::vector< TextFragment > tv{t0, t1, t2, t3, t4, t5};
-  
-  /*
-  int i{0};
-  for(auto tf : tv)
-  {
-    auto segs = textUtils::split(tf, '/');
-    REQUIRE(segs.size() == i++);
-    
-    Path p = textToPath(tf);
-    TextFragment tf2 = pathToText(p);
-    Path p2 = textToPath(tf2);
-    
-    REQUIRE(p == p2);
-  }*/
   
 
   for(int i=0; i<100; ++i)

@@ -465,7 +465,7 @@ void EventsToSignals::processVector(int startTime)
   }
 
   testCounter += kFloatsPerDSPVector;
-  const int samples = 96000;
+  const int samples = 48000;
   if (testCounter > samples)
   {
     // dumpVoices();
@@ -791,23 +791,34 @@ void EventsToSignals::processControllerEvent(const Event& event)
       }
       case (hash("MPE")):
       {
-        // modulate voices matching event channel.
-        // TODO refactor once working properly
-        for (int v = 1; v < polyphony_ + 1; ++v)
+        // modulate main voice
+        if (event.channel == 1)
         {
-          if (voices[v].creatorKeyIdx_ == event.channel)
+          if (ctrl == voiceModCC_)
           {
-            if (ctrl == voiceModCC_)
+            // modulate main MPE voice
+            voices[0].currentMod = val;
+          }
+        }
+        else
+        {
+          // modulate other voices matching event channel.
+          for (int v = 1; v < polyphony_ + 1; ++v)
+          {
+            if (voices[v].creatorKeyIdx_ == event.channel)
             {
-              voices[v].currentMod = val;
-            }
-            if (ctrl == 73)
-            {
-              voices[v].currentX = val;
-            }
-            else if (ctrl == 74)
-            {
-              voices[v].currentY = val;
+              if (ctrl == voiceModCC_)
+              {
+                voices[v].currentMod = val;
+              }
+              if (ctrl == 73)
+              {
+                voices[v].currentX = val;
+              }
+              else if (ctrl == 74)
+              {
+                voices[v].currentY = val;
+              }
             }
           }
         }

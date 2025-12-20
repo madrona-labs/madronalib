@@ -509,8 +509,10 @@ inline std::ostream& operator<<(std::ostream& out, const TextPath& r)
 // Convenience functions
 
 inline Path textToPath(const TextFragment& t) { return runtimePath(t); }
+inline TextPath textToTextPath(const TextFragment& t, const char separator) { return runtimeTextPath(t.getText(), separator); }
 inline TextFragment pathToText(const Path& p) { return p.toText(); }
 inline TextFragment pathToText(const TextPath& p) { return p.toText(); }
+
 
 class PathList
 {

@@ -23,6 +23,7 @@
 #include "MLSharedResource.h"
 #include "MLSymbol.h"
 #include "MLText.h"
+#include "MLTestUtils.h"
 #include "MLTextUtils.h"
 #include "MLTimer.h"
 

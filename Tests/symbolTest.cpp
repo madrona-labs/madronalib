@@ -6,7 +6,7 @@
 
 #include "catch.hpp"
 #include "madronalib.h"
-#include "testUtils.h"
+#include "MLTestUtils.h"
 
 #if _WIN32
 #define HAVE_U8_LITERALS 0

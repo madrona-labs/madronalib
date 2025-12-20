@@ -6,7 +6,7 @@
 
 #include "catch.hpp"
 #include "madronalib.h"
-#include "testUtils.h"
+#include "MLTestUtils.h"
 
 const int longSleepMs{50};
 

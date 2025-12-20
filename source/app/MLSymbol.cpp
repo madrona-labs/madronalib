@@ -17,17 +17,6 @@ uint64_t SymbolTable::registerSymbol(const char* text, size_t len)
 
   std::lock_guard<std::mutex> lock(mutex_);
 
-  // TEMP
-  /*
-  std::cout << "making ";
-  for (int i = 0; i < len; ++i)
-  {
-    std::cout << text[i];
-  }
-  std::cout << "\n";
-*/
-
-
   auto it = symbols_.find(hash);
   if (it != symbols_.end())
   {

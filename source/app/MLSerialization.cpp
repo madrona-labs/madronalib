@@ -322,14 +322,24 @@ Tree<Value> binaryToValueTreeOld(const std::vector<uint8_t>& binaryData)
         auto pathSize = pathHeader.dataBytes;
         auto pathHeaderSize = sizeof(BinaryChunkHeader);
         auto path = binaryToPathOld(pData + idx);
+
         idx += pathSize + pathHeaderSize;
 
         // get value
         BinaryChunkHeader valueHeader{*reinterpret_cast<const BinaryChunkHeader*>(pData + idx)};
+
         auto valueType = valueHeader.type;
         auto valueSize = valueHeader.dataBytes;
         auto valueHeaderSize = sizeof(BinaryChunkHeader);
         auto val = binaryToValueOld(pData + idx);
+
+        // TEMP
+        if (val.getType() == Value::kUndefined)
+        {
+          std::cout << "binaryToValueTreeOld: undefined value for " << path << "! exiting. \n";
+          return outputTree;
+        }
+
         idx += valueSize + valueHeaderSize;
         // write to tree
         outputTree[path] = val;

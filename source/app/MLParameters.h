@@ -189,7 +189,7 @@ public:
       case Value::kUndefined:
         return Value();
         break;
-        // float and int get converted
+        // float and int get converted (fallthru)
       case Value::kFloat:
       case Value::kInt:
         return Value(convertRealToNormalizedFloatValue(pname, val));

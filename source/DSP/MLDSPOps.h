@@ -79,6 +79,19 @@ inline T* DSPVectorAlignPointer(const T* p)
 
 #endif
 
+
+
+
+
+// TODO
+/*
+remove MANUAL_ALIGN_DSPVECTOR
+make FloatArray type
+use DSPChunk<ROWS> = FLoatArray somehow
+make templates that create Banks with vertical output (<COLS, ROWS> ? ) using 4x SIMD ops
+*/
+
+
 // ----------------------------------------------------------------
 // DSPVectorArray
 //
@@ -150,11 +163,11 @@ class DSPVectorArray
 
   // default constructor: zeroes the data.
   // TODO this seems to be taking a lot of time! investigate
-  DSPVectorArray() { data_.arrayData_.fill(0.f); }
+  constexpr DSPVectorArray() { data_.arrayData_.fill(0.f); }
 
   // conversion constructor to float.  This keeps the syntax of common DSP code
   // shorter: "va + DSPVector(1.f)" becomes just "va + 1.f".
-  DSPVectorArray(float k) { operator=(k); }
+  constexpr DSPVectorArray(float k) { operator=(k); }
 
   // unaligned data * ctors
   explicit DSPVectorArray(float* pData) { load(*this, pData); }
@@ -340,7 +353,9 @@ class DSPVectorArray
   }
   friend inline DSPVectorArray operator-(const DSPVectorArray& x1)
   {
-    constexpr DSPVectorArray zero(0.f);
+    // TODO should be able to declare this constexpr!
+    DSPVectorArray zero(0.f);
+    
     return subtract(zero, x1);
   }
   friend inline DSPVectorArray operator-(const DSPVectorArray& x1, const DSPVectorArray& x2)
@@ -592,6 +607,7 @@ inline void storeAligned(const DSPVectorArray<ROWS>& vecSrc, float* pDest)
     return vy;                                                         \
   }
 
+DEFINE_OP1(recipApprox, (vecRecipApprox(x)));
 DEFINE_OP1(sqrt, (vecSqrt(x)));
 DEFINE_OP1(sqrtApprox, vecSqrtApprox(x));
 DEFINE_OP1(abs, vecAbs(x));
@@ -623,6 +639,9 @@ DEFINE_OP1(logApprox, (vecLogApprox(x)));
 // lazy log2 and exp2 approximations from log / exp approximations
 DEFINE_OP1(log2Approx, (vecMul(vecLogApprox(x), kLogTwoRVec)));
 DEFINE_OP1(exp2Approx, (vecExpApprox(vecMul(kLogTwoVec, x))));
+
+// cubic tanh approx
+DEFINE_OP1(tanhApprox, (vecTanhApprox(x)));
 
 // ----------------------------------------------------------------
 // binary vector operators (float, float) -> float
