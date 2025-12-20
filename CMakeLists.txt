@@ -291,10 +291,10 @@ endif()
 include(GNUInstallDirs)
 
 if(WIN32)
-    set(CMAKE_INSTALL_LIBDIR "C:/Program Files/madronalib/lib")
     if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
       set(CMAKE_INSTALL_PREFIX "C:/Program Files/madronalib" CACHE PATH "..." FORCE)
     endif()
+    # Let GNUInstallDirs set CMAKE_INSTALL_LIBDIR relative to CMAKE_INSTALL_PREFIX
 endif()
 
 install(
