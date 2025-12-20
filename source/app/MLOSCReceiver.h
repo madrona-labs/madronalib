@@ -8,6 +8,9 @@
 
 #pragma once
 
+// MLPlatform.h must come first on Windows to fix std::thread/_beginthreadex issue
+#include "MLPlatform.h"
+
 #include <functional>
 #include <memory>
 #include <mutex>
