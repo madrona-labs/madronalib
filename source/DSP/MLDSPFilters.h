@@ -1043,7 +1043,19 @@ namespace PitchbendableDelayConsts
 {
 // period in samples of allpass fade cycle. must be a power of 2 less than or
 // equal to kFloatsPerDSPVector. 32 sounds good.
-constexpr int kFadePeriod{32};
+
+// TODO allow fade period larger than kFloatsPerDSPVector as follows:
+// - don't send vChangeTicks to FractionalDelays (and remove that operator() version)
+// - keep a tiny buffer of each delay output in PitchbendableDelay
+// - fill buffer as follows: 1. change d1, 2. write first half of buffer, 3. change d2, 4. write 2nd half of buffer
+// - give the delay a processSample() fn
+// - fade signal is still a constant block, length of buffer (try quadratic!)
+// - with a very lightweight object for rebuffering, this could read very cleanly
+
+constexpr int kFadePeriod{16};
+static_assert(kFadePeriod <= kFloatsPerDSPVector,
+              "PitchbendableDelay: kFadePeriod must be < the DSP vector size.");
+
 constexpr int fadeRamp(int n) { return n % kFadePeriod; }
 constexpr int ticks1(int n) { return fadeRamp(n) == kFadePeriod / 2; }
 constexpr int ticks2(int n) { return fadeRamp(n) == 0; }
@@ -1059,13 +1071,12 @@ constexpr float fadeFn(int n)
 // note: mDelay1's delay time will be 0 when the object is created and before
 // the first half fade period. so there is a warmup time of one half fade
 // period: any input before this will be attenuated.
-//
-// constexpr fill is used. unfortunately this cannot be made to work with a
-// lambda in C++11. TODO Revisit.
+
 constexpr DSPVectorInt test1(fadeRamp);
 constexpr DSPVectorInt kvDelay1Changes(ticks1);
 constexpr DSPVectorInt kvDelay2Changes(ticks2);
 constexpr DSPVector kvFade(fadeFn);
+
 };  // namespace PitchbendableDelayConsts
 
 class PitchbendableDelay

@@ -53,7 +53,7 @@ class TickGen
 class ImpulseGen
 {
   // pick odd table size to get sample-centered sinc and window
-  static constexpr int kTableSize{17};
+  static constexpr int kTableSize{15};
   DSPVector _table;
   static_assert(kTableSize < kFloatsPerDSPVector,
                 "ImpulseGen: table size must be < the DSP vector size.");

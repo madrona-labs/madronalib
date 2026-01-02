@@ -10,7 +10,7 @@
 using namespace ml;
 
 // Mac OS note: need to ask for microphone access if kInputChannels is nonzero!
-constexpr int kInputChannels = 1;
+constexpr int kInputChannels = 0;
 constexpr int kOutputChannels = 2;
 constexpr int kSampleRate = 48000;
 
@@ -31,6 +31,9 @@ struct AaltoverbState
 
   // feedback storage
   DSPVector mvFeedbackL, mvFeedbackR;
+  
+  // TEMP
+  ImpulseGen impulse1;
 };
 
 void initializeReverb(AaltoverbState& r)
@@ -101,8 +104,18 @@ void processVector(AudioContext* ctx, void *stateData)
   DSPVector vt9 = max(0.111*delayParamInSamples, vMin);
   DSPVector vt10 = max(0.096*delayParamInSamples, vMin);
 
-  // sum stereo inputs and diffuse with four allpass filters in series
-  DSPVector monoInput = (ctx->inputs[0] + ctx->inputs[1]);
+  // sum stereo inputs or, if no inputs make clicks
+  DSPVector monoInput;
+  if(ctx->inputs.size() > 1)
+  {
+    monoInput = (ctx->inputs[0] + ctx->inputs[1]);
+  }
+  else
+  {
+    monoInput = r->impulse1(2.0f/kSampleRate);
+  }
+  
+  // diffuse input with four allpass filters in series
   DSPVector diffusedInput = r->mAp4(r->mAp3(r->mAp2(r->mAp1(monoInput, vt1), vt2), vt3), vt4);
 
   // get delay times in samples, subtracting the constant delay of one DSPVector and clamping to zero
