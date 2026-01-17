@@ -34,6 +34,7 @@
 #include <iterator>
 #include <type_traits>
 #include <vector>
+#include <utility>
 
 #include "MLDSPMath.h"
 #include "MLDSPScalarMath.h"
@@ -41,7 +42,7 @@
 // make_array, used in constructors
 
 template <class Function, std::size_t... Indices>
-constexpr auto make_array_helper(Function f, ml_index_sequence<Indices...>)
+constexpr auto make_array_helper(Function f, std::index_sequence<Indices...>)
     -> std::array<typename std::invoke_result<Function, std::size_t>::type, sizeof...(Indices)>
 {
   return {{f(Indices)...}};
@@ -51,7 +52,7 @@ template <int N, class Function>
 constexpr auto make_array(Function f)
     -> std::array<typename std::invoke_result<Function, std::size_t>::type, N>
 {
-  return make_array_helper(f, ml_make_index_sequence<N>{});
+  return make_array_helper(f, std::make_index_sequence<N>{});
 }
 
 #if (_WIN32 && (!_WIN64))
