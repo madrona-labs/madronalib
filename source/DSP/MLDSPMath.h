@@ -11,9 +11,8 @@ static_assert((kFloatsPerDSPVectorBits <= 8),
               "We count on kFloatsPerDSPVectorBits to be 8 or less.");
 
 // Load definitions for low-level SIMD math.
-// These must define SIMDVectorFloat, SIMDVectorInt, their sizes, and a bunch of
-// operations on them. We are currently only using 4-element vectors on both SSE
-// and NEON.
+// These define float4, int4, and a bunch of operations on them.
+// We are currently only using 4-element vectors on both SSE and NEON.
 
 #if (defined __ARM_NEON) || (defined __ARM_NEON__)
 // NEON

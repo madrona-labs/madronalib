@@ -84,7 +84,7 @@ class DSPVectorArray
 {
   union Data
   {
-    SIMDVectorFloat _align[kSIMDVectorsPerDSPVector * ROWS];   // unused except to force alignment
+    float4 _align[kSIMDVectorsPerDSPVector * ROWS];   // unused except to force alignment
     std::array<float, kFloatsPerDSPVector * ROWS> arrayData_;  // for constexpr ctor
     float asFloat[kFloatsPerDSPVector * ROWS];
 
@@ -132,13 +132,13 @@ class DSPVectorArray
   // = float: set each element of the DSPVectorArray to the float value k.
   inline DSPVectorArray operator=(float k)
   {
-    const SIMDVectorFloat vk = vecSet1(k);
+    const float4 vk = vecSet1(k);
     float* py1 = getBuffer();
 
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
     {
       vecStore(py1, vk);
-      py1 += kFloatsPerSIMDVector;
+      py1 += 4;
     }
     return *this;
   }
@@ -190,8 +190,8 @@ class DSPVectorArray
     for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
     {
       vecStore(py1, vecLoad(px1));
-      px1 += kFloatsPerSIMDVector;
-      py1 += kFloatsPerSIMDVector;
+      px1 += 4;
+      py1 += 4;
     }
     return vy;
   }
@@ -205,8 +205,8 @@ class DSPVectorArray
     for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
     {
       vecStore(py1, vecLoad(px1));
-      px1 += kFloatsPerSIMDVector;
-      py1 += kFloatsPerSIMDVector;
+      px1 += 4;
+      py1 += 4;
     }
   }
 
@@ -311,7 +311,7 @@ class DSPVectorArrayInt
 {
   union Data
   {
-    SIMDVectorInt _align[kSIMDVectorsPerDSPVector * ROWS];     // unused except to force alignment
+    int4 _align[kSIMDVectorsPerDSPVector * ROWS];     // unused except to force alignment
     std::array<int32_t, kIntsPerDSPVector * ROWS> arrayData_;  // for constexpr ctor
     int32_t asInt[kIntsPerDSPVector * ROWS];
     float asFloat[kFloatsPerDSPVector * ROWS];
@@ -338,13 +338,13 @@ class DSPVectorArrayInt
   // set each element of the DSPVectorArray to the int32_t value k.
   inline DSPVectorArrayInt operator=(int32_t k)
   {
-    SIMDVectorFloat vk = VecI2F(vecSetInt1(k));
+    float4 vk = int4ToFloat4(vecSetInt1(k));
     int32_t* py1 = getBufferInt();
 
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
     {
       vecStore(reinterpret_cast<float*>(py1), vk);
-      py1 += kIntsPerSIMDVector;
+      py1 += 4;
     }
     return *this;
   }
@@ -457,8 +457,8 @@ inline void loadAligned(DSPVectorArray<ROWS>& vecDest, const float* pSrc)
   for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
   {
     vecStore(py1, vecLoad(px1));
-    px1 += kFloatsPerSIMDVector;
-    py1 += kFloatsPerSIMDVector;
+    px1 += 4;
+    py1 += 4;
   }
 }
 
@@ -471,8 +471,8 @@ inline void storeAligned(const DSPVectorArray<ROWS>& vecSrc, float* pDest)
   for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
   {
     vecStore(py1, vecLoad(px1));
-    px1 += kFloatsPerSIMDVector;
-    py1 += kFloatsPerSIMDVector;
+    px1 += 4;
+    py1 += 4;
   }
 }
 
@@ -488,10 +488,10 @@ inline void storeAligned(const DSPVectorArray<ROWS>& vecSrc, float* pDest)
     float* py1 = vy.getBuffer();                                       \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
     {                                                                  \
-      SIMDVectorFloat x = vecLoad(px1);                                \
+      float4 x = vecLoad(px1);                                \
       vecStore(py1, (opComputation));                                  \
-      px1 += kFloatsPerSIMDVector;                                     \
-      py1 += kFloatsPerSIMDVector;                                     \
+      px1 += 4;                                     \
+      py1 += 4;                                     \
     }                                                                  \
     return vy;                                                         \
   }
@@ -546,12 +546,12 @@ DEFINE_OP1(tanhApprox, (vecTanhApprox(x)));
     float* py1 = vy.getBuffer();                                       \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
     {                                                                  \
-      SIMDVectorFloat x1 = vecLoad(px1);                               \
-      SIMDVectorFloat x2 = vecLoad(px2);                               \
+      float4 x1 = vecLoad(px1);                               \
+      float4 x2 = vecLoad(px2);                               \
       vecStore(py1, (opComputation));                                  \
-      px1 += kFloatsPerSIMDVector;                                     \
-      px2 += kFloatsPerSIMDVector;                                     \
-      py1 += kFloatsPerSIMDVector;                                     \
+      px1 += 4;                                     \
+      px2 += 4;                                     \
+      py1 += 4;                                     \
     }                                                                  \
     return vy;                                                         \
   }
@@ -583,13 +583,13 @@ DEFINE_OP2(max, (vecMax(x1, x2)));
     size_t px2Offset = 0;                                              \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
     {                                                                  \
-      SIMDVectorFloat x1 = vecLoad(px1);                               \
-      SIMDVectorFloat x2 = vecLoad(px2 + px2Offset);                   \
+      float4 x1 = vecLoad(px1);                               \
+      float4 x2 = vecLoad(px2 + px2Offset);                   \
       vecStore(py1, (opComputation));                                  \
-      px1 += kFloatsPerSIMDVector;                                     \
-      px2Offset += kFloatsPerSIMDVector;                               \
+      px1 += 4;                                     \
+      px2Offset += 4;                               \
       px2Offset &= kFloatsPerDSPVector - 1;                            \
-      py1 += kFloatsPerSIMDVector;                                     \
+      py1 += 4;                                     \
     }                                                                  \
     return vy;                                                         \
   }
@@ -619,12 +619,12 @@ DEFINE_OP2_MS(max1, (vecMax(x1, x2)));
     float* py1 = vy.getBuffer();                                             \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)                \
     {                                                                        \
-      SIMDVectorInt x1 = VecF2I(vecLoad(px1));                               \
-      SIMDVectorInt x2 = VecF2I(vecLoad(px2));                               \
-      vecStore(py1, VecI2F(opComputation));                                  \
-      px1 += kIntsPerSIMDVector;                                             \
-      px2 += kIntsPerSIMDVector;                                             \
-      py1 += kIntsPerSIMDVector;                                             \
+      int4 x1 = float4ToInt4(vecLoad(px1));                               \
+      int4 x2 = float4ToInt4(vecLoad(px2));                               \
+      vecStore(py1, int4ToFloat4(opComputation));                                  \
+      px1 += 4;                                             \
+      px2 += 4;                                             \
+      py1 += 4;                                             \
     }                                                                        \
     return vy;                                                               \
   }
@@ -648,14 +648,14 @@ DEFINE_OP2_INT32(addInt32, (vecAddInt(x1, x2)));
     float* py1 = vy.getBuffer();                                       \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
     {                                                                  \
-      SIMDVectorFloat x1 = vecLoad(px1);                               \
-      SIMDVectorFloat x2 = vecLoad(px2);                               \
-      SIMDVectorFloat x3 = vecLoad(px3);                               \
+      float4 x1 = vecLoad(px1);                               \
+      float4 x2 = vecLoad(px2);                               \
+      float4 x3 = vecLoad(px3);                               \
       vecStore(py1, (opComputation));                                  \
-      px1 += kFloatsPerSIMDVector;                                     \
-      px2 += kFloatsPerSIMDVector;                                     \
-      px3 += kFloatsPerSIMDVector;                                     \
-      py1 += kFloatsPerSIMDVector;                                     \
+      px1 += 4;                                     \
+      px2 += 4;                                     \
+      px3 += 4;                                     \
+      py1 += 4;                                     \
     }                                                                  \
     return vy;                                                         \
   }
@@ -678,16 +678,16 @@ inline DSPVectorArray<ROWS> lerp(const DSPVectorArray<ROWS>& vx1, const DSPVecto
   const float* px2 = vx2.getConstBuffer();
   DSPVector vmix(m);
   float* py1 = vy.getBuffer();
-  const SIMDVectorFloat vConstMix = vecSet1(m);
+  const float4 vConstMix = vecSet1(m);
 
   for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
   {
-    SIMDVectorFloat x1 = vecLoad(px1);
-    SIMDVectorFloat x2 = vecLoad(px2);
+    float4 x1 = vecLoad(px1);
+    float4 x2 = vecLoad(px2);
     vecStore(py1, vecAdd(x1, (vecMul(vConstMix, vecSub(x2, x1)))));
-    px1 += kFloatsPerSIMDVector;
-    px2 += kFloatsPerSIMDVector;
-    py1 += kFloatsPerSIMDVector;
+    px1 += 4;
+    px2 += 4;
+    py1 += 4;
   }
   return vy;
 }
@@ -704,16 +704,16 @@ inline DSPVectorArray<ROWS> lerp(const DSPVectorArray<ROWS>& vx1, const DSPVecto
     float* py1 = vy.getBuffer();                                          \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
     {                                                                     \
-      SIMDVectorFloat x = vecLoad(px1);                                   \
+      float4 x = vecLoad(px1);                                   \
       vecStore((py1), (opComputation));                                   \
-      px1 += kFloatsPerSIMDVector;                                        \
-      py1 += kIntsPerSIMDVector;                                          \
+      px1 += 4;                                        \
+      py1 += 4;                                          \
     }                                                                     \
     return vy;                                                            \
   }
 
-DEFINE_OP1_F2I(roundFloatToInt, (VecI2F(vecFloatToIntRound(x))));
-DEFINE_OP1_F2I(truncateFloatToInt, (VecI2F(vecFloatToIntTruncate(x))));
+DEFINE_OP1_F2I(roundFloatToInt, (int4ToFloat4(vecFloatToIntRound(x))));
+DEFINE_OP1_F2I(truncateFloatToInt, (int4ToFloat4(vecFloatToIntTruncate(x))));
 
 // ----------------------------------------------------------------
 // vector operators (int) -> float
@@ -727,10 +727,10 @@ DEFINE_OP1_F2I(truncateFloatToInt, (VecI2F(vecFloatToIntTruncate(x))));
     float* py1 = vy.getBuffer();                                          \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
     {                                                                     \
-      SIMDVectorInt x = VecF2I(vecLoad(px1));                             \
+      int4 x = float4ToInt4(vecLoad(px1));                             \
       vecStore((py1), (opComputation));                                   \
-      px1 += kIntsPerSIMDVector;                                          \
-      py1 += kFloatsPerSIMDVector;                                        \
+      px1 += 4;                                          \
+      py1 += 4;                                        \
     }                                                                     \
     return vy;                                                            \
   }
@@ -757,12 +757,12 @@ DEFINE_OP1(fractionalPart, (vecSub(x, vecIntToFloat(vecFloatToIntTruncate(x)))))
     float* py1 = vy.getBuffer();                                          \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
     {                                                                     \
-      SIMDVectorFloat x1 = vecLoad(px1);                                  \
-      SIMDVectorFloat x2 = vecLoad(px2);                                  \
+      float4 x1 = vecLoad(px1);                                  \
+      float4 x2 = vecLoad(px2);                                  \
       vecStore((py1), (opComputation));                                   \
-      px1 += kFloatsPerSIMDVector;                                        \
-      px2 += kFloatsPerSIMDVector;                                        \
-      py1 += kIntsPerSIMDVector;                                          \
+      px1 += 4;                                        \
+      px2 += 4;                                        \
+      py1 += 4;                                          \
     }                                                                     \
     return vy;                                                            \
   }
@@ -790,19 +790,19 @@ DEFINE_OP2_FF2I(lessThanOrEqual, (vecLessThanOrEqual(x1, x2)));
     float* py1 = vy.getBuffer();                                          \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
     {                                                                     \
-      SIMDVectorFloat x1 = vecLoad(px1);                                  \
-      SIMDVectorFloat x2 = vecLoad(px2);                                  \
-      SIMDVectorInt x3 = VecF2I(vecLoad(px3));                            \
+      float4 x1 = vecLoad(px1);                                  \
+      float4 x2 = vecLoad(px2);                                  \
+      int4 x3 = float4ToInt4(vecLoad(px3));                            \
       vecStore(py1, (opComputation));                                     \
-      px1 += kFloatsPerSIMDVector;                                        \
-      px2 += kFloatsPerSIMDVector;                                        \
-      px3 += kFloatsPerSIMDVector;                                        \
-      py1 += kFloatsPerSIMDVector;                                        \
+      px1 += 4;                                        \
+      px2 += 4;                                        \
+      px3 += 4;                                        \
+      py1 += 4;                                        \
     }                                                                     \
     return vy;                                                            \
   }
 
-DEFINE_OP3_FFI2F(select, vecSelect(x1, x2, x3));  // bitwise select(resultIfTrue,
+DEFINE_OP3_FFI2F(select, vecSelectFFI(x1, x2, x3));  // bitwise select(resultIfTrue,
                                                   // resultIfFalse, conditionMask)
 
 // ----------------------------------------------------------------
@@ -821,19 +821,19 @@ DEFINE_OP3_FFI2F(select, vecSelect(x1, x2, x3));  // bitwise select(resultIfTrue
     float* py1 = vy.getBuffer();                                             \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)                \
     {                                                                        \
-      SIMDVectorInt x1 = VecF2I(vecLoad(px1));                               \
-      SIMDVectorInt x2 = VecF2I(vecLoad(px2));                               \
-      SIMDVectorInt x3 = VecF2I(vecLoad(px3));                               \
-      vecStore(py1, VecI2F(opComputation));                                  \
-      px1 += kIntsPerSIMDVector;                                             \
-      px2 += kIntsPerSIMDVector;                                             \
-      px3 += kIntsPerSIMDVector;                                             \
-      py1 += kIntsPerSIMDVector;                                             \
+      int4 x1 = float4ToInt4(vecLoad(px1));                               \
+      int4 x2 = float4ToInt4(vecLoad(px2));                               \
+      int4 x3 = float4ToInt4(vecLoad(px3));                               \
+      vecStore(py1, int4ToFloat4(opComputation));                                  \
+      px1 += 4;                                             \
+      px2 += 4;                                             \
+      px3 += 4;                                             \
+      py1 += 4;                                             \
     }                                                                        \
     return vy;                                                               \
   }
 
-DEFINE_OP3_III2I(select, vecSelect(x1, x2, x3));  // bitwise select(resultIfTrue,
+DEFINE_OP3_III2I(select, vecSelectIII(x1, x2, x3));  // bitwise select(resultIfTrue,
                                                   // resultIfFalse, conditionMask)
 
 // ----------------------------------------------------------------
@@ -905,7 +905,7 @@ inline float sum(const DSPVector& x)
   for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
   {
     sum += vecSumH(vecLoad(px1));
-    px1 += kFloatsPerSIMDVector;
+    px1 += 4;
   }
   return sum;
 }
@@ -923,7 +923,7 @@ inline float max(const DSPVector& x)
   for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
   {
     fmax = ml::max(fmax, vecMaxH(vecLoad(px1)));
-    px1 += kFloatsPerSIMDVector;
+    px1 += 4;
   }
   return fmax;
 }
@@ -935,7 +935,7 @@ inline float min(const DSPVector& x)
   for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
   {
     fmin = ml::min(fmin, vecMinH(vecLoad(px1)));
-    px1 += kFloatsPerSIMDVector;
+    px1 += 4;
   }
   return fmin;
 }
@@ -1130,16 +1130,16 @@ inline ml::DSPVectorArray<ROWS> rotateLeft(const ml::DSPVectorArray<ROWS>& x)
   for (size_t row = 0; row < ROWS; row++)
   {
     const float* px1 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
-    const float* px2 = px1 + kFloatsPerSIMDVector;
+    const float* px2 = px1 + 4;
     float* py1 = vy.getBuffer() + (row * kFloatsPerDSPVector);
 
     for (int n = 0; n < kSIMDVectorsPerDSPVector - 1; ++n)
     {
       vecStore(py1, vecShuffleLeft(vecLoad(px1), vecLoad(px2)));
 
-      px1 += kFloatsPerSIMDVector;
-      px2 += kFloatsPerSIMDVector;
-      py1 += kFloatsPerSIMDVector;
+      px1 += 4;
+      px2 += 4;
+      py1 += 4;
     }
 
     px2 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
@@ -1160,16 +1160,16 @@ inline ml::DSPVectorArray<ROWS> rotateRight(const ml::DSPVectorArray<ROWS>& x)
   for (size_t row = 0; row < ROWS; row++)
   {
     const float* px1 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
-    const float* px2 = px1 + kFloatsPerSIMDVector;
-    float* py1 = vy.getBuffer() + (row * kFloatsPerDSPVector) + kFloatsPerSIMDVector;
+    const float* px2 = px1 + 4;
+    float* py1 = vy.getBuffer() + (row * kFloatsPerDSPVector) + 4;
 
     for (int n = 0; n < kSIMDVectorsPerDSPVector - 1; ++n)
     {
       vecStore(py1, vecShuffleRight(vecLoad(px1), vecLoad(px2)));
 
-      px1 += kFloatsPerSIMDVector;
-      px2 += kFloatsPerSIMDVector;
-      py1 += kFloatsPerSIMDVector;
+      px1 += 4;
+      px2 += 4;
+      py1 += 4;
     }
 
     px2 = x.getConstBuffer() + (row * kFloatsPerDSPVector);

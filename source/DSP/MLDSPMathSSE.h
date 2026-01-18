@@ -5,30 +5,6 @@
 // MLDSPMathSSE.h
 // SSE implementations of madronalib SIMD primitives
 
-// cephes-derived approximate math functions adapted from code by Julien
-// Pommier, licensed as follows:
-/*
- Copyright (C) 2007  Julien Pommier
-
- This software is provided 'as-is', without any express or implied
- warranty.  In no event will the authors be held liable for any damages
- arising from the use of this software.
-
- Permission is granted to anyone to use this software for any purpose,
- including commercial applications, and to alter it and redistribute it
- freely, subject to the following restrictions:
-
- 1. The origin of this software must not be misrepresented; you must not
- claim that you wrote the original software. If you use this software
- in a product, an acknowledgment in the product documentation would be
- appreciated but is not required.
- 2. Altered source versions must be plainly marked as such, and must not be
- misrepresented as being the original software.
- 3. This notice may not be removed or altered from any source distribution.
-
- (this is the zlib license)
- */
-
 #include "MLPlatform.h"
 
 #ifndef ML_SSE_TO_NEON
@@ -48,7 +24,7 @@
 #define ALIGN16_END __attribute__((aligned(16)))
 #endif
 
-struct float4
+struct alignas(16) float4
 {
   __m128 v;
   
@@ -60,14 +36,13 @@ struct float4
 // Implicit conversions to __m128
 operator __m128&() { return v; }
 operator const __m128&() const { return v; }
-  
+      
   // Keep compound assignment as members (they require lvalue)
-  float4& operator+=(const float4& rhs) { v = _mm_add_ps(v, rhs.v); return *this; }
-  float4& operator-=(const float4& rhs) { v = _mm_sub_ps(v, rhs.v); return *this; }
-  float4& operator*=(const float4& rhs) { v = _mm_mul_ps(v, rhs.v); return *this; }
-  float4& operator/=(const float4& rhs) { v = _mm_div_ps(v, rhs.v); return *this; }
+  float4& operator+=(const float4& rhs) { v = _mm_add_ps(v, rhs); return *this; }
+  float4& operator-=(const float4& rhs) { v = _mm_sub_ps(v, rhs); return *this; }
+  float4& operator*=(const float4& rhs) { v = _mm_mul_ps(v, rhs); return *this; }
+  float4& operator/=(const float4& rhs) { v = _mm_div_ps(v, rhs); return *this; }
   
-  // loads and stores must be aligned!
   static float4 load(const float* ptr) { return _mm_load_ps(ptr); }
   void store(float* ptr) const { _mm_store_ps(ptr, v); }
   
@@ -87,75 +62,126 @@ operator const __m128&() const { return v; }
     tmp[lane] = val;
     v = _mm_load_ps(tmp);
   }
-  
-  static void transpose4x4(float4& r0, float4& r1, float4& r2, float4& r3) {
-    __m128 t0 = _mm_unpacklo_ps(r0.v, r1.v);
-    __m128 t1 = _mm_unpacklo_ps(r2.v, r3.v);
-    __m128 t2 = _mm_unpackhi_ps(r0.v, r1.v);
-    __m128 t3 = _mm_unpackhi_ps(r2.v, r3.v);
-    r0.v = _mm_movelh_ps(t0, t1);
-    r1.v = _mm_movehl_ps(t1, t0);
-    r2.v = _mm_movelh_ps(t2, t3);
-    r3.v = _mm_movehl_ps(t3, t2);
-  }
 };
 
+struct alignas(16) int4
+{
+  __m128i v;
+  
+  int4() : v(_mm_setzero_si128()) {}
+  int4(__m128i x) : v(x) {}
+  int4(int32_t a, int32_t b, int32_t c, int32_t d) : v(_mm_setr_epi32(a, b, c, d)) {}
+  int4(int32_t x) : v(_mm_set1_epi32(x)) {}
+
+  // Implicit conversions to __m128i
+  operator __m128i&() { return v; }
+  operator const __m128i&() const { return v; }
+  
+  // Compound assignment operators
+  int4& operator+=(const int4& rhs) { v = _mm_add_epi32(v, rhs); return *this; }
+  int4& operator-=(const int4& rhs) { v = _mm_sub_epi32(v, rhs); return *this; }
+  // Note: integer multiplication requires SSE4.1 (_mm_mullo_epi32)
+  // Note: integer division has no SIMD instruction in SSE2/SSE4
+  
+  static int4 load(const int32_t* ptr) { return _mm_load_si128((__m128i*)ptr); }
+  void store(int32_t* ptr) const { _mm_store_si128((__m128i*)ptr, v); }
+  
+  // Get single lane value (expensive - use sparingly)
+  int32_t get1(size_t lane) const {
+    assert(lane < 4);
+    alignas(16) int32_t tmp[4];
+    _mm_store_si128((__m128i*)tmp, v);
+    return tmp[lane];
+  }
+  
+  // Set single lane value (expensive - use sparingly)
+  void set1(size_t lane, int32_t val) {
+    assert(lane < 4);
+    alignas(16) int32_t tmp[4];
+    _mm_store_si128((__m128i*)tmp, v);
+    tmp[lane] = val;
+    v = _mm_load_si128((__m128i*)tmp);
+  }
+};
 
 // Free function operators
 // Note: float * float4 works via implicit conversion
 inline float4 operator+(const float4& lhs, const float4& rhs) {
-  return _mm_add_ps(lhs.v, rhs.v);
+  return _mm_add_ps(lhs, rhs);
 }
 inline float4 operator-(const float4& lhs, const float4& rhs) {
-  return _mm_sub_ps(lhs.v, rhs.v);
+  return _mm_sub_ps(lhs, rhs);
 }
 inline float4 operator*(const float4& lhs, const float4& rhs) {
-  return _mm_mul_ps(lhs.v, rhs.v);
+  return _mm_mul_ps(lhs, rhs);
 }
 inline float4 operator/(const float4& lhs, const float4& rhs) {
-  return _mm_div_ps(lhs.v, rhs.v);
+  return _mm_div_ps(lhs, rhs);
 }
 inline float4 operator-(const float4& x) {
-  return _mm_sub_ps(_mm_setzero_ps(), x.v);
+  return _mm_sub_ps(_mm_setzero_ps(), x);
 }
 inline float4 clamp(const float4& a, const float4& b, const float4& c) {
-  return _mm_min_ps(_mm_max_ps(a.v, b.v), c.v);
+  return _mm_min_ps(_mm_max_ps(a, b), c);
 }
 inline float4 rcp(const float4& a) {
-  return _mm_rcp_ps(a.v);
+  return _mm_rcp_ps(a);
 }
+
+inline void transpose4x4(float4& r0, float4& r1, float4& r2, float4& r3) {
+  __m128 t0 = _mm_unpacklo_ps(r0, r1);
+  __m128 t1 = _mm_unpacklo_ps(r2, r3);
+  __m128 t2 = _mm_unpackhi_ps(r0, r1);
+  __m128 t3 = _mm_unpackhi_ps(r2, r3);
+  r0 = _mm_movelh_ps(t0, t1);
+  r1 = _mm_movehl_ps(t1, t0);
+  r2 = _mm_movelh_ps(t2, t3);
+  r3 = _mm_movehl_ps(t3, t2);
+}
+
+inline int4 operator|(const int4& a, const int4& b)
+{
+  return _mm_or_si128(a, b);
+}
+inline int4 operator&(const int4& a, const int4& b)
+{
+  return _mm_and_si128(a, b);
+}
+
+typedef union
+{
+  float4 v;
+  float f[4];
+} float4Union;
+
+typedef union
+{
+  int4 v;
+  int32_t i[4];
+} int4Union;
 
 inline std::ostream& operator<< (std::ostream& out, const float4 x)
 {
-  alignas(16) float tmp[4];
-  x.store(tmp);
-  out << "[";
-  for(int i=0; i<4; ++i)
-  {
-    out << tmp[i];
-    if(i < 3) { out << ", "; }
-  }
-  out << "]";
-  return out;
+    float4Union u{x};
+    out << "[";
+    out << u.f[0];
+    out << ", ";
+    out << u.f[1];
+    out << ", ";
+    out << u.f[2];
+    out << ", ";
+    out << u.f[3];
+    out << "]";
+    return out;
 }
 
-// SSE types
-typedef __m128 SIMDVectorFloat;
-typedef __m128i SIMDVectorInt;
-
 // SSE casts
-#define VecF2I _mm_castps_si128
-#define VecI2F _mm_castsi128_ps
+#define float4ToInt4 _mm_castps_si128
+#define int4ToFloat4 _mm_castsi128_ps
 
-// TODO int or uintptr_t?
-constexpr int kFloatsPerSIMDVectorBits = 2;
-constexpr int kFloatsPerSIMDVector = 1 << kFloatsPerSIMDVectorBits;
-constexpr int kSIMDVectorsPerDSPVector = kFloatsPerDSPVector / kFloatsPerSIMDVector;
-constexpr int kBytesPerSIMDVector = kFloatsPerSIMDVector * sizeof(float);
-constexpr int kSIMDVectorMask = ~(kBytesPerSIMDVector - 1);
-
-constexpr int kIntsPerSIMDVectorBits = 2;
-constexpr int kIntsPerSIMDVector = 1 << kIntsPerSIMDVectorBits;
+constexpr size_t kSIMDVectorsPerDSPVector = kFloatsPerDSPVector / 4;
+constexpr size_t kBytesPerSIMDVector = 4 * sizeof(float);
+constexpr size_t kSIMDVectorMask = ~(kBytesPerSIMDVector - 1);
 
 inline bool isSIMDAligned(float* p)
 {
@@ -215,7 +241,7 @@ inline bool isSIMDAligned(float* p)
 
 // _mm_cvtepi32_ps approximation for unsigned int data
 // this loses a bit of precision
-inline SIMDVectorFloat vecUnsignedIntToFloat(SIMDVectorInt v)
+inline float4 vecUnsignedIntToFloat(int4 v)
 {
   __m128i v_hi = _mm_srli_epi32(v, 1);
   __m128 v_hi_flt = _mm_cvtepi32_ps(v_hi);
@@ -226,21 +252,9 @@ inline SIMDVectorFloat vecUnsignedIntToFloat(SIMDVectorInt v)
 #define vecSubInt _mm_sub_epi32
 #define vecSet1Int _mm_set1_epi32
 
-typedef union
-{
-  SIMDVectorFloat v;
-  float f[4];
-} SIMDVectorFloatUnion;
+inline int4 vecSetInt1(uint32_t a) { return _mm_set1_epi32(a); }
 
-typedef union
-{
-  SIMDVectorInt v;
-  uint32_t i[4];
-} SIMDVectorIntUnion;
-
-inline SIMDVectorInt vecSetInt1(uint32_t a) { return _mm_set1_epi32(a); }
-
-inline SIMDVectorInt vecSetInt4(uint32_t a, uint32_t b, uint32_t c, uint32_t d)
+inline int4 vecSetInt4(uint32_t a, uint32_t b, uint32_t c, uint32_t d)
 {
   return _mm_set_epi32(d, c, b, a);
 }
@@ -248,22 +262,22 @@ inline SIMDVectorInt vecSetInt4(uint32_t a, uint32_t b, uint32_t c, uint32_t d)
 static const int XI = 0xFFFFFFFF;
 static const float X = *(reinterpret_cast<const float*>(&XI));
 
-const SIMDVectorFloat vecMask0 = {0, 0, 0, 0};
-const SIMDVectorFloat vecMask1 = {0, 0, 0, X};
-const SIMDVectorFloat vecMask2 = {0, 0, X, 0};
-const SIMDVectorFloat vecMask3 = {0, 0, X, X};
-const SIMDVectorFloat vecMask4 = {0, X, 0, 0};
-const SIMDVectorFloat vecMask5 = {0, X, 0, X};
-const SIMDVectorFloat vecMask6 = {0, X, X, 0};
-const SIMDVectorFloat vecMask7 = {0, X, X, X};
-const SIMDVectorFloat vecMask8 = {X, 0, 0, 0};
-const SIMDVectorFloat vecMask9 = {X, 0, 0, X};
-const SIMDVectorFloat vecMaskA = {X, 0, X, 0};
-const SIMDVectorFloat vecMaskB = {X, 0, X, X};
-const SIMDVectorFloat vecMaskC = {X, X, 0, 0};
-const SIMDVectorFloat vecMaskD = {X, X, 0, X};
-const SIMDVectorFloat vecMaskE = {X, X, X, 0};
-const SIMDVectorFloat vecMaskF = {X, X, X, X};
+const float4 vecMask0 = {0, 0, 0, 0};
+const float4 vecMask1 = {0, 0, 0, X};
+const float4 vecMask2 = {0, 0, X, 0};
+const float4 vecMask3 = {0, 0, X, X};
+const float4 vecMask4 = {0, X, 0, 0};
+const float4 vecMask5 = {0, X, 0, X};
+const float4 vecMask6 = {0, X, X, 0};
+const float4 vecMask7 = {0, X, X, X};
+const float4 vecMask8 = {X, 0, 0, 0};
+const float4 vecMask9 = {X, 0, 0, X};
+const float4 vecMaskA = {X, 0, X, 0};
+const float4 vecMaskB = {X, 0, X, X};
+const float4 vecMaskC = {X, X, 0, 0};
+const float4 vecMaskD = {X, X, 0, X};
+const float4 vecMaskE = {X, X, X, 0};
+const float4 vecMaskF = {X, X, X, X};
 
 #define SHUFFLE(a, b, c, d) ((a << 6) | (b << 4) | (c << 2) | (d))
 #define vecBroadcast3(x1) _mm_shuffle_ps(x1, x1, SHUFFLE(3, 3, 3, 3))
@@ -271,57 +285,25 @@ const SIMDVectorFloat vecMaskF = {X, X, X, X};
 #define vecShiftElementsLeft(x1, i) _mm_slli_si128(x1, 4 * i);
 #define vecShiftElementsRight(x1, i) _mm_srli_si128(x1, 4 * i);
 
-inline std::ostream& operator<<(std::ostream& out, SIMDVectorFloat v)
-{
-  SIMDVectorFloatUnion u;
-  u.v = v;
-  out << "[";
-  out << u.f[0];
-  out << ", ";
-  out << u.f[1];
-  out << ", ";
-  out << u.f[2];
-  out << ", ";
-  out << u.f[3];
-  out << "]";
-  return out;
-}
-
-inline std::ostream& operator<<(std::ostream& out, SIMDVectorInt v)
-{
-  SIMDVectorIntUnion u;
-  u.v = v;
-  out << "[";
-  out << u.i[0];
-  out << ", ";
-  out << u.i[1];
-  out << ", ";
-  out << u.i[2];
-  out << ", ";
-  out << u.i[3];
-  out << "]";
-  return out;
-}
-
 // ----------------------------------------------------------------
 #pragma mark select
 
-inline SIMDVectorFloat vecSelect(SIMDVectorFloat a, SIMDVectorFloat b, SIMDVectorInt conditionMask)
+inline float4 vecSelectFFI(float4 a, float4 b, int4 conditionMask)
 {
   __m128i ones = _mm_set1_epi32(-1);
-  return _mm_or_ps(_mm_and_ps(VecI2F(conditionMask), a),
-                   _mm_and_ps(_mm_xor_ps(VecI2F(conditionMask), VecI2F(ones)), b));
+  return _mm_or_ps(_mm_and_ps(int4ToFloat4(conditionMask), a),
+                   _mm_and_ps(_mm_xor_ps(int4ToFloat4(conditionMask), int4ToFloat4(ones)), b));
 }
 
-inline SIMDVectorFloat vecSelect(SIMDVectorFloat a, SIMDVectorFloat b,
-                                 SIMDVectorFloat conditionMask)
+inline float4 vecSelectFFF(float4 a, float4 b,
+                                 float4 conditionMask)
 {
   __m128i ones = _mm_set1_epi32(-1);
   return _mm_or_ps(_mm_and_ps((conditionMask), a),
-                   _mm_and_ps(_mm_xor_ps((conditionMask), VecI2F(ones)), b));
+                   _mm_and_ps(_mm_xor_ps((conditionMask), int4ToFloat4(ones)), b));
 }
 
-inline SIMDVectorInt vecSelect(SIMDVectorInt a, SIMDVectorInt b, SIMDVectorInt conditionMask)
+inline int4 vecSelectIII(int4 a, int4 b, int4 conditionMask)
 {
   __m128i ones = _mm_set1_epi32(-1);
   return _mm_or_si128(_mm_and_si128(conditionMask, a),
@@ -331,26 +313,29 @@ inline SIMDVectorInt vecSelect(SIMDVectorInt a, SIMDVectorInt b, SIMDVectorInt c
 // ----------------------------------------------------------------
 // horizontal operations returning float
 
-inline float vecSumH(SIMDVectorFloat v)
+inline float vecSumH(float4 v)
 {
-  SIMDVectorFloat tmp0 = _mm_add_ps(v, _mm_movehl_ps(v, v));
-  SIMDVectorFloat tmp1 = _mm_add_ss(tmp0, _mm_shuffle_ps(tmp0, tmp0, 1));
+  float4 tmp0 = _mm_add_ps(v, _mm_movehl_ps(v, v));
+  float4 tmp1 = _mm_add_ss(tmp0, _mm_shuffle_ps(tmp0, tmp0, 1));
   return _mm_cvtss_f32(tmp1);
 }
 
-inline float vecMaxH(SIMDVectorFloat v)
+inline float vecMaxH(float4 v)
 {
-  SIMDVectorFloat tmp0 = _mm_max_ps(v, _mm_movehl_ps(v, v));
-  SIMDVectorFloat tmp1 = _mm_max_ss(tmp0, _mm_shuffle_ps(tmp0, tmp0, 1));
+  float4 tmp0 = _mm_max_ps(v, _mm_movehl_ps(v, v));
+  float4 tmp1 = _mm_max_ss(tmp0, _mm_shuffle_ps(tmp0, tmp0, 1));
   return _mm_cvtss_f32(tmp1);
 }
 
-inline float vecMinH(SIMDVectorFloat v)
+inline float vecMinH(float4 v)
 {
-  SIMDVectorFloat tmp0 = _mm_min_ps(v, _mm_movehl_ps(v, v));
-  SIMDVectorFloat tmp1 = _mm_min_ss(tmp0, _mm_shuffle_ps(tmp0, tmp0, 1));
+  float4 tmp0 = _mm_min_ps(v, _mm_movehl_ps(v, v));
+  float4 tmp1 = _mm_min_ss(tmp0, _mm_shuffle_ps(tmp0, tmp0, 1));
   return _mm_cvtss_f32(tmp1);
 }
+
+// cephes-derived approximate math functions adapted from code by Julien Pommier
+// Copyright (C) 2007 Julien Pommier and licensed under the zlib license
 
 /* declare some SSE constants -- why can't I figure a better way to do that? */
 #define _PS_CONST(Name, Val) \
@@ -393,22 +378,22 @@ _PS_CONST(cephes_log_q2, 0.693359375f);
 /* natural logarithm computed for 4 simultaneous float
  return NaN for x <= 0
  */
-inline SIMDVectorFloat vecLog(SIMDVectorFloat x)
+inline float4 vecLog(float4 x)
 {
-  SIMDVectorInt emm0;
-  SIMDVectorFloat one = *(SIMDVectorFloat*)_ps_1;
-  SIMDVectorFloat invalid_mask = _mm_cmple_ps(x, _mm_setzero_ps());
+  int4 emm0;
+  float4 one = *(float4*)_ps_1;
+  float4 invalid_mask = _mm_cmple_ps(x, _mm_setzero_ps());
 
-  x = _mm_max_ps(x, *(SIMDVectorFloat*)_ps_min_norm_pos); /* cut off denormalized stuff */
+  x = _mm_max_ps(x, *(float4*)_ps_min_norm_pos); /* cut off denormalized stuff */
 
-  emm0 = _mm_srli_epi32(VecF2I(x), 23);
+  emm0 = _mm_srli_epi32(float4ToInt4(x), 23);
 
   /* keep only the fractional part */
-  x = _mm_and_ps(x, *(SIMDVectorFloat*)_ps_inv_mant_mask);
-  x = _mm_or_ps(x, *(SIMDVectorFloat*)_ps_0p5);
+  x = _mm_and_ps(x, *(float4*)_ps_inv_mant_mask);
+  x = _mm_or_ps(x, *(float4*)_ps_0p5);
 
-  emm0 = _mm_sub_epi32(emm0, *(SIMDVectorInt*)_pi32_0x7f);
-  SIMDVectorFloat e = _mm_cvtepi32_ps(emm0);
+  emm0 = _mm_sub_epi32(emm0, *(int4*)_pi32_0x7f);
+  float4 e = _mm_cvtepi32_ps(emm0);
 
   e = _mm_add_ps(e, one);
 
@@ -418,42 +403,42 @@ inline SIMDVectorFloat vecLog(SIMDVectorFloat x)
    x = x + x - 1.0;
    } else { x = x - 1.0; }
    */
-  SIMDVectorFloat mask = _mm_cmplt_ps(x, *(SIMDVectorFloat*)_ps_cephes_SQRTHF);
-  SIMDVectorFloat tmp = _mm_and_ps(x, mask);
+  float4 mask = _mm_cmplt_ps(x, *(float4*)_ps_cephes_SQRTHF);
+  float4 tmp = _mm_and_ps(x, mask);
   x = _mm_sub_ps(x, one);
   e = _mm_sub_ps(e, _mm_and_ps(one, mask));
   x = _mm_add_ps(x, tmp);
 
-  SIMDVectorFloat z = _mm_mul_ps(x, x);
+  float4 z = _mm_mul_ps(x, x);
 
-  SIMDVectorFloat y = *(SIMDVectorFloat*)_ps_cephes_log_p0;
+  float4 y = *(float4*)_ps_cephes_log_p0;
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_log_p1);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p1);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_log_p2);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p2);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_log_p3);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p3);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_log_p4);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p4);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_log_p5);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p5);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_log_p6);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p6);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_log_p7);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p7);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_log_p8);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p8);
   y = _mm_mul_ps(y, x);
 
   y = _mm_mul_ps(y, z);
 
-  tmp = _mm_mul_ps(e, *(SIMDVectorFloat*)_ps_cephes_log_q1);
+  tmp = _mm_mul_ps(e, *(float4*)_ps_cephes_log_q1);
   y = _mm_add_ps(y, tmp);
 
-  tmp = _mm_mul_ps(z, *(SIMDVectorFloat*)_ps_0p5);
+  tmp = _mm_mul_ps(z, *(float4*)_ps_0p5);
   y = _mm_sub_ps(y, tmp);
 
-  tmp = _mm_mul_ps(e, *(SIMDVectorFloat*)_ps_cephes_log_q2);
+  tmp = _mm_mul_ps(e, *(float4*)_ps_cephes_log_q2);
   x = _mm_add_ps(x, y);
   x = _mm_add_ps(x, tmp);
   x = _mm_or_ps(x, invalid_mask);  // negative arg will be NAN
@@ -474,54 +459,54 @@ _PS_CONST(cephes_exp_p3, 4.1665795894E-2f);
 _PS_CONST(cephes_exp_p4, 1.6666665459E-1f);
 _PS_CONST(cephes_exp_p5, 5.0000001201E-1f);
 
-inline SIMDVectorFloat vecExp(SIMDVectorFloat x)
+inline float4 vecExp(float4 x)
 {
-  SIMDVectorFloat tmp = _mm_setzero_ps(), fx;
-  SIMDVectorInt emm0;
-  SIMDVectorFloat one = *(SIMDVectorFloat*)_ps_1;
+  float4 tmp = _mm_setzero_ps(), fx;
+  int4 emm0;
+  float4 one = *(float4*)_ps_1;
 
-  x = _mm_min_ps(x, *(SIMDVectorFloat*)_ps_exp_hi);
-  x = _mm_max_ps(x, *(SIMDVectorFloat*)_ps_exp_lo);
+  x = _mm_min_ps(x, *(float4*)_ps_exp_hi);
+  x = _mm_max_ps(x, *(float4*)_ps_exp_lo);
 
   /* express exp(x) as exp(g + n*log(2)) */
-  fx = _mm_mul_ps(x, *(SIMDVectorFloat*)_ps_cephes_LOG2EF);
-  fx = _mm_add_ps(fx, *(SIMDVectorFloat*)_ps_0p5);
+  fx = _mm_mul_ps(x, *(float4*)_ps_cephes_LOG2EF);
+  fx = _mm_add_ps(fx, *(float4*)_ps_0p5);
 
   /* how to perform a floorf with SSE: just below */
   emm0 = _mm_cvttps_epi32(fx);
   tmp = _mm_cvtepi32_ps(emm0);
 
   /* if greater, substract 1 */
-  SIMDVectorFloat mask = _mm_cmpgt_ps(tmp, fx);
+  float4 mask = _mm_cmpgt_ps(tmp, fx);
   mask = _mm_and_ps(mask, one);
   fx = _mm_sub_ps(tmp, mask);
 
-  tmp = _mm_mul_ps(fx, *(SIMDVectorFloat*)_ps_cephes_exp_C1);
-  SIMDVectorFloat z = _mm_mul_ps(fx, *(SIMDVectorFloat*)_ps_cephes_exp_C2);
+  tmp = _mm_mul_ps(fx, *(float4*)_ps_cephes_exp_C1);
+  float4 z = _mm_mul_ps(fx, *(float4*)_ps_cephes_exp_C2);
   x = _mm_sub_ps(x, tmp);
   x = _mm_sub_ps(x, z);
   z = _mm_mul_ps(x, x);
 
-  SIMDVectorFloat y = *(SIMDVectorFloat*)_ps_cephes_exp_p0;
+  float4 y = *(float4*)_ps_cephes_exp_p0;
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_exp_p1);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p1);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_exp_p2);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p2);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_exp_p3);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p3);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_exp_p4);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p4);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_cephes_exp_p5);
+  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p5);
   y = _mm_mul_ps(y, z);
   y = _mm_add_ps(y, x);
   y = _mm_add_ps(y, one);
 
   /* build 2^n */
   emm0 = _mm_cvttps_epi32(fx);
-  emm0 = _mm_add_epi32(emm0, *(SIMDVectorInt*)_pi32_0x7f);
+  emm0 = _mm_add_epi32(emm0, *(int4*)_pi32_0x7f);
   emm0 = _mm_slli_epi32(emm0, 23);
-  SIMDVectorFloat pow2n = VecI2F(emm0);
+  float4 pow2n = int4ToFloat4(emm0);
 
   y = _mm_mul_ps(y, pow2n);
   return y;
@@ -538,73 +523,47 @@ _PS_CONST(coscof_p1, -1.388731625493765E-003f);
 _PS_CONST(coscof_p2, 4.166664568298827E-002f);
 _PS_CONST(cephes_FOPI, 1.27323954473516f);  // 4 / M_PI
 
-/*
- Julien Pommier:
- The code is the exact rewriting of the cephes sinf function.
- Precision is excellent as long as x < 8192 (I did not bother to
- take into account the special handling they have for greater values
- -- it does not return garbage for arguments over 8192, though, but
- the extra precision is missing).
-
- Note that it is such that sinf((float)M_PI) = 8.74e-8, which is the
- surprising but correct result.
-
- Performance is also surprisingly good, 1.33 times faster than the
- macos vsinf SSE2 function, and 1.5 times faster than the
- __vrs4_sinf of amd's ACML (which is only available in 64 bits). Not
- too bad for an SSE1 function (with no special tuning) !
- However the latter libraries probably have a much better handling of NaN,
- Inf, denormalized and other special arguments..
-
- On my core 1 duo, the execution of this function takes approximately 95 cycles.
-
- From what I have observed on the experiments with Intel AMath lib, switching to
- an SSE2 version would improve the perf by only 10%.
-
- Since it is based on SSE intrinsics, it has to be compiled at -O2 to
- deliver full speed.
- */
-inline SIMDVectorFloat vecSin(SIMDVectorFloat x)
+inline float4 vecSin(float4 x)
 {
-  SIMDVectorFloat xmm1, xmm2 = _mm_setzero_ps(), xmm3, sign_bit, y;
-  SIMDVectorInt emm0, emm2;
+  float4 xmm1, xmm2 = _mm_setzero_ps(), xmm3, sign_bit, y;
+  int4 emm0, emm2;
 
   sign_bit = x;
   /* take the absolute value */
-  x = _mm_and_ps(x, *(SIMDVectorFloat*)_ps_inv_sign_mask);
+  x = _mm_and_ps(x, *(float4*)_ps_inv_sign_mask);
   /* extract the sign bit (upper one) */
-  sign_bit = _mm_and_ps(sign_bit, *(SIMDVectorFloat*)_ps_sign_mask);
+  sign_bit = _mm_and_ps(sign_bit, *(float4*)_ps_sign_mask);
 
   /* scale by 4/Pi */
-  y = _mm_mul_ps(x, *(SIMDVectorFloat*)_ps_cephes_FOPI);
+  y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
 
   /* store the integer part of y in mm0 */
   emm2 = _mm_cvttps_epi32(y);
   /* j=(j+1) & (~1) (see the cephes sources) */
-  emm2 = _mm_add_epi32(emm2, *(SIMDVectorInt*)_pi32_1);
-  emm2 = _mm_and_si128(emm2, *(SIMDVectorInt*)_pi32_inv1);
+  emm2 = _mm_add_epi32(emm2, *(int4*)_pi32_1);
+  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_inv1);
   y = _mm_cvtepi32_ps(emm2);
 
   /* get the swap sign flag */
-  emm0 = _mm_and_si128(emm2, *(SIMDVectorInt*)_pi32_4);
+  emm0 = _mm_and_si128(emm2, *(int4*)_pi32_4);
   emm0 = _mm_slli_epi32(emm0, 29);
   /* get the polynom selection mask
    there is one polynom for 0 <= x <= Pi/4
    and another one for Pi/4<x<=Pi/2
    Both branches will be computed.
    */
-  emm2 = _mm_and_si128(emm2, *(SIMDVectorInt*)_pi32_2);
+  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_2);
   emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
 
-  SIMDVectorFloat swap_sign_bit = VecI2F(emm0);
-  SIMDVectorFloat poly_mask = VecI2F(emm2);
+  float4 swap_sign_bit = int4ToFloat4(emm0);
+  float4 poly_mask = int4ToFloat4(emm2);
   sign_bit = _mm_xor_ps(sign_bit, swap_sign_bit);
 
   /* The magic pass: "Extended precision modular arithmetic"
    x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(SIMDVectorFloat*)_ps_minus_cephes_DP1;
-  xmm2 = *(SIMDVectorFloat*)_ps_minus_cephes_DP2;
-  xmm3 = *(SIMDVectorFloat*)_ps_minus_cephes_DP3;
+  xmm1 = *(float4*)_ps_minus_cephes_DP1;
+  xmm2 = *(float4*)_ps_minus_cephes_DP2;
+  xmm3 = *(float4*)_ps_minus_cephes_DP3;
   xmm1 = _mm_mul_ps(y, xmm1);
   xmm2 = _mm_mul_ps(y, xmm2);
   xmm3 = _mm_mul_ps(y, xmm3);
@@ -613,25 +572,25 @@ inline SIMDVectorFloat vecSin(SIMDVectorFloat x)
   x = _mm_add_ps(x, xmm3);
 
   /* Evaluate the first polynom  (0 <= x <= Pi/4) */
-  y = *(SIMDVectorFloat*)_ps_coscof_p0;
-  SIMDVectorFloat z = _mm_mul_ps(x, x);
+  y = *(float4*)_ps_coscof_p0;
+  float4 z = _mm_mul_ps(x, x);
 
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_coscof_p1);
+  y = _mm_add_ps(y, *(float4*)_ps_coscof_p1);
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_coscof_p2);
+  y = _mm_add_ps(y, *(float4*)_ps_coscof_p2);
   y = _mm_mul_ps(y, z);
   y = _mm_mul_ps(y, z);
-  SIMDVectorFloat tmp = _mm_mul_ps(z, *(SIMDVectorFloat*)_ps_0p5);
+  float4 tmp = _mm_mul_ps(z, *(float4*)_ps_0p5);
   y = _mm_sub_ps(y, tmp);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_1);
+  y = _mm_add_ps(y, *(float4*)_ps_1);
 
   /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-  SIMDVectorFloat y2 = *(SIMDVectorFloat*)_ps_sincof_p0;
+  float4 y2 = *(float4*)_ps_sincof_p0;
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(SIMDVectorFloat*)_ps_sincof_p1);
+  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p1);
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(SIMDVectorFloat*)_ps_sincof_p2);
+  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p2);
   y2 = _mm_mul_ps(y2, z);
   y2 = _mm_mul_ps(y2, x);
   y2 = _mm_add_ps(y2, x);
@@ -647,40 +606,40 @@ inline SIMDVectorFloat vecSin(SIMDVectorFloat x)
 }
 
 /* almost the same as sin_ps */
-inline SIMDVectorFloat vecCos(SIMDVectorFloat x)
+inline float4 vecCos(float4 x)
 {
-  SIMDVectorFloat xmm1, xmm2 = _mm_setzero_ps(), xmm3, y;
-  SIMDVectorInt emm0, emm2;
+  float4 xmm1, xmm2 = _mm_setzero_ps(), xmm3, y;
+  int4 emm0, emm2;
 
   /* take the absolute value */
-  x = _mm_and_ps(x, *(SIMDVectorFloat*)_ps_inv_sign_mask);
+  x = _mm_and_ps(x, *(float4*)_ps_inv_sign_mask);
 
   /* scale by 4/Pi */
-  y = _mm_mul_ps(x, *(SIMDVectorFloat*)_ps_cephes_FOPI);
+  y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
 
   /* store the integer part of y in mm0 */
   emm2 = _mm_cvttps_epi32(y);
   /* j=(j+1) & (~1) (see the cephes sources) */
-  emm2 = _mm_add_epi32(emm2, *(SIMDVectorInt*)_pi32_1);
-  emm2 = _mm_and_si128(emm2, *(SIMDVectorInt*)_pi32_inv1);
+  emm2 = _mm_add_epi32(emm2, *(int4*)_pi32_1);
+  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_inv1);
   y = _mm_cvtepi32_ps(emm2);
-  emm2 = _mm_sub_epi32(emm2, *(SIMDVectorInt*)_pi32_2);
+  emm2 = _mm_sub_epi32(emm2, *(int4*)_pi32_2);
 
   /* get the swap sign flag */
-  emm0 = _mm_andnot_si128(emm2, *(SIMDVectorInt*)_pi32_4);
+  emm0 = _mm_andnot_si128(emm2, *(int4*)_pi32_4);
   emm0 = _mm_slli_epi32(emm0, 29);
   /* get the polynom selection mask */
-  emm2 = _mm_and_si128(emm2, *(SIMDVectorInt*)_pi32_2);
+  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_2);
   emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
 
-  SIMDVectorFloat sign_bit = VecI2F(emm0);
-  SIMDVectorFloat poly_mask = VecI2F(emm2);
+  float4 sign_bit = int4ToFloat4(emm0);
+  float4 poly_mask = int4ToFloat4(emm2);
 
   /* The magic pass: "Extended precision modular arithmetic"
    x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(SIMDVectorFloat*)_ps_minus_cephes_DP1;
-  xmm2 = *(SIMDVectorFloat*)_ps_minus_cephes_DP2;
-  xmm3 = *(SIMDVectorFloat*)_ps_minus_cephes_DP3;
+  xmm1 = *(float4*)_ps_minus_cephes_DP1;
+  xmm2 = *(float4*)_ps_minus_cephes_DP2;
+  xmm3 = *(float4*)_ps_minus_cephes_DP3;
   xmm1 = _mm_mul_ps(y, xmm1);
   xmm2 = _mm_mul_ps(y, xmm2);
   xmm3 = _mm_mul_ps(y, xmm3);
@@ -689,25 +648,25 @@ inline SIMDVectorFloat vecCos(SIMDVectorFloat x)
   x = _mm_add_ps(x, xmm3);
 
   /* Evaluate the first polynom  (0 <= x <= Pi/4) */
-  y = *(SIMDVectorFloat*)_ps_coscof_p0;
-  SIMDVectorFloat z = _mm_mul_ps(x, x);
+  y = *(float4*)_ps_coscof_p0;
+  float4 z = _mm_mul_ps(x, x);
 
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_coscof_p1);
+  y = _mm_add_ps(y, *(float4*)_ps_coscof_p1);
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_coscof_p2);
+  y = _mm_add_ps(y, *(float4*)_ps_coscof_p2);
   y = _mm_mul_ps(y, z);
   y = _mm_mul_ps(y, z);
-  SIMDVectorFloat tmp = _mm_mul_ps(z, *(SIMDVectorFloat*)_ps_0p5);
+  float4 tmp = _mm_mul_ps(z, *(float4*)_ps_0p5);
   y = _mm_sub_ps(y, tmp);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_1);
+  y = _mm_add_ps(y, *(float4*)_ps_1);
 
   /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-  SIMDVectorFloat y2 = *(SIMDVectorFloat*)_ps_sincof_p0;
+  float4 y2 = *(float4*)_ps_sincof_p0;
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(SIMDVectorFloat*)_ps_sincof_p1);
+  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p1);
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(SIMDVectorFloat*)_ps_sincof_p2);
+  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p2);
   y2 = _mm_mul_ps(y2, z);
   y2 = _mm_mul_ps(y2, x);
   y2 = _mm_add_ps(y2, x);
@@ -725,45 +684,45 @@ inline SIMDVectorFloat vecCos(SIMDVectorFloat x)
 
 /* since sin_ps and cos_ps are almost identical, sincos_ps could replace both of
  them.. it is almost as fast, and gives you a free cosine with your sine */
-inline void vecSinCos(SIMDVectorFloat x, SIMDVectorFloat* s, SIMDVectorFloat* c)
+inline void vecSinCos(float4 x, float4* s, float4* c)
 {
-  SIMDVectorFloat xmm1, xmm2, xmm3 = _mm_setzero_ps(), sign_bit_sin, y;
-  SIMDVectorInt emm0, emm2, emm4;
+  float4 xmm1, xmm2, xmm3 = _mm_setzero_ps(), sign_bit_sin, y;
+  int4 emm0, emm2, emm4;
 
   sign_bit_sin = x;
   /* take the absolute value */
-  x = _mm_and_ps(x, *(SIMDVectorFloat*)_ps_inv_sign_mask);
+  x = _mm_and_ps(x, *(float4*)_ps_inv_sign_mask);
   /* extract the sign bit (upper one) */
-  sign_bit_sin = _mm_and_ps(sign_bit_sin, *(SIMDVectorFloat*)_ps_sign_mask);
+  sign_bit_sin = _mm_and_ps(sign_bit_sin, *(float4*)_ps_sign_mask);
 
   /* scale by 4/Pi */
-  y = _mm_mul_ps(x, *(SIMDVectorFloat*)_ps_cephes_FOPI);
+  y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
 
   /* store the integer part of y in emm2 */
   emm2 = _mm_cvttps_epi32(y);
 
   /* j=(j+1) & (~1) (see the cephes sources) */
-  emm2 = _mm_add_epi32(emm2, *(SIMDVectorInt*)_pi32_1);
-  emm2 = _mm_and_si128(emm2, *(SIMDVectorInt*)_pi32_inv1);
+  emm2 = _mm_add_epi32(emm2, *(int4*)_pi32_1);
+  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_inv1);
   y = _mm_cvtepi32_ps(emm2);
 
   emm4 = emm2;
 
   /* get the swap sign flag for the sine */
-  emm0 = _mm_and_si128(emm2, *(SIMDVectorInt*)_pi32_4);
+  emm0 = _mm_and_si128(emm2, *(int4*)_pi32_4);
   emm0 = _mm_slli_epi32(emm0, 29);
-  SIMDVectorFloat swap_sign_bit_sin = VecI2F(emm0);
+  float4 swap_sign_bit_sin = int4ToFloat4(emm0);
 
   /* get the polynom selection mask for the sine*/
-  emm2 = _mm_and_si128(emm2, *(SIMDVectorInt*)_pi32_2);
+  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_2);
   emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
-  SIMDVectorFloat poly_mask = VecI2F(emm2);
+  float4 poly_mask = int4ToFloat4(emm2);
 
   /* The magic pass: "Extended precision modular arithmetic"
    x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(SIMDVectorFloat*)_ps_minus_cephes_DP1;
-  xmm2 = *(SIMDVectorFloat*)_ps_minus_cephes_DP2;
-  xmm3 = *(SIMDVectorFloat*)_ps_minus_cephes_DP3;
+  xmm1 = *(float4*)_ps_minus_cephes_DP1;
+  xmm2 = *(float4*)_ps_minus_cephes_DP2;
+  xmm3 = *(float4*)_ps_minus_cephes_DP3;
   xmm1 = _mm_mul_ps(y, xmm1);
   xmm2 = _mm_mul_ps(y, xmm2);
   xmm3 = _mm_mul_ps(y, xmm3);
@@ -771,41 +730,41 @@ inline void vecSinCos(SIMDVectorFloat x, SIMDVectorFloat* s, SIMDVectorFloat* c)
   x = _mm_add_ps(x, xmm2);
   x = _mm_add_ps(x, xmm3);
 
-  emm4 = _mm_sub_epi32(emm4, *(SIMDVectorInt*)_pi32_2);
-  emm4 = _mm_andnot_si128(emm4, *(SIMDVectorInt*)_pi32_4);
+  emm4 = _mm_sub_epi32(emm4, *(int4*)_pi32_2);
+  emm4 = _mm_andnot_si128(emm4, *(int4*)_pi32_4);
   emm4 = _mm_slli_epi32(emm4, 29);
-  SIMDVectorFloat sign_bit_cos = VecI2F(emm4);
+  float4 sign_bit_cos = int4ToFloat4(emm4);
 
   sign_bit_sin = _mm_xor_ps(sign_bit_sin, swap_sign_bit_sin);
 
   /* Evaluate the first polynom  (0 <= x <= Pi/4) */
-  SIMDVectorFloat z = _mm_mul_ps(x, x);
-  y = *(SIMDVectorFloat*)_ps_coscof_p0;
+  float4 z = _mm_mul_ps(x, x);
+  y = *(float4*)_ps_coscof_p0;
 
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_coscof_p1);
+  y = _mm_add_ps(y, *(float4*)_ps_coscof_p1);
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_coscof_p2);
+  y = _mm_add_ps(y, *(float4*)_ps_coscof_p2);
   y = _mm_mul_ps(y, z);
   y = _mm_mul_ps(y, z);
-  SIMDVectorFloat tmp = _mm_mul_ps(z, *(SIMDVectorFloat*)_ps_0p5);
+  float4 tmp = _mm_mul_ps(z, *(float4*)_ps_0p5);
   y = _mm_sub_ps(y, tmp);
-  y = _mm_add_ps(y, *(SIMDVectorFloat*)_ps_1);
+  y = _mm_add_ps(y, *(float4*)_ps_1);
 
   /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-  SIMDVectorFloat y2 = *(SIMDVectorFloat*)_ps_sincof_p0;
+  float4 y2 = *(float4*)_ps_sincof_p0;
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(SIMDVectorFloat*)_ps_sincof_p1);
+  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p1);
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(SIMDVectorFloat*)_ps_sincof_p2);
+  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p2);
   y2 = _mm_mul_ps(y2, z);
   y2 = _mm_mul_ps(y2, x);
   y2 = _mm_add_ps(y2, x);
 
   /* select the correct result from the two polynoms */
   xmm3 = poly_mask;
-  SIMDVectorFloat ysin2 = _mm_and_ps(xmm3, y2);
-  SIMDVectorFloat ysin1 = _mm_andnot_ps(xmm3, y);
+  float4 ysin2 = _mm_and_ps(xmm3, y2);
+  float4 ysin1 = _mm_andnot_ps(xmm3, y);
   y2 = _mm_sub_ps(y2, ysin2);
   y = _mm_sub_ps(y, ysin1);
 
@@ -865,9 +824,9 @@ STATIC_M128_CONST(kCosC3Vec, 4.1496001183986663818359375e-2f);
 STATIC_M128_CONST(kCosC4Vec, -1.33926304988563060760498046875e-3f);
 STATIC_M128_CONST(kCosC5Vec, 1.8791708498611114919185638427734375e-5f);
 
-inline SIMDVectorFloat vecCosApprox(SIMDVectorFloat x)
+inline float4 vecCosApprox(float4 x)
 {
-  SIMDVectorFloat x2 = _mm_mul_ps(x, x);
+  float4 x2 = _mm_mul_ps(x, x);
   return _mm_add_ps(
       kCosC1Vec,
       _mm_mul_ps(
@@ -887,21 +846,21 @@ STATIC_M128_CONST(kExpC6Vec, 0.168143436463395944830000f);
 STATIC_M128_CONST(kExpC7Vec, -2.88093587581985443087955e-3f);
 STATIC_M128_CONST(kExpC8Vec, 1.3671023382430374383648148e-2f);
 
-inline SIMDVectorFloat vecExpApprox(SIMDVectorFloat x)
+inline float4 vecExpApprox(float4 x)
 {
-  const SIMDVectorFloat kZeroVec = _mm_setzero_ps();
+  const float4 kZeroVec = _mm_setzero_ps();
 
-  SIMDVectorFloat val2, val3, val4;
-  SIMDVectorInt val4i;
+  float4 val2, val3, val4;
+  int4 val4i;
 
   val2 = _mm_add_ps(_mm_mul_ps(x, kExpC2Vec), kExpC3Vec);
   val3 = _mm_min_ps(val2, kExpC1Vec);
   val4 = _mm_max_ps(val3, kZeroVec);
   val4i = _mm_cvttps_epi32(val4);
 
-  SIMDVectorFloat xu = _mm_and_ps(VecI2F(val4i), VecI2F(_mm_set1_epi32(0x7F800000)));
-  SIMDVectorFloat b = _mm_or_ps(_mm_and_ps(VecI2F(val4i), VecI2F(_mm_set1_epi32(0x7FFFFF))),
-                                VecI2F(_mm_set1_epi32(0x3F800000)));
+  float4 xu = _mm_and_ps(int4ToFloat4(val4i), int4ToFloat4(_mm_set1_epi32(0x7F800000)));
+  float4 b = _mm_or_ps(_mm_and_ps(int4ToFloat4(val4i), int4ToFloat4(_mm_set1_epi32(0x7FFFFF))),
+                                int4ToFloat4(_mm_set1_epi32(0x3F800000)));
 
   return _mm_mul_ps(
       xu,
@@ -924,19 +883,19 @@ STATIC_M128_CONST(kLogC5Vec, -0.288739945f);
 STATIC_M128_CONST(kLogC6Vec, 3.110401639e-2f);
 STATIC_M128_CONST(kLogC7Vec, 0.69314718055995f);
 
-inline SIMDVectorFloat vecLogApprox(SIMDVectorFloat val)
+inline float4 vecLogApprox(float4 val)
 {
-  SIMDVectorInt vZero = _mm_setzero_si128();
-  SIMDVectorInt valAsInt = VecF2I(val);
-  SIMDVectorInt expi = _mm_srli_epi32(valAsInt, 23);
-  SIMDVectorFloat addcst =
-      vecSelect(kLogC1Vec, _mm_set1_ps(FLT_MIN), VecF2I(_mm_cmpgt_ps(val, VecI2F(vZero))));
-  SIMDVectorInt valAsIntMasked =
-      VecF2I(_mm_or_ps(_mm_and_ps(VecI2F(valAsInt), VecI2F(_mm_set1_epi32(0x7FFFFF))),
-                       VecI2F(_mm_set1_epi32(0x3F800000))));
-  SIMDVectorFloat x = VecI2F(valAsIntMasked);
+  int4 vZero = _mm_setzero_si128();
+  int4 valAsInt = float4ToInt4(val);
+  int4 expi = _mm_srli_epi32(valAsInt, 23);
+  float4 addcst =
+      vecSelectFFI(kLogC1Vec, _mm_set1_ps(FLT_MIN), float4ToInt4(_mm_cmpgt_ps(val, int4ToFloat4(vZero))));
+  int4 valAsIntMasked =
+      float4ToInt4(_mm_or_ps(_mm_and_ps(int4ToFloat4(valAsInt), int4ToFloat4(_mm_set1_epi32(0x7FFFFF))),
+                       int4ToFloat4(_mm_set1_epi32(0x3F800000))));
+  float4 x = int4ToFloat4(valAsIntMasked);
 
-  SIMDVectorFloat poly = _mm_mul_ps(
+  float4 poly = _mm_mul_ps(
       x, _mm_add_ps(
              kLogC2Vec,
              _mm_mul_ps(
@@ -947,7 +906,7 @@ inline SIMDVectorFloat vecLogApprox(SIMDVectorFloat val)
                                           _mm_mul_ps(x, _mm_add_ps(kLogC5Vec,
                                                                    _mm_mul_ps(x, kLogC6Vec)))))))));
 
-  SIMDVectorFloat addCstResult = _mm_add_ps(addcst, _mm_mul_ps(kLogC7Vec, _mm_cvtepi32_ps(expi)));
+  float4 addCstResult = _mm_add_ps(addcst, _mm_mul_ps(kLogC7Vec, _mm_cvtepi32_ps(expi)));
   return _mm_add_ps(poly, addCstResult);
 }
 
@@ -956,30 +915,26 @@ inline SIMDVectorFloat vecLogApprox(SIMDVectorFloat val)
 STATIC_M128_CONST(k9Vec, 9.0f);
 STATIC_M128_CONST(k27Vec, 27.0f);
 
-inline SIMDVectorFloat vecTanhApprox(SIMDVectorFloat x)
+inline float4 vecTanhApprox(float4 x)
 {
-  SIMDVectorFloat x2 = _mm_mul_ps(x, x);
-  SIMDVectorFloat denom = _mm_add_ps(k27Vec, _mm_mul_ps(k9Vec, x2));
-  SIMDVectorFloat frac = _mm_div_ps(_mm_add_ps(k27Vec, x2), (denom));
-  
-  // try me!
-//  SIMDVectorFloat frac = _mm_mul_ps(_mm_add_ps(k27Vec, x2), _mm_rcp_ps(denom));
-
+  float4 x2 = _mm_mul_ps(x, x);
+  float4 denom = _mm_add_ps(k27Vec, _mm_mul_ps(k9Vec, x2));
+  float4 frac = _mm_div_ps(_mm_add_ps(k27Vec, x2), (denom));
   return _mm_mul_ps(x, frac);
 }
 
 // conversions
 
-inline SIMDVectorFloat vecIntPart(SIMDVectorFloat val)
+inline float4 vecIntPart(float4 val)
 {
-  SIMDVectorInt vi = _mm_cvttps_epi32(val);  // convert with truncate
+  int4 vi = _mm_cvttps_epi32(val);  // convert with truncate
   return (_mm_cvtepi32_ps(vi));
 }
 
-inline SIMDVectorFloat vecFracPart(SIMDVectorFloat val)
+inline float4 vecFracPart(float4 val)
 {
-  SIMDVectorInt vi = _mm_cvttps_epi32(val);  // convert with truncate
-  SIMDVectorFloat intPart = _mm_cvtepi32_ps(vi);
+  int4 vi = _mm_cvttps_epi32(val);  // convert with truncate
+  float4 intPart = _mm_cvtepi32_ps(vi);
   return _mm_sub_ps(val, intPart);
 }
 
@@ -987,14 +942,14 @@ inline SIMDVectorFloat vecFracPart(SIMDVectorFloat val)
 
 // Given vectors [ ?, ?, ?, 3 ], [ 4, 5, 6, 7 ]
 // Returns [ 3, 4, 5, 6 ]
-inline SIMDVectorFloat vecShuffleRight(SIMDVectorFloat v1, SIMDVectorFloat v2)
+inline float4 vecShuffleRight(float4 v1, float4 v2)
 {
   return _mm_shuffle_ps(_mm_shuffle_ps(v2, v1, SHUFFLE(3, 3, 0, 0)), v2, SHUFFLE(2, 1, 0, 3));
 }
 
 // Given vectors [ 0, 1, 2, 3 ], [ 4, ?, ?, ? ]
 // Returns [ 1, 2, 3, 4 ]
-inline SIMDVectorFloat vecShuffleLeft(SIMDVectorFloat v1, SIMDVectorFloat v2)
+inline float4 vecShuffleLeft(float4 v1, float4 v2)
 {
   return _mm_shuffle_ps(v1, _mm_shuffle_ps(v1, v2, SHUFFLE(0, 0, 3, 3)), SHUFFLE(3, 0, 2, 1));
 }
@@ -1003,34 +958,26 @@ inline SIMDVectorFloat vecShuffleLeft(SIMDVectorFloat v1, SIMDVectorFloat v2)
 #ifndef ML_SSE_TO_NEON
 #ifdef WIN32
 
-inline SIMDVectorFloat operator*(const SIMDVectorFloat& a, const SIMDVectorFloat& b)
+inline float4 operator*(const float4& a, const float4& b)
 {
   return vecMul(a, b);
 }
 
-inline SIMDVectorFloat operator+(const SIMDVectorFloat& a, const SIMDVectorFloat& b)
+inline float4 operator+(const float4& a, const float4& b)
 {
   return vecAdd(a, b);
 }
 
-inline SIMDVectorFloat operator-(const SIMDVectorFloat& a, const SIMDVectorFloat& b)
+inline float4 operator-(const float4& a, const float4& b)
 {
   return vecSub(a, b);
 }
 
-inline SIMDVectorFloat operator/(const SIMDVectorFloat& a, const SIMDVectorFloat& b)
+inline float4 operator/(const float4& a, const float4& b)
 {
   return vecDiv(a, b);
 }
 
-inline SIMDVectorInt operator|(const SIMDVectorInt& a, const SIMDVectorInt& b)
-{
-  return _mm_or_si128(a, b);
-}
-inline SIMDVectorInt operator&(const SIMDVectorInt& a, const SIMDVectorInt& b)
-{
-  return _mm_and_si128(a, b);
-}
 
 #endif
 #endif
