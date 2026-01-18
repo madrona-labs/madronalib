@@ -23,21 +23,23 @@
 #define ALIGN16_BEG
 #define ALIGN16_END __attribute__((aligned(16)))
 #endif
-
 struct alignas(16) float4
 {
-  __m128 v;
+  union {
+    __m128 v;
+    float f[4];
+  };
   
-  float4() : v(_mm_setzero_ps()) {}
-  float4(__m128 x) : v(x) {}
-  float4(float a, float b, float c, float d) : v(_mm_setr_ps(a, b, c, d)) {}
-  float4(float x) : v(_mm_set1_ps(x)) {}
+  constexpr float4() : f{0.0f, 0.0f, 0.0f, 0.0f} {}
+  constexpr float4(float x) : f{x, x, x, x} {}
+  constexpr float4(float a, float b, float c, float d) : f{a, b, c, d} {}
+  float4(__m128 x) : v(x) {}  // Not constexpr - runtime only
 
-// Implicit conversions to __m128
-operator __m128&() { return v; }
-operator const __m128&() const { return v; }
-      
-  // Keep compound assignment as members (they require lvalue)
+  // Implicit conversions to __m128
+  operator __m128&() { return v; }
+  operator const __m128&() const { return v; }
+  
+  // Compound assignment operators
   float4& operator+=(const float4& rhs) { v = _mm_add_ps(v, rhs); return *this; }
   float4& operator-=(const float4& rhs) { v = _mm_sub_ps(v, rhs); return *this; }
   float4& operator*=(const float4& rhs) { v = _mm_mul_ps(v, rhs); return *this; }
@@ -46,21 +48,16 @@ operator const __m128&() const { return v; }
   static float4 load(const float* ptr) { return _mm_load_ps(ptr); }
   void store(float* ptr) const { _mm_store_ps(ptr, v); }
   
-  // Get single lane value (expensive - use sparingly)
+  // Get single lane value (now just array access!)
   float get1(size_t lane) const {
     assert(lane < 4);
-    alignas(16) float tmp[4];
-    _mm_store_ps(tmp, v);
-    return tmp[lane];
+    return f[lane];
   }
   
-  // Set single lane value (expensive - use sparingly)
+  // Set single lane value
   void set1(size_t lane, float val) {
     assert(lane < 4);
-    alignas(16) float tmp[4];
-    _mm_store_ps(tmp, v);
-    tmp[lane] = val;
-    v = _mm_load_ps(tmp);
+    f[lane] = val;
   }
 };
 
@@ -148,21 +145,9 @@ inline int4 operator&(const int4& a, const int4& b)
   return _mm_and_si128(a, b);
 }
 
-typedef union
-{
-  float4 v;
-  float f[4];
-} float4Union;
-
-typedef union
-{
-  int4 v;
-  int32_t i[4];
-} int4Union;
-
 inline std::ostream& operator<< (std::ostream& out, const float4 x)
 {
-    float4Union u{x};
+    float4 u{x};
     out << "[";
     out << u.f[0];
     out << ", ";
@@ -796,7 +781,9 @@ inline void vecSinCos(float4 x, float4* s, float4* c)
 // > plot(f+(x-1)*log(2)-log(x), [1,2]);
 // > f+(x-1)*log(2)
 
-STATIC_M128_CONST(kSinC1Vec, 0.99997937679290771484375f);
+constexpr float4 kSinC1Vec{0.99997937679290771484375f};
+
+//STATIC_M128_CONST(kSinC1Vec, 0.99997937679290771484375f);
 STATIC_M128_CONST(kSinC2Vec, -0.166624367237091064453125f);
 STATIC_M128_CONST(kSinC3Vec, 8.30897875130176544189453125e-3f);
 STATIC_M128_CONST(kSinC4Vec, -1.92649182281456887722015380859375e-4f);
