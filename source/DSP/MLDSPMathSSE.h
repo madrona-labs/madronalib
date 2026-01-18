@@ -16,13 +16,6 @@
 
 #pragma once
 
-#ifdef _MSC_VER /* visual c++ */
-#define ALIGN16_BEG __declspec(align(16))
-#define ALIGN16_END
-#else /* gcc or icc */
-#define ALIGN16_BEG
-#define ALIGN16_END __attribute__((aligned(16)))
-#endif
 struct alignas(16) float4
 {
   union {
@@ -247,7 +240,7 @@ inline int4 vecSetInt4(uint32_t a, uint32_t b, uint32_t c, uint32_t d)
 static const int XI = 0xFFFFFFFF;
 static const float X = *(reinterpret_cast<const float*>(&XI));
 
-const float4 vecMask0 = {0, 0, 0, 0};
+constexpr float4 vecMask0{0, 0, 0, 0};
 const float4 vecMask1 = {0, 0, 0, X};
 const float4 vecMask2 = {0, 0, X, 0};
 const float4 vecMask3 = {0, 0, X, X};
@@ -324,22 +317,20 @@ inline float vecMinH(float4 v)
 
 /* declare some SSE constants -- why can't I figure a better way to do that? */
 #define _PS_CONST(Name, Val) \
-  static const ALIGN16_BEG float _ps_##Name[4] ALIGN16_END = {Val, Val, Val, Val}
+  static const float _ps_##Name[4] = {Val, Val, Val, Val}
 #define _PI32_CONST(Name, Val) \
-  static const ALIGN16_BEG int _pi32_##Name[4] ALIGN16_END = {Val, Val, Val, Val}
-#define _PS_CONST_TYPE(Name, Type, Val) \
-  static const ALIGN16_BEG Type _ps_##Name[4] ALIGN16_END = {Val, Val, Val, Val}
+  static const int _pi32_##Name[4] = {Val, Val, Val, Val}
 
 _PS_CONST(1, 1.0f);
 _PS_CONST(0p5, 0.5f);
 
 /* the smallest non denormalized float number */
-_PS_CONST_TYPE(min_norm_pos, int, 0x00800000);
-_PS_CONST_TYPE(mant_mask, int, 0x7f800000);
-_PS_CONST_TYPE(inv_mant_mask, int, ~0x7f800000);
+_PI32_CONST(min_norm_pos, 0x00800000);
+_PI32_CONST(mant_mask, 0x7f800000);
+_PI32_CONST(inv_mant_mask, ~0x7f800000);
 
-_PS_CONST_TYPE(sign_mask, int, (int)0x80000000);
-_PS_CONST_TYPE(inv_sign_mask, int, ~0x80000000);
+_PI32_CONST(sign_mask, (int)0x80000000);
+_PI32_CONST(inv_sign_mask, ~0x80000000);
 
 _PI32_CONST(1, 1);
 _PI32_CONST(inv1, ~1);
@@ -369,12 +360,12 @@ inline float4 vecLog(float4 x)
   float4 one = *(float4*)_ps_1;
   float4 invalid_mask = _mm_cmple_ps(x, _mm_setzero_ps());
 
-  x = _mm_max_ps(x, *(float4*)_ps_min_norm_pos); /* cut off denormalized stuff */
+  x = _mm_max_ps(x, *(float4*)_pi32_min_norm_pos); /* cut off denormalized stuff */
 
   emm0 = _mm_srli_epi32(float4ToInt4(x), 23);
 
   /* keep only the fractional part */
-  x = _mm_and_ps(x, *(float4*)_ps_inv_mant_mask);
+  x = _mm_and_ps(x, *(float4*)_pi32_inv_mant_mask);
   x = _mm_or_ps(x, *(float4*)_ps_0p5);
 
   emm0 = _mm_sub_epi32(emm0, *(int4*)_pi32_0x7f);
@@ -515,9 +506,9 @@ inline float4 vecSin(float4 x)
 
   sign_bit = x;
   /* take the absolute value */
-  x = _mm_and_ps(x, *(float4*)_ps_inv_sign_mask);
+  x = _mm_and_ps(x, *(float4*)_pi32_inv_sign_mask);
   /* extract the sign bit (upper one) */
-  sign_bit = _mm_and_ps(sign_bit, *(float4*)_ps_sign_mask);
+  sign_bit = _mm_and_ps(sign_bit, *(float4*)_pi32_sign_mask);
 
   /* scale by 4/Pi */
   y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
@@ -597,7 +588,7 @@ inline float4 vecCos(float4 x)
   int4 emm0, emm2;
 
   /* take the absolute value */
-  x = _mm_and_ps(x, *(float4*)_ps_inv_sign_mask);
+  x = _mm_and_ps(x, *(float4*)_pi32_inv_sign_mask);
 
   /* scale by 4/Pi */
   y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
@@ -676,9 +667,9 @@ inline void vecSinCos(float4 x, float4* s, float4* c)
 
   sign_bit_sin = x;
   /* take the absolute value */
-  x = _mm_and_ps(x, *(float4*)_ps_inv_sign_mask);
+  x = _mm_and_ps(x, *(float4*)_pi32_inv_sign_mask);
   /* extract the sign bit (upper one) */
-  sign_bit_sin = _mm_and_ps(sign_bit_sin, *(float4*)_ps_sign_mask);
+  sign_bit_sin = _mm_and_ps(sign_bit_sin, *(float4*)_pi32_sign_mask);
 
   /* scale by 4/Pi */
   y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
