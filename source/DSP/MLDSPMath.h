@@ -16,16 +16,10 @@ static_assert((kFloatsPerDSPVectorBits <= 8),
 // and NEON.
 
 #if (defined __ARM_NEON) || (defined __ARM_NEON__)
-
 // NEON
-
 #define ML_SSE_TO_NEON
 #include "MLDSPMathNEON.h"
-
 #else
-
 // SSE2
-
 #include "MLDSPMathSSE.h"
-
 #endif
