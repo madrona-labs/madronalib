@@ -55,38 +55,12 @@ constexpr auto make_array(Function f)
   return make_array_helper(f, std::make_index_sequence<N>{});
 }
 
-#if (_WIN32 && (!_WIN64))
-#define MANUAL_ALIGN_DSPVECTOR
-#endif
-
 // ----------------------------------------------------------------
 // alignment definitions
-
-#ifdef MANUAL_ALIGN_DSPVECTOR
-
-const uintptr_t kDSPVectorAlignBytes = 16;
-const uintptr_t kDSPVectorAlignFloats = kDSPVectorAlignBytes / sizeof(float);
-const uintptr_t kDSPVectorAlignInts = kDSPVectorAlignBytes / sizeof(int);
-const uintptr_t kDSPVectorBytesAlignMask = ~(kDSPVectorAlignBytes - 1);
-
-template <type T>
-inline T* DSPVectorAlignPointer(const T* p)
-{
-  uintptr_t pM = (uintptr_t)p;
-  pM += (uintptr_t)(ml::kDSPVectorAlignBytes - 1);
-  pM &= ml::kDSPVectorBytesAlignMask;
-  return reinterpret_cast<T*>(pM);
-}
-
-#endif
-
-
-
 
 
 // TODO
 /*
-remove MANUAL_ALIGN_DSPVECTOR
 make FloatArray type
 use DSPChunk<ROWS> = FLoatArray somehow
 make templates that create Banks with vertical output (<COLS, ROWS> ? ) using 4x SIMD ops
@@ -108,24 +82,6 @@ namespace ml
 template <size_t ROWS>
 class DSPVectorArray
 {
-  // union def'n
-#ifdef MANUAL_ALIGN_DSPVECTOR
-  union Data
-  {
-    float asFloat[kFloatsPerDSPVector * ROWS + kDSPVectorAlignFloats];
-
-    Data() {}
-
-    Data(std::array<float, kFloatsPerDSPVector * ROWS> a)
-    {
-      float* py = DSPVectorAlignPointer<float>(this->asFloat);
-      for (int i = 0; i < kFloatsPerDSPVector * ROWS; ++i)
-      {
-        py[i] = a[i];
-      }
-    }
-  };
-#else
   union Data
   {
     SIMDVectorFloat _align[kSIMDVectorsPerDSPVector * ROWS];   // unused except to force alignment
@@ -135,20 +91,12 @@ class DSPVectorArray
     Data() {}
     constexpr Data(std::array<float, kFloatsPerDSPVector * ROWS> a) : arrayData_(a) {}
   };
-
-#endif
-
   Data data_;
 
  public:
   // getBuffer, getConstBuffer
-#ifdef MANUAL_ALIGN_DSPVECTOR
-  inline float* getBuffer() const { return DSPVectorAlignPointer<float>(data_.asFloat); }
-  inline const float* getConstBuffer() const { return DSPVectorAlignPointer<float>(data_.asFloat); }
-#else
   inline float* getBuffer() { return data_.asFloat; }
   inline const float* getConstBuffer() const { return data_.asFloat; }
-#endif  // MANUAL_ALIGN_DSPVECTOR
 
   // constexpr constructor taking a std::array. Use with make_array
   constexpr DSPVectorArray(std::array<float, kFloatsPerDSPVector * ROWS> a) : data_(a) {}
@@ -232,35 +180,6 @@ class DSPVectorArray
     setRowVectorUnchecked(J, x1);
   }
 
-#ifdef MANUAL_ALIGN_DSPVECTOR
-
-  // get a row vector j when j is not known at compile time.
-  inline DSPVectorArray<1> getRowVectorUnchecked(size_t j) const
-  {
-    DSPVectorArray<1> vy;
-    const float* px1 = getConstBuffer() + kFloatsPerDSPVector * j;
-    float* py1 = vy.getBuffer();
-
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
-    {
-      py1[n] = px1[n];
-    }
-    return vy;
-  }
-
-  // set a row vector j when j is not known at compile time.
-  inline void setRowVectorUnchecked(size_t j, const DSPVectorArray<1> x1)
-  {
-    const float* px1 = x1.getConstBuffer();
-    float* py1 = getBuffer() + kFloatsPerDSPVector * j;
-
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
-    {
-      py1[n] = px1[n];
-    }
-  }
-#else
-
   // get a row vector j when j is not known at compile time.
   inline DSPVectorArray<1> getRowVectorUnchecked(size_t j) const
   {
@@ -290,7 +209,6 @@ class DSPVectorArray
       py1 += kFloatsPerSIMDVector;
     }
   }
-#endif
 
   // return a const pointer to the first element in row J of this
   // DSPVectorArray.
@@ -391,25 +309,6 @@ constexpr size_t kIntsPerDSPVector = kFloatsPerDSPVector;
 template <size_t ROWS>
 class DSPVectorArrayInt
 {
-#ifdef MANUAL_ALIGN_DSPVECTOR
-  union Data
-  {
-    std::array<int, kIntsPerDSPVector * ROWS + kDSPVectorAlignInts> mArrayData;
-    int32_t asInt[kIntsPerDSPVector * ROWS + kDSPVectorAlignInts];
-    float asFloat[kFloatsPerDSPVector * ROWS + kDSPVectorAlignFloats];
-
-    Data() {}
-
-    Data(std::array<int, kIntsPerDSPVector * ROWS> a)
-    {
-      int* py = DSPVectorAlignPointer<int>(this->asFloat);
-      for (int i = 0; i < kIntsPerDSPVector * ROWS; ++i)
-      {
-        py[i] = a[i];
-      }
-    }
-  };
-#else
   union Data
   {
     SIMDVectorInt _align[kSIMDVectorsPerDSPVector * ROWS];     // unused except to force alignment
@@ -420,26 +319,15 @@ class DSPVectorArrayInt
     Data() {}
     constexpr Data(std::array<int32_t, kIntsPerDSPVector * ROWS> a) : arrayData_(a) {}
   };
-#endif  // MANUAL_ALIGN_DSPVECTOR
 
  public:
   Data data_;
 
   // getBuffer, getConstBuffer
-#ifdef MANUAL_ALIGN_DSPVECTOR
-  inline float* getBuffer() const { return DSPVectorAlignPointer<float>(data_.asFloat); }
-  inline const float* getConstBuffer() const { return DSPVectorAlignPointer<float>(data_.asFloat); }
-  inline int32_t* getBufferInt() const { return DSPVectorAlignPointer<float>(data_.asInt); }
-  inline const int32_t* getConstBufferInt() const
-  {
-    return DSPVectorAlignPointer<float>(data_.asInt);
-  }
-#else
   inline float* getBuffer() { return data_.asFloat; }
   inline const float* getConstBuffer() const { return data_.asFloat; }
   inline int32_t* getBufferInt() { return data_.asInt; }
   inline const int32_t* getConstBufferInt() const { return data_.asInt; }
-#endif  // MANUAL_ALIGN_DSPVECTOR
 
   explicit DSPVectorArrayInt() { operator=(0); }
   explicit DSPVectorArrayInt(int32_t k) { operator=(k); }
@@ -969,23 +857,10 @@ DSPVectorArray<ROWS> add(DSPVectorArray<ROWS> first, Args... args)
 // ----------------------------------------------------------------
 // constexpr definitions
 
-#ifdef MANUAL_ALIGN_DSPVECTOR
-
-// it seems unlikely that the constexpr ctors can be made to compile with manual
-// alignment, so we give up on constexpr for 32-bit Windows.
-#define ConstDSPVector static DSPVector
-#define ConstDSPVectorArray static DSPVectorArray
-#define ConstDSPVectorInt static DSPVectorInt
-#define ConstDSPVectorArrayInt static DSPVectorArrayInt
-
-#else
-
 #define ConstDSPVector constexpr DSPVector
 #define ConstDSPVectorArray constexpr DSPVectorArray
 #define ConstDSPVectorInt constexpr DSPVectorInt
 #define ConstDSPVectorArrayInt constexpr DSPVectorArrayInt
-
-#endif
 
 // ----------------------------------------------------------------
 // single-vector index and sequence generators
