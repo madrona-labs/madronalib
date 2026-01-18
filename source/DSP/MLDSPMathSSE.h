@@ -56,12 +56,15 @@ struct alignas(16) float4
 
 struct alignas(16) int4
 {
-  __m128i v;
-  
-  int4() : v(_mm_setzero_si128()) {}
-  int4(__m128i x) : v(x) {}
-  int4(int32_t a, int32_t b, int32_t c, int32_t d) : v(_mm_setr_epi32(a, b, c, d)) {}
-  int4(int32_t x) : v(_mm_set1_epi32(x)) {}
+    union {
+      __m128i v;
+      uint32_t i[4];
+    };
+
+    constexpr int4() : i{0, 0, 0, 0} {}
+    constexpr int4(int32_t a, int32_t b, int32_t c, int32_t d) : v(_mm_setr_epi32(a, b, c, d)) {}
+    constexpr int4(int32_t x) : v(_mm_set1_epi32(x)) {}
+int4(__m128i x) : v(x) {}
 
   // Implicit conversions to __m128i
   operator __m128i&() { return v; }
@@ -236,26 +239,6 @@ inline int4 vecSetInt4(uint32_t a, uint32_t b, uint32_t c, uint32_t d)
 {
   return _mm_set_epi32(d, c, b, a);
 }
-
-static const int XI = 0xFFFFFFFF;
-static const float X = *(reinterpret_cast<const float*>(&XI));
-
-constexpr float4 vecMask0{0, 0, 0, 0};
-const float4 vecMask1 = {0, 0, 0, X};
-const float4 vecMask2 = {0, 0, X, 0};
-const float4 vecMask3 = {0, 0, X, X};
-const float4 vecMask4 = {0, X, 0, 0};
-const float4 vecMask5 = {0, X, 0, X};
-const float4 vecMask6 = {0, X, X, 0};
-const float4 vecMask7 = {0, X, X, X};
-const float4 vecMask8 = {X, 0, 0, 0};
-const float4 vecMask9 = {X, 0, 0, X};
-const float4 vecMaskA = {X, 0, X, 0};
-const float4 vecMaskB = {X, 0, X, X};
-const float4 vecMaskC = {X, X, 0, 0};
-const float4 vecMaskD = {X, X, 0, X};
-const float4 vecMaskE = {X, X, X, 0};
-const float4 vecMaskF = {X, X, X, X};
 
 #define SHUFFLE(a, b, c, d) ((a << 6) | (b << 4) | (c << 2) | (d))
 #define vecBroadcast3(x1) _mm_shuffle_ps(x1, x1, SHUFFLE(3, 3, 3, 3))
