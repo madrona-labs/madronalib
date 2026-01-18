@@ -36,6 +36,7 @@
 #endif
 
 #include <float.h>
+#include <assert.h>
 
 #pragma once
 
@@ -46,6 +47,97 @@
 #define ALIGN16_BEG
 #define ALIGN16_END __attribute__((aligned(16)))
 #endif
+
+struct float4
+{
+  __m128 v;
+  
+  float4() : v(_mm_setzero_ps()) {}
+  float4(__m128 x) : v(x) {}
+  float4(float a, float b, float c, float d) : v(_mm_setr_ps(a, b, c, d)) {}
+  float4(float x) : v(_mm_set1_ps(x)) {}
+
+// Implicit conversions to __m128
+operator __m128&() { return v; }
+operator const __m128&() const { return v; }
+  
+  // Keep compound assignment as members (they require lvalue)
+  float4& operator+=(const float4& rhs) { v = _mm_add_ps(v, rhs.v); return *this; }
+  float4& operator-=(const float4& rhs) { v = _mm_sub_ps(v, rhs.v); return *this; }
+  float4& operator*=(const float4& rhs) { v = _mm_mul_ps(v, rhs.v); return *this; }
+  float4& operator/=(const float4& rhs) { v = _mm_div_ps(v, rhs.v); return *this; }
+  
+  // loads and stores must be aligned!
+  static float4 load(const float* ptr) { return _mm_load_ps(ptr); }
+  void store(float* ptr) const { _mm_store_ps(ptr, v); }
+  
+  // Get single lane value (expensive - use sparingly)
+  float get1(size_t lane) const {
+    assert(lane < 4);
+    alignas(16) float tmp[4];
+    _mm_store_ps(tmp, v);
+    return tmp[lane];
+  }
+  
+  // Set single lane value (expensive - use sparingly)
+  void set1(size_t lane, float val) {
+    assert(lane < 4);
+    alignas(16) float tmp[4];
+    _mm_store_ps(tmp, v);
+    tmp[lane] = val;
+    v = _mm_load_ps(tmp);
+  }
+  
+  static void transpose4x4(float4& r0, float4& r1, float4& r2, float4& r3) {
+    __m128 t0 = _mm_unpacklo_ps(r0.v, r1.v);
+    __m128 t1 = _mm_unpacklo_ps(r2.v, r3.v);
+    __m128 t2 = _mm_unpackhi_ps(r0.v, r1.v);
+    __m128 t3 = _mm_unpackhi_ps(r2.v, r3.v);
+    r0.v = _mm_movelh_ps(t0, t1);
+    r1.v = _mm_movehl_ps(t1, t0);
+    r2.v = _mm_movelh_ps(t2, t3);
+    r3.v = _mm_movehl_ps(t3, t2);
+  }
+};
+
+
+// Free function operators
+// Note: float * float4 works via implicit conversion
+inline float4 operator+(const float4& lhs, const float4& rhs) {
+  return _mm_add_ps(lhs.v, rhs.v);
+}
+inline float4 operator-(const float4& lhs, const float4& rhs) {
+  return _mm_sub_ps(lhs.v, rhs.v);
+}
+inline float4 operator*(const float4& lhs, const float4& rhs) {
+  return _mm_mul_ps(lhs.v, rhs.v);
+}
+inline float4 operator/(const float4& lhs, const float4& rhs) {
+  return _mm_div_ps(lhs.v, rhs.v);
+}
+inline float4 operator-(const float4& x) {
+  return _mm_sub_ps(_mm_setzero_ps(), x.v);
+}
+inline float4 clamp(const float4& a, const float4& b, const float4& c) {
+  return _mm_min_ps(_mm_max_ps(a.v, b.v), c.v);
+}
+inline float4 rcp(const float4& a) {
+  return _mm_rcp_ps(a.v);
+}
+
+inline std::ostream& operator<< (std::ostream& out, const float4 x)
+{
+  alignas(16) float tmp[4];
+  x.store(tmp);
+  out << "[";
+  for(int i=0; i<4; ++i)
+  {
+    out << tmp[i];
+    if(i < 3) { out << ", "; }
+  }
+  out << "]";
+  return out;
+}
 
 // SSE types
 typedef __m128 SIMDVectorFloat;
