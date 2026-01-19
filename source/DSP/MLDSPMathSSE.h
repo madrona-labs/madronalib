@@ -23,7 +23,7 @@ struct alignas(16) float4
     float f[4];
   };
   
-  constexpr float4() : f{0.0f, 0.0f, 0.0f, 0.0f} {}
+    float4() {}
   constexpr float4(float x) : f{x, x, x, x} {}
   constexpr float4(float a, float b, float c, float d) : f{a, b, c, d} {}
   float4(__m128 x) : v(x) {}  // Not constexpr - runtime only
@@ -49,7 +49,7 @@ struct alignas(16) int4
       uint32_t i[4];
     };
 
-    constexpr int4() : i{0, 0, 0, 0} {}
+    int4() {}
     constexpr int4(int32_t a, int32_t b, int32_t c, int32_t d) : i{(uint32_t)a, (uint32_t)b, (uint32_t)c, (uint32_t)d} {}
     constexpr int4(int32_t x) : i{(uint32_t)x, (uint32_t)x, (uint32_t)x, (uint32_t)x} {}
     int4(__m128i x) : v(x) {}  // Not constexpr - runtime only
