@@ -40,18 +40,6 @@ struct alignas(16) float4
   
   static float4 load(const float* ptr) { return _mm_load_ps(ptr); }
   void store(float* ptr) const { _mm_store_ps(ptr, v); }
-  
-  // Get single lane value (now just array access!)
-  float get1(size_t lane) const {
-    assert(lane < 4);
-    return f[lane];
-  }
-  
-  // Set single lane value
-  void set1(size_t lane, float val) {
-    assert(lane < 4);
-    f[lane] = val;
-  }
 };
 
 struct alignas(16) int4
@@ -62,9 +50,9 @@ struct alignas(16) int4
     };
 
     constexpr int4() : i{0, 0, 0, 0} {}
-    constexpr int4(int32_t a, int32_t b, int32_t c, int32_t d) : v(_mm_setr_epi32(a, b, c, d)) {}
-    constexpr int4(int32_t x) : v(_mm_set1_epi32(x)) {}
-int4(__m128i x) : v(x) {}
+    constexpr int4(int32_t a, int32_t b, int32_t c, int32_t d) : i{(uint32_t)a, (uint32_t)b, (uint32_t)c, (uint32_t)d} {}
+    constexpr int4(int32_t x) : i{(uint32_t)x, (uint32_t)x, (uint32_t)x, (uint32_t)x} {}
+    int4(__m128i x) : v(x) {}  // Not constexpr - runtime only
 
   // Implicit conversions to __m128i
   operator __m128i&() { return v; }
@@ -78,23 +66,6 @@ int4(__m128i x) : v(x) {}
   
   static int4 load(const int32_t* ptr) { return _mm_load_si128((__m128i*)ptr); }
   void store(int32_t* ptr) const { _mm_store_si128((__m128i*)ptr, v); }
-  
-  // Get single lane value (expensive - use sparingly)
-  int32_t get1(size_t lane) const {
-    assert(lane < 4);
-    alignas(16) int32_t tmp[4];
-    _mm_store_si128((__m128i*)tmp, v);
-    return tmp[lane];
-  }
-  
-  // Set single lane value (expensive - use sparingly)
-  void set1(size_t lane, int32_t val) {
-    assert(lane < 4);
-    alignas(16) int32_t tmp[4];
-    _mm_store_si128((__m128i*)tmp, v);
-    tmp[lane] = val;
-    v = _mm_load_si128((__m128i*)tmp);
-  }
 };
 
 // Free function operators
@@ -294,45 +265,62 @@ inline float vecMinH(float4 v)
   float4 tmp1 = _mm_min_ss(tmp0, _mm_shuffle_ps(tmp0, tmp0, 1));
   return _mm_cvtss_f32(tmp1);
 }
-
 // cephes-derived approximate math functions adapted from code by Julien Pommier
 // Copyright (C) 2007 Julien Pommier and licensed under the zlib license
 
-/* declare some SSE constants -- why can't I figure a better way to do that? */
-#define _PS_CONST(Name, Val) \
-  static const float _ps_##Name[4] = {Val, Val, Val, Val}
-#define _PI32_CONST(Name, Val) \
-  static const int _pi32_##Name[4] = {Val, Val, Val, Val}
+// Float constants
+constexpr float4 _ps_1{1.0f};
+constexpr float4 _ps_0p5{0.5f};
 
-_PS_CONST(1, 1.0f);
-_PS_CONST(0p5, 0.5f);
+constexpr float4 _ps_cephes_SQRTHF{0.707106781186547524f};
+constexpr float4 _ps_cephes_log_p0{7.0376836292E-2f};
+constexpr float4 _ps_cephes_log_p1{-1.1514610310E-1f};
+constexpr float4 _ps_cephes_log_p2{1.1676998740E-1f};
+constexpr float4 _ps_cephes_log_p3{-1.2420140846E-1f};
+constexpr float4 _ps_cephes_log_p4{+1.4249322787E-1f};
+constexpr float4 _ps_cephes_log_p5{-1.6668057665E-1f};
+constexpr float4 _ps_cephes_log_p6{+2.0000714765E-1f};
+constexpr float4 _ps_cephes_log_p7{-2.4999993993E-1f};
+constexpr float4 _ps_cephes_log_p8{+3.3333331174E-1f};
+constexpr float4 _ps_cephes_log_q1{-2.12194440e-4f};
+constexpr float4 _ps_cephes_log_q2{0.693359375f};
 
-/* the smallest non denormalized float number */
-_PI32_CONST(min_norm_pos, 0x00800000);
-_PI32_CONST(mant_mask, 0x7f800000);
-_PI32_CONST(inv_mant_mask, ~0x7f800000);
+constexpr float4 _ps_exp_hi{88.3762626647949f};
+constexpr float4 _ps_exp_lo{-88.3762626647949f};
 
-_PI32_CONST(sign_mask, (int)0x80000000);
-_PI32_CONST(inv_sign_mask, ~0x80000000);
+constexpr float4 _ps_cephes_LOG2EF{1.44269504088896341f};
+constexpr float4 _ps_cephes_exp_C1{0.693359375f};
+constexpr float4 _ps_cephes_exp_C2{-2.12194440e-4f};
 
-_PI32_CONST(1, 1);
-_PI32_CONST(inv1, ~1);
-_PI32_CONST(2, 2);
-_PI32_CONST(4, 4);
-_PI32_CONST(0x7f, 0x7f);
+constexpr float4 _ps_cephes_exp_p0{1.9875691500E-4f};
+constexpr float4 _ps_cephes_exp_p1{1.3981999507E-3f};
+constexpr float4 _ps_cephes_exp_p2{8.3334519073E-3f};
+constexpr float4 _ps_cephes_exp_p3{4.1665795894E-2f};
+constexpr float4 _ps_cephes_exp_p4{1.6666665459E-1f};
+constexpr float4 _ps_cephes_exp_p5{5.0000001201E-1f};
 
-_PS_CONST(cephes_SQRTHF, 0.707106781186547524f);
-_PS_CONST(cephes_log_p0, 7.0376836292E-2f);
-_PS_CONST(cephes_log_p1, -1.1514610310E-1f);
-_PS_CONST(cephes_log_p2, 1.1676998740E-1f);
-_PS_CONST(cephes_log_p3, -1.2420140846E-1f);
-_PS_CONST(cephes_log_p4, +1.4249322787E-1f);
-_PS_CONST(cephes_log_p5, -1.6668057665E-1f);
-_PS_CONST(cephes_log_p6, +2.0000714765E-1f);
-_PS_CONST(cephes_log_p7, -2.4999993993E-1f);
-_PS_CONST(cephes_log_p8, +3.3333331174E-1f);
-_PS_CONST(cephes_log_q1, -2.12194440e-4f);
-_PS_CONST(cephes_log_q2, 0.693359375f);
+constexpr float4 _ps_minus_cephes_DP1{-0.78515625f};
+constexpr float4 _ps_minus_cephes_DP2{-2.4187564849853515625e-4f};
+constexpr float4 _ps_minus_cephes_DP3{-3.77489497744594108e-8f};
+constexpr float4 _ps_sincof_p0{-1.9515295891E-4f};
+constexpr float4 _ps_sincof_p1{8.3321608736E-3f};
+constexpr float4 _ps_sincof_p2{-1.6666654611E-1f};
+constexpr float4 _ps_coscof_p0{2.443315711809948E-005f};
+constexpr float4 _ps_coscof_p1{-1.388731625493765E-003f};
+constexpr float4 _ps_coscof_p2{4.166664568298827E-002f};
+constexpr float4 _ps_cephes_FOPI{1.27323954473516f};  // 4 / M_PI
+
+// Integer constants
+constexpr int4 _pi32_min_norm_pos{0x00800000};  // the smallest non denormalized float number
+constexpr int4 _pi32_mant_mask{0x7f800000};
+constexpr int4 _pi32_inv_mant_mask{~0x7f800000};
+constexpr int4 _pi32_sign_mask{(int32_t)0x80000000};
+constexpr int4 _pi32_inv_sign_mask{~0x80000000};
+constexpr int4 _pi32_1{1};
+constexpr int4 _pi32_inv1{~1};
+constexpr int4 _pi32_2{2};
+constexpr int4 _pi32_4{4};
+constexpr int4 _pi32_0x7f{0x7f};
 
 /* natural logarithm computed for 4 simultaneous float
  return NaN for x <= 0
@@ -340,18 +328,18 @@ _PS_CONST(cephes_log_q2, 0.693359375f);
 inline float4 vecLog(float4 x)
 {
   int4 emm0;
-  float4 one = *(float4*)_ps_1;
+  float4 one = _ps_1;
   float4 invalid_mask = _mm_cmple_ps(x, _mm_setzero_ps());
 
-  x = _mm_max_ps(x, *(float4*)_pi32_min_norm_pos); /* cut off denormalized stuff */
+  x = _mm_max_ps(x, _pi32_min_norm_pos); /* cut off denormalized stuff */
 
   emm0 = _mm_srli_epi32(float4ToInt4(x), 23);
 
   /* keep only the fractional part */
-  x = _mm_and_ps(x, *(float4*)_pi32_inv_mant_mask);
-  x = _mm_or_ps(x, *(float4*)_ps_0p5);
+  x = _mm_and_ps(x, _pi32_inv_mant_mask);
+  x = _mm_or_ps(x, _ps_0p5);
 
-  emm0 = _mm_sub_epi32(emm0, *(int4*)_pi32_0x7f);
+  emm0 = _mm_sub_epi32(emm0, _pi32_0x7f);
   float4 e = _mm_cvtepi32_ps(emm0);
 
   e = _mm_add_ps(e, one);
@@ -362,7 +350,7 @@ inline float4 vecLog(float4 x)
    x = x + x - 1.0;
    } else { x = x - 1.0; }
    */
-  float4 mask = _mm_cmplt_ps(x, *(float4*)_ps_cephes_SQRTHF);
+  float4 mask = _mm_cmplt_ps(x, _ps_cephes_SQRTHF);
   float4 tmp = _mm_and_ps(x, mask);
   x = _mm_sub_ps(x, one);
   e = _mm_sub_ps(e, _mm_and_ps(one, mask));
@@ -370,66 +358,52 @@ inline float4 vecLog(float4 x)
 
   float4 z = _mm_mul_ps(x, x);
 
-  float4 y = *(float4*)_ps_cephes_log_p0;
+  float4 y = _ps_cephes_log_p0;
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p1);
+  y = _mm_add_ps(y, _ps_cephes_log_p1);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p2);
+  y = _mm_add_ps(y, _ps_cephes_log_p2);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p3);
+  y = _mm_add_ps(y, _ps_cephes_log_p3);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p4);
+  y = _mm_add_ps(y, _ps_cephes_log_p4);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p5);
+  y = _mm_add_ps(y, _ps_cephes_log_p5);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p6);
+  y = _mm_add_ps(y, _ps_cephes_log_p6);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p7);
+  y = _mm_add_ps(y, _ps_cephes_log_p7);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_log_p8);
+  y = _mm_add_ps(y, _ps_cephes_log_p8);
   y = _mm_mul_ps(y, x);
 
   y = _mm_mul_ps(y, z);
 
-  tmp = _mm_mul_ps(e, *(float4*)_ps_cephes_log_q1);
+  tmp = _mm_mul_ps(e, _ps_cephes_log_q1);
   y = _mm_add_ps(y, tmp);
 
-  tmp = _mm_mul_ps(z, *(float4*)_ps_0p5);
+  tmp = _mm_mul_ps(z, _ps_0p5);
   y = _mm_sub_ps(y, tmp);
 
-  tmp = _mm_mul_ps(e, *(float4*)_ps_cephes_log_q2);
+  tmp = _mm_mul_ps(e, _ps_cephes_log_q2);
   x = _mm_add_ps(x, y);
   x = _mm_add_ps(x, tmp);
   x = _mm_or_ps(x, invalid_mask);  // negative arg will be NAN
   return x;
 }
 
-_PS_CONST(exp_hi, 88.3762626647949f);
-_PS_CONST(exp_lo, -88.3762626647949f);
-
-_PS_CONST(cephes_LOG2EF, 1.44269504088896341f);
-_PS_CONST(cephes_exp_C1, 0.693359375f);
-_PS_CONST(cephes_exp_C2, -2.12194440e-4f);
-
-_PS_CONST(cephes_exp_p0, 1.9875691500E-4f);
-_PS_CONST(cephes_exp_p1, 1.3981999507E-3f);
-_PS_CONST(cephes_exp_p2, 8.3334519073E-3f);
-_PS_CONST(cephes_exp_p3, 4.1665795894E-2f);
-_PS_CONST(cephes_exp_p4, 1.6666665459E-1f);
-_PS_CONST(cephes_exp_p5, 5.0000001201E-1f);
-
 inline float4 vecExp(float4 x)
 {
   float4 tmp = _mm_setzero_ps(), fx;
   int4 emm0;
-  float4 one = *(float4*)_ps_1;
+  float4 one = _ps_1;
 
-  x = _mm_min_ps(x, *(float4*)_ps_exp_hi);
-  x = _mm_max_ps(x, *(float4*)_ps_exp_lo);
+  x = _mm_min_ps(x, _ps_exp_hi);
+  x = _mm_max_ps(x, _ps_exp_lo);
 
   /* express exp(x) as exp(g + n*log(2)) */
-  fx = _mm_mul_ps(x, *(float4*)_ps_cephes_LOG2EF);
-  fx = _mm_add_ps(fx, *(float4*)_ps_0p5);
+  fx = _mm_mul_ps(x, _ps_cephes_LOG2EF);
+  fx = _mm_add_ps(fx, _ps_0p5);
 
   /* how to perform a floorf with SSE: just below */
   emm0 = _mm_cvttps_epi32(fx);
@@ -440,47 +414,36 @@ inline float4 vecExp(float4 x)
   mask = _mm_and_ps(mask, one);
   fx = _mm_sub_ps(tmp, mask);
 
-  tmp = _mm_mul_ps(fx, *(float4*)_ps_cephes_exp_C1);
-  float4 z = _mm_mul_ps(fx, *(float4*)_ps_cephes_exp_C2);
+  tmp = _mm_mul_ps(fx, _ps_cephes_exp_C1);
+  float4 z = _mm_mul_ps(fx, _ps_cephes_exp_C2);
   x = _mm_sub_ps(x, tmp);
   x = _mm_sub_ps(x, z);
   z = _mm_mul_ps(x, x);
 
-  float4 y = *(float4*)_ps_cephes_exp_p0;
+  float4 y = _ps_cephes_exp_p0;
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p1);
+  y = _mm_add_ps(y, _ps_cephes_exp_p1);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p2);
+  y = _mm_add_ps(y, _ps_cephes_exp_p2);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p3);
+  y = _mm_add_ps(y, _ps_cephes_exp_p3);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p4);
+  y = _mm_add_ps(y, _ps_cephes_exp_p4);
   y = _mm_mul_ps(y, x);
-  y = _mm_add_ps(y, *(float4*)_ps_cephes_exp_p5);
+  y = _mm_add_ps(y, _ps_cephes_exp_p5);
   y = _mm_mul_ps(y, z);
   y = _mm_add_ps(y, x);
   y = _mm_add_ps(y, one);
 
   /* build 2^n */
   emm0 = _mm_cvttps_epi32(fx);
-  emm0 = _mm_add_epi32(emm0, *(int4*)_pi32_0x7f);
+  emm0 = _mm_add_epi32(emm0, _pi32_0x7f);
   emm0 = _mm_slli_epi32(emm0, 23);
   float4 pow2n = int4ToFloat4(emm0);
 
   y = _mm_mul_ps(y, pow2n);
   return y;
 }
-
-_PS_CONST(minus_cephes_DP1, -0.78515625f);
-_PS_CONST(minus_cephes_DP2, -2.4187564849853515625e-4f);
-_PS_CONST(minus_cephes_DP3, -3.77489497744594108e-8f);
-_PS_CONST(sincof_p0, -1.9515295891E-4f);
-_PS_CONST(sincof_p1, 8.3321608736E-3f);
-_PS_CONST(sincof_p2, -1.6666654611E-1f);
-_PS_CONST(coscof_p0, 2.443315711809948E-005f);
-_PS_CONST(coscof_p1, -1.388731625493765E-003f);
-_PS_CONST(coscof_p2, 4.166664568298827E-002f);
-_PS_CONST(cephes_FOPI, 1.27323954473516f);  // 4 / M_PI
 
 inline float4 vecSin(float4 x)
 {
@@ -489,29 +452,29 @@ inline float4 vecSin(float4 x)
 
   sign_bit = x;
   /* take the absolute value */
-  x = _mm_and_ps(x, *(float4*)_pi32_inv_sign_mask);
+  x = _mm_and_ps(x, _pi32_inv_sign_mask);
   /* extract the sign bit (upper one) */
-  sign_bit = _mm_and_ps(sign_bit, *(float4*)_pi32_sign_mask);
+  sign_bit = _mm_and_ps(sign_bit, _pi32_sign_mask);
 
   /* scale by 4/Pi */
-  y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
+  y = _mm_mul_ps(x, _ps_cephes_FOPI);
 
   /* store the integer part of y in mm0 */
   emm2 = _mm_cvttps_epi32(y);
   /* j=(j+1) & (~1) (see the cephes sources) */
-  emm2 = _mm_add_epi32(emm2, *(int4*)_pi32_1);
-  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_inv1);
+  emm2 = _mm_add_epi32(emm2, _pi32_1);
+  emm2 = _mm_and_si128(emm2, _pi32_inv1);
   y = _mm_cvtepi32_ps(emm2);
 
   /* get the swap sign flag */
-  emm0 = _mm_and_si128(emm2, *(int4*)_pi32_4);
+  emm0 = _mm_and_si128(emm2, _pi32_4);
   emm0 = _mm_slli_epi32(emm0, 29);
   /* get the polynom selection mask
    there is one polynom for 0 <= x <= Pi/4
    and another one for Pi/4<x<=Pi/2
    Both branches will be computed.
    */
-  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_2);
+  emm2 = _mm_and_si128(emm2, _pi32_2);
   emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
 
   float4 swap_sign_bit = int4ToFloat4(emm0);
@@ -520,9 +483,9 @@ inline float4 vecSin(float4 x)
 
   /* The magic pass: "Extended precision modular arithmetic"
    x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(float4*)_ps_minus_cephes_DP1;
-  xmm2 = *(float4*)_ps_minus_cephes_DP2;
-  xmm3 = *(float4*)_ps_minus_cephes_DP3;
+  xmm1 = _ps_minus_cephes_DP1;
+  xmm2 = _ps_minus_cephes_DP2;
+  xmm3 = _ps_minus_cephes_DP3;
   xmm1 = _mm_mul_ps(y, xmm1);
   xmm2 = _mm_mul_ps(y, xmm2);
   xmm3 = _mm_mul_ps(y, xmm3);
@@ -531,25 +494,25 @@ inline float4 vecSin(float4 x)
   x = _mm_add_ps(x, xmm3);
 
   /* Evaluate the first polynom  (0 <= x <= Pi/4) */
-  y = *(float4*)_ps_coscof_p0;
+  y = _ps_coscof_p0;
   float4 z = _mm_mul_ps(x, x);
 
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(float4*)_ps_coscof_p1);
+  y = _mm_add_ps(y, _ps_coscof_p1);
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(float4*)_ps_coscof_p2);
+  y = _mm_add_ps(y, _ps_coscof_p2);
   y = _mm_mul_ps(y, z);
   y = _mm_mul_ps(y, z);
-  float4 tmp = _mm_mul_ps(z, *(float4*)_ps_0p5);
+  float4 tmp = _mm_mul_ps(z, _ps_0p5);
   y = _mm_sub_ps(y, tmp);
-  y = _mm_add_ps(y, *(float4*)_ps_1);
+  y = _mm_add_ps(y, _ps_1);
 
   /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-  float4 y2 = *(float4*)_ps_sincof_p0;
+  float4 y2 = _ps_sincof_p0;
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p1);
+  y2 = _mm_add_ps(y2, _ps_sincof_p1);
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p2);
+  y2 = _mm_add_ps(y2, _ps_sincof_p2);
   y2 = _mm_mul_ps(y2, z);
   y2 = _mm_mul_ps(y2, x);
   y2 = _mm_add_ps(y2, x);
@@ -571,24 +534,24 @@ inline float4 vecCos(float4 x)
   int4 emm0, emm2;
 
   /* take the absolute value */
-  x = _mm_and_ps(x, *(float4*)_pi32_inv_sign_mask);
+  x = _mm_and_ps(x, _pi32_inv_sign_mask);
 
   /* scale by 4/Pi */
-  y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
+  y = _mm_mul_ps(x, _ps_cephes_FOPI);
 
   /* store the integer part of y in mm0 */
   emm2 = _mm_cvttps_epi32(y);
   /* j=(j+1) & (~1) (see the cephes sources) */
-  emm2 = _mm_add_epi32(emm2, *(int4*)_pi32_1);
-  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_inv1);
+  emm2 = _mm_add_epi32(emm2, _pi32_1);
+  emm2 = _mm_and_si128(emm2, _pi32_inv1);
   y = _mm_cvtepi32_ps(emm2);
-  emm2 = _mm_sub_epi32(emm2, *(int4*)_pi32_2);
+  emm2 = _mm_sub_epi32(emm2, _pi32_2);
 
   /* get the swap sign flag */
-  emm0 = _mm_andnot_si128(emm2, *(int4*)_pi32_4);
+  emm0 = _mm_andnot_si128(emm2, _pi32_4);
   emm0 = _mm_slli_epi32(emm0, 29);
   /* get the polynom selection mask */
-  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_2);
+  emm2 = _mm_and_si128(emm2, _pi32_2);
   emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
 
   float4 sign_bit = int4ToFloat4(emm0);
@@ -596,9 +559,9 @@ inline float4 vecCos(float4 x)
 
   /* The magic pass: "Extended precision modular arithmetic"
    x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(float4*)_ps_minus_cephes_DP1;
-  xmm2 = *(float4*)_ps_minus_cephes_DP2;
-  xmm3 = *(float4*)_ps_minus_cephes_DP3;
+  xmm1 = _ps_minus_cephes_DP1;
+  xmm2 = _ps_minus_cephes_DP2;
+  xmm3 = _ps_minus_cephes_DP3;
   xmm1 = _mm_mul_ps(y, xmm1);
   xmm2 = _mm_mul_ps(y, xmm2);
   xmm3 = _mm_mul_ps(y, xmm3);
@@ -607,25 +570,25 @@ inline float4 vecCos(float4 x)
   x = _mm_add_ps(x, xmm3);
 
   /* Evaluate the first polynom  (0 <= x <= Pi/4) */
-  y = *(float4*)_ps_coscof_p0;
+  y = _ps_coscof_p0;
   float4 z = _mm_mul_ps(x, x);
 
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(float4*)_ps_coscof_p1);
+  y = _mm_add_ps(y, _ps_coscof_p1);
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(float4*)_ps_coscof_p2);
+  y = _mm_add_ps(y, _ps_coscof_p2);
   y = _mm_mul_ps(y, z);
   y = _mm_mul_ps(y, z);
-  float4 tmp = _mm_mul_ps(z, *(float4*)_ps_0p5);
+  float4 tmp = _mm_mul_ps(z, _ps_0p5);
   y = _mm_sub_ps(y, tmp);
-  y = _mm_add_ps(y, *(float4*)_ps_1);
+  y = _mm_add_ps(y, _ps_1);
 
   /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-  float4 y2 = *(float4*)_ps_sincof_p0;
+  float4 y2 = _ps_sincof_p0;
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p1);
+  y2 = _mm_add_ps(y2, _ps_sincof_p1);
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p2);
+  y2 = _mm_add_ps(y2, _ps_sincof_p2);
   y2 = _mm_mul_ps(y2, z);
   y2 = _mm_mul_ps(y2, x);
   y2 = _mm_add_ps(y2, x);
@@ -650,38 +613,38 @@ inline void vecSinCos(float4 x, float4* s, float4* c)
 
   sign_bit_sin = x;
   /* take the absolute value */
-  x = _mm_and_ps(x, *(float4*)_pi32_inv_sign_mask);
+  x = _mm_and_ps(x, _pi32_inv_sign_mask);
   /* extract the sign bit (upper one) */
-  sign_bit_sin = _mm_and_ps(sign_bit_sin, *(float4*)_pi32_sign_mask);
+  sign_bit_sin = _mm_and_ps(sign_bit_sin, _pi32_sign_mask);
 
   /* scale by 4/Pi */
-  y = _mm_mul_ps(x, *(float4*)_ps_cephes_FOPI);
+  y = _mm_mul_ps(x, _ps_cephes_FOPI);
 
   /* store the integer part of y in emm2 */
   emm2 = _mm_cvttps_epi32(y);
 
   /* j=(j+1) & (~1) (see the cephes sources) */
-  emm2 = _mm_add_epi32(emm2, *(int4*)_pi32_1);
-  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_inv1);
+  emm2 = _mm_add_epi32(emm2, _pi32_1);
+  emm2 = _mm_and_si128(emm2, _pi32_inv1);
   y = _mm_cvtepi32_ps(emm2);
 
   emm4 = emm2;
 
   /* get the swap sign flag for the sine */
-  emm0 = _mm_and_si128(emm2, *(int4*)_pi32_4);
+  emm0 = _mm_and_si128(emm2, _pi32_4);
   emm0 = _mm_slli_epi32(emm0, 29);
   float4 swap_sign_bit_sin = int4ToFloat4(emm0);
 
   /* get the polynom selection mask for the sine*/
-  emm2 = _mm_and_si128(emm2, *(int4*)_pi32_2);
+  emm2 = _mm_and_si128(emm2, _pi32_2);
   emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
   float4 poly_mask = int4ToFloat4(emm2);
 
   /* The magic pass: "Extended precision modular arithmetic"
    x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(float4*)_ps_minus_cephes_DP1;
-  xmm2 = *(float4*)_ps_minus_cephes_DP2;
-  xmm3 = *(float4*)_ps_minus_cephes_DP3;
+  xmm1 = _ps_minus_cephes_DP1;
+  xmm2 = _ps_minus_cephes_DP2;
+  xmm3 = _ps_minus_cephes_DP3;
   xmm1 = _mm_mul_ps(y, xmm1);
   xmm2 = _mm_mul_ps(y, xmm2);
   xmm3 = _mm_mul_ps(y, xmm3);
@@ -689,8 +652,8 @@ inline void vecSinCos(float4 x, float4* s, float4* c)
   x = _mm_add_ps(x, xmm2);
   x = _mm_add_ps(x, xmm3);
 
-  emm4 = _mm_sub_epi32(emm4, *(int4*)_pi32_2);
-  emm4 = _mm_andnot_si128(emm4, *(int4*)_pi32_4);
+  emm4 = _mm_sub_epi32(emm4, _pi32_2);
+  emm4 = _mm_andnot_si128(emm4, _pi32_4);
   emm4 = _mm_slli_epi32(emm4, 29);
   float4 sign_bit_cos = int4ToFloat4(emm4);
 
@@ -698,24 +661,24 @@ inline void vecSinCos(float4 x, float4* s, float4* c)
 
   /* Evaluate the first polynom  (0 <= x <= Pi/4) */
   float4 z = _mm_mul_ps(x, x);
-  y = *(float4*)_ps_coscof_p0;
+  y = _ps_coscof_p0;
 
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(float4*)_ps_coscof_p1);
+  y = _mm_add_ps(y, _ps_coscof_p1);
   y = _mm_mul_ps(y, z);
-  y = _mm_add_ps(y, *(float4*)_ps_coscof_p2);
+  y = _mm_add_ps(y, _ps_coscof_p2);
   y = _mm_mul_ps(y, z);
   y = _mm_mul_ps(y, z);
-  float4 tmp = _mm_mul_ps(z, *(float4*)_ps_0p5);
+  float4 tmp = _mm_mul_ps(z, _ps_0p5);
   y = _mm_sub_ps(y, tmp);
-  y = _mm_add_ps(y, *(float4*)_ps_1);
+  y = _mm_add_ps(y, _ps_1);
 
   /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-  float4 y2 = *(float4*)_ps_sincof_p0;
+  float4 y2 = _ps_sincof_p0;
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p1);
+  y2 = _mm_add_ps(y2, _ps_sincof_p1);
   y2 = _mm_mul_ps(y2, z);
-  y2 = _mm_add_ps(y2, *(float4*)_ps_sincof_p2);
+  y2 = _mm_add_ps(y2, _ps_sincof_p2);
   y2 = _mm_mul_ps(y2, z);
   y2 = _mm_mul_ps(y2, x);
   y2 = _mm_add_ps(y2, x);
@@ -734,8 +697,6 @@ inline void vecSinCos(float4 x, float4* s, float4* c)
   *s = _mm_xor_ps(xmm1, sign_bit_sin);
   *c = _mm_xor_ps(xmm2, sign_bit_cos);
 }
-
-#define STATIC_M128_CONST(name, val) static constexpr __m128 name = {val, val, val, val};
 
 // fast polynomial approximations
 // from scalar code by Jacques-Henri Jourdan <jourgun@gmail.com>
@@ -756,12 +717,10 @@ inline void vecSinCos(float4 x, float4* s, float4* c)
 // > f+(x-1)*log(2)
 
 constexpr float4 kSinC1Vec{0.99997937679290771484375f};
-
-//STATIC_M128_CONST(kSinC1Vec, 0.99997937679290771484375f);
-STATIC_M128_CONST(kSinC2Vec, -0.166624367237091064453125f);
-STATIC_M128_CONST(kSinC3Vec, 8.30897875130176544189453125e-3f);
-STATIC_M128_CONST(kSinC4Vec, -1.92649182281456887722015380859375e-4f);
-STATIC_M128_CONST(kSinC5Vec, 2.147840177713078446686267852783203125e-6f);
+constexpr float4 kSinC2Vec{-0.166624367237091064453125f};
+constexpr float4 kSinC3Vec{8.30897875130176544189453125e-3f};
+constexpr float4 kSinC4Vec{-1.92649182281456887722015380859375e-4f};
+constexpr float4 kSinC5Vec{2.147840177713078446686267852783203125e-6f};
 
 inline __m128 vecSinApprox(__m128 x)
 {
@@ -779,11 +738,11 @@ inline __m128 vecSinApprox(__m128 x)
                                                                   _mm_mul_ps(x2, kSinC5Vec)))))))));
 }
 
-STATIC_M128_CONST(kCosC1Vec, 0.999959766864776611328125f);
-STATIC_M128_CONST(kCosC2Vec, -0.4997930824756622314453125f);
-STATIC_M128_CONST(kCosC3Vec, 4.1496001183986663818359375e-2f);
-STATIC_M128_CONST(kCosC4Vec, -1.33926304988563060760498046875e-3f);
-STATIC_M128_CONST(kCosC5Vec, 1.8791708498611114919185638427734375e-5f);
+constexpr float4 kCosC1Vec{0.999959766864776611328125f};
+constexpr float4 kCosC2Vec{-0.4997930824756622314453125f};
+constexpr float4 kCosC3Vec{4.1496001183986663818359375e-2f};
+constexpr float4 kCosC4Vec{-1.33926304988563060760498046875e-3f};
+constexpr float4 kCosC5Vec{1.8791708498611114919185638427734375e-5f};
 
 inline float4 vecCosApprox(float4 x)
 {
@@ -798,14 +757,15 @@ inline float4 vecCosApprox(float4 x)
                                         _mm_mul_ps(x2, _mm_add_ps(kCosC4Vec,
                                                                   _mm_mul_ps(x2, kCosC5Vec))))))));
 }
-STATIC_M128_CONST(kExpC1Vec, 2139095040.f);
-STATIC_M128_CONST(kExpC2Vec, 12102203.1615614f);
-STATIC_M128_CONST(kExpC3Vec, 1065353216.f);
-STATIC_M128_CONST(kExpC4Vec, 0.510397365625862338668154f);
-STATIC_M128_CONST(kExpC5Vec, 0.310670891004095530771135f);
-STATIC_M128_CONST(kExpC6Vec, 0.168143436463395944830000f);
-STATIC_M128_CONST(kExpC7Vec, -2.88093587581985443087955e-3f);
-STATIC_M128_CONST(kExpC8Vec, 1.3671023382430374383648148e-2f);
+
+constexpr float4 kExpC1Vec{2139095040.f};
+constexpr float4 kExpC2Vec{12102203.1615614f};
+constexpr float4 kExpC3Vec{1065353216.f};
+constexpr float4 kExpC4Vec{0.510397365625862338668154f};
+constexpr float4 kExpC5Vec{0.310670891004095530771135f};
+constexpr float4 kExpC6Vec{0.168143436463395944830000f};
+constexpr float4 kExpC7Vec{-2.88093587581985443087955e-3f};
+constexpr float4 kExpC8Vec{1.3671023382430374383648148e-2f};
 
 inline float4 vecExpApprox(float4 x)
 {
@@ -836,13 +796,13 @@ inline float4 vecExpApprox(float4 x)
                                                                 _mm_mul_ps(b, kExpC8Vec))))))))));
 }
 
-STATIC_M128_CONST(kLogC1Vec, -89.970756366f);
-STATIC_M128_CONST(kLogC2Vec, 3.529304993f);
-STATIC_M128_CONST(kLogC3Vec, -2.461222105f);
-STATIC_M128_CONST(kLogC4Vec, 1.130626167f);
-STATIC_M128_CONST(kLogC5Vec, -0.288739945f);
-STATIC_M128_CONST(kLogC6Vec, 3.110401639e-2f);
-STATIC_M128_CONST(kLogC7Vec, 0.69314718055995f);
+constexpr float4 kLogC1Vec{-89.970756366f};
+constexpr float4 kLogC2Vec{3.529304993f};
+constexpr float4 kLogC3Vec{-2.461222105f};
+constexpr float4 kLogC4Vec{1.130626167f};
+constexpr float4 kLogC5Vec{-0.288739945f};
+constexpr float4 kLogC6Vec{3.110401639e-2f};
+constexpr float4 kLogC7Vec{0.69314718055995f};
 
 inline float4 vecLogApprox(float4 val)
 {
@@ -873,8 +833,8 @@ inline float4 vecLogApprox(float4 val)
 
 // rough cubic tanh approx, valid in [-4, 4]
 
-STATIC_M128_CONST(k9Vec, 9.0f);
-STATIC_M128_CONST(k27Vec, 27.0f);
+constexpr float4 k9Vec{9.0f};
+constexpr float4 k27Vec{27.0f};
 
 inline float4 vecTanhApprox(float4 x)
 {

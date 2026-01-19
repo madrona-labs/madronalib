@@ -56,18 +56,6 @@ constexpr auto make_array(Function f)
 }
 
 // ----------------------------------------------------------------
-// alignment definitions
-
-
-// TODO
-/*
-make FloatArray type
-use DSPChunk<ROWS> = FLoatArray somehow
-make templates that create Banks with vertical output (<COLS, ROWS> ? ) using 4x SIMD ops
-*/
-
-
-// ----------------------------------------------------------------
 // DSPVectorArray
 //
 // An array of DSPVectors. Each DSPVector holds kFloatsPerDSPVector float32 samples.
@@ -514,8 +502,8 @@ DEFINE_OP1(log, (vecLog(x)));
 DEFINE_OP1(exp, (vecExp(x)));
 
 // lazy log2 and exp2 from natural log / exp
-STATIC_M128_CONST(kLogTwoVec, 0.69314718055994529f);
-STATIC_M128_CONST(kLogTwoRVec, 1.4426950408889634f);
+constexpr float4 kLogTwoVec{0.69314718055994529f};
+constexpr float4 kLogTwoRVec{1.4426950408889634f};
 DEFINE_OP1(log2, (vecMul(vecLog(x), kLogTwoRVec)));
 DEFINE_OP1(exp2, (vecExp(vecMul(kLogTwoVec, x))));
 
