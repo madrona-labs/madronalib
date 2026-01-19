@@ -25,6 +25,14 @@
 typedef __m128 float4;
 typedef __m128i int4;
 
+#ifdef _MSC_VER
+#define ML_FORCE_INLINE __forceinline
+#else
+#define ML_FORCE_INLINE __attribute__((always_inline)) inline
+#endif
+
+
+
 // ----------------------------------------------------------------
 // float4 construction functions (replace constructors)
 
@@ -68,10 +76,10 @@ inline void setFloat4Lane(float4& v, size_t lane, float val) {
 // Wrapper functions for SSE intrinsics operating on float4/int4
 
 // Float arithmetic
-inline float4 add4(float4 a, float4 b) { return _mm_add_ps(a, b); }
-inline float4 sub4(float4 a, float4 b) { return _mm_sub_ps(a, b); }
-inline float4 mul4(float4 a, float4 b) { return _mm_mul_ps(a, b); }
-inline float4 div4(float4 a, float4 b) { return _mm_div_ps(a, b); }
+ML_FORCE_INLINE float4 add4(float4 a, float4 b) { return _mm_add_ps(a, b); }
+ML_FORCE_INLINE float4 sub4(float4 a, float4 b) { return _mm_sub_ps(a, b); }
+ML_FORCE_INLINE float4 mul4(float4 a, float4 b) { return _mm_mul_ps(a, b); }
+ML_FORCE_INLINE float4 div4(float4 a, float4 b) { return _mm_div_ps(a, b); }
 inline float4 min4(float4 a, float4 b) { return _mm_min_ps(a, b); }
 inline float4 max4(float4 a, float4 b) { return _mm_max_ps(a, b); }
 inline float4 sqrt4(float4 a) { return _mm_sqrt_ps(a); }
