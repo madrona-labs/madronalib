@@ -1,5 +1,5 @@
 // madronalib: a C++ framework for DSP applications.
-// Copyright (c) 2020-2022 Madrona Labs LLC. http://www.madronalabs.com
+// Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
 // MLDSPMathSSE.h
@@ -18,16 +18,13 @@
 
 struct alignas(16) float4
 {
-  union {
-    __m128 v;
-    float f[4];
-  };
-  
-    float4() {}
-  constexpr float4(float x) : f{x, x, x, x} {}
-  constexpr float4(float a, float b, float c, float d) : f{a, b, c, d} {}
-  float4(__m128 x) : v(x) {}  // Not constexpr - runtime only
+  __m128 v;
 
+  float4() {}
+  float4(__m128 x) : v(x) {}
+  float4(float a, float b, float c, float d) : v(_mm_setr_ps(a, b, c, d)) {}
+  float4(float x) : v(_mm_set1_ps(x)) {}
+    
   // Implicit conversions to __m128
   operator __m128&() { return v; }
   operator const __m128&() const { return v; }
@@ -40,20 +37,34 @@ struct alignas(16) float4
   
   static float4 load(const float* ptr) { return _mm_load_ps(ptr); }
   void store(float* ptr) const { _mm_store_ps(ptr, v); }
+    
+// Get single lane value (may be slow)
+  float get1(size_t lane) const {
+    assert(lane < 4);
+    alignas(16) float tmp[4];
+    _mm_store_ps(tmp, v);
+    return tmp[lane];
+  }
+  
+  // Set single lane value (may be slow)
+  void set1(size_t lane, float val) {
+    assert(lane < 4);
+    alignas(16) float tmp[4];
+    _mm_store_ps(tmp, v);
+    tmp[lane] = val;
+    v = _mm_load_ps(tmp);
+  }
 };
 
 struct alignas(16) int4
 {
-    union {
-      __m128i v;
-      uint32_t i[4];
-    };
+  __m128i v;
 
-    int4() {}
-    constexpr int4(int32_t a, int32_t b, int32_t c, int32_t d) : i{(uint32_t)a, (uint32_t)b, (uint32_t)c, (uint32_t)d} {}
-    constexpr int4(int32_t x) : i{(uint32_t)x, (uint32_t)x, (uint32_t)x, (uint32_t)x} {}
-    int4(__m128i x) : v(x) {}  // Not constexpr - runtime only
-
+  int4() {}
+  int4(__m128i x) : v(x) {}
+  int4(int32_t a, int32_t b, int32_t c, int32_t d) : v(_mm_setr_epi32(a, b, c, d)) {}
+  int4(int32_t x) : v(_mm_set1_epi32(x)) {}
+    
   // Implicit conversions to __m128i
   operator __m128i&() { return v; }
   operator const __m128i&() const { return v; }
@@ -114,15 +125,14 @@ inline int4 operator&(const int4& a, const int4& b)
 
 inline std::ostream& operator<< (std::ostream& out, const float4 x)
 {
-    float4 u{x};
     out << "[";
-    out << u.f[0];
+    out << x.get1(0);
     out << ", ";
-    out << u.f[1];
+    out << x.get1(1);
     out << ", ";
-    out << u.f[2];
+    out << x.get1(2);
     out << ", ";
-    out << u.f[3];
+    out << x.get1(3);
     out << "]";
     return out;
 }
@@ -269,58 +279,57 @@ inline float vecMinH(float4 v)
 // Copyright (C) 2007 Julien Pommier and licensed under the zlib license
 
 // Float constants
-constexpr float4 _ps_1{1.0f};
-constexpr float4 _ps_0p5{0.5f};
+static const float4 _ps_1{1.0f};
+static const float4 _ps_0p5{0.5f};
+static const float4 _ps_cephes_SQRTHF{0.707106781186547524f};
+static const float4 _ps_cephes_log_p0{7.0376836292E-2f};
+static const float4 _ps_cephes_log_p1{-1.1514610310E-1f};
+static const float4 _ps_cephes_log_p2{1.1676998740E-1f};
+static const float4 _ps_cephes_log_p3{-1.2420140846E-1f};
+static const float4 _ps_cephes_log_p4{+1.4249322787E-1f};
+static const float4 _ps_cephes_log_p5{-1.6668057665E-1f};
+static const float4 _ps_cephes_log_p6{+2.0000714765E-1f};
+static const float4 _ps_cephes_log_p7{-2.4999993993E-1f};
+static const float4 _ps_cephes_log_p8{+3.3333331174E-1f};
+static const float4 _ps_cephes_log_q1{-2.12194440e-4f};
+static const float4 _ps_cephes_log_q2{0.693359375f};
 
-constexpr float4 _ps_cephes_SQRTHF{0.707106781186547524f};
-constexpr float4 _ps_cephes_log_p0{7.0376836292E-2f};
-constexpr float4 _ps_cephes_log_p1{-1.1514610310E-1f};
-constexpr float4 _ps_cephes_log_p2{1.1676998740E-1f};
-constexpr float4 _ps_cephes_log_p3{-1.2420140846E-1f};
-constexpr float4 _ps_cephes_log_p4{+1.4249322787E-1f};
-constexpr float4 _ps_cephes_log_p5{-1.6668057665E-1f};
-constexpr float4 _ps_cephes_log_p6{+2.0000714765E-1f};
-constexpr float4 _ps_cephes_log_p7{-2.4999993993E-1f};
-constexpr float4 _ps_cephes_log_p8{+3.3333331174E-1f};
-constexpr float4 _ps_cephes_log_q1{-2.12194440e-4f};
-constexpr float4 _ps_cephes_log_q2{0.693359375f};
+static const float4 _ps_exp_hi{88.3762626647949f};
+static const float4 _ps_exp_lo{-88.3762626647949f};
 
-constexpr float4 _ps_exp_hi{88.3762626647949f};
-constexpr float4 _ps_exp_lo{-88.3762626647949f};
+static const float4 _ps_cephes_LOG2EF{1.44269504088896341f};
+static const float4 _ps_cephes_exp_C1{0.693359375f};
+static const float4 _ps_cephes_exp_C2{-2.12194440e-4f};
 
-constexpr float4 _ps_cephes_LOG2EF{1.44269504088896341f};
-constexpr float4 _ps_cephes_exp_C1{0.693359375f};
-constexpr float4 _ps_cephes_exp_C2{-2.12194440e-4f};
+static const float4 _ps_cephes_exp_p0{1.9875691500E-4f};
+static const float4 _ps_cephes_exp_p1{1.3981999507E-3f};
+static const float4 _ps_cephes_exp_p2{8.3334519073E-3f};
+static const float4 _ps_cephes_exp_p3{4.1665795894E-2f};
+static const float4 _ps_cephes_exp_p4{1.6666665459E-1f};
+static const float4 _ps_cephes_exp_p5{5.0000001201E-1f};
 
-constexpr float4 _ps_cephes_exp_p0{1.9875691500E-4f};
-constexpr float4 _ps_cephes_exp_p1{1.3981999507E-3f};
-constexpr float4 _ps_cephes_exp_p2{8.3334519073E-3f};
-constexpr float4 _ps_cephes_exp_p3{4.1665795894E-2f};
-constexpr float4 _ps_cephes_exp_p4{1.6666665459E-1f};
-constexpr float4 _ps_cephes_exp_p5{5.0000001201E-1f};
-
-constexpr float4 _ps_minus_cephes_DP1{-0.78515625f};
-constexpr float4 _ps_minus_cephes_DP2{-2.4187564849853515625e-4f};
-constexpr float4 _ps_minus_cephes_DP3{-3.77489497744594108e-8f};
-constexpr float4 _ps_sincof_p0{-1.9515295891E-4f};
-constexpr float4 _ps_sincof_p1{8.3321608736E-3f};
-constexpr float4 _ps_sincof_p2{-1.6666654611E-1f};
-constexpr float4 _ps_coscof_p0{2.443315711809948E-005f};
-constexpr float4 _ps_coscof_p1{-1.388731625493765E-003f};
-constexpr float4 _ps_coscof_p2{4.166664568298827E-002f};
-constexpr float4 _ps_cephes_FOPI{1.27323954473516f};  // 4 / M_PI
+static const float4 _ps_minus_cephes_DP1{-0.78515625f};
+static const float4 _ps_minus_cephes_DP2{-2.4187564849853515625e-4f};
+static const float4 _ps_minus_cephes_DP3{-3.77489497744594108e-8f};
+static const float4 _ps_sincof_p0{-1.9515295891E-4f};
+static const float4 _ps_sincof_p1{8.3321608736E-3f};
+static const float4 _ps_sincof_p2{-1.6666654611E-1f};
+static const float4 _ps_coscof_p0{2.443315711809948E-005f};
+static const float4 _ps_coscof_p1{-1.388731625493765E-003f};
+static const float4 _ps_coscof_p2{4.166664568298827E-002f};
+static const float4 _ps_cephes_FOPI{1.27323954473516f};  // 4 / M_PI
 
 // Integer constants
-constexpr int4 _pi32_min_norm_pos{0x00800000};  // the smallest non denormalized float number
-constexpr int4 _pi32_mant_mask{0x7f800000};
-constexpr int4 _pi32_inv_mant_mask{~0x7f800000};
-constexpr int4 _pi32_sign_mask{(int32_t)0x80000000};
-constexpr int4 _pi32_inv_sign_mask{~0x80000000};
-constexpr int4 _pi32_1{1};
-constexpr int4 _pi32_inv1{~1};
-constexpr int4 _pi32_2{2};
-constexpr int4 _pi32_4{4};
-constexpr int4 _pi32_0x7f{0x7f};
+static const int4 _pi32_min_norm_pos{0x00800000};  // the smallest non denormalized float number
+static const int4 _pi32_mant_mask{0x7f800000};
+static const int4 _pi32_inv_mant_mask{~0x7f800000};
+static const int4 _pi32_sign_mask{(int32_t)0x80000000};
+static const int4 _pi32_inv_sign_mask{~0x80000000};
+static const int4 _pi32_1{1};
+static const int4 _pi32_inv1{~1};
+static const int4 _pi32_2{2};
+static const int4 _pi32_4{4};
+static const int4 _pi32_0x7f{0x7f};
 
 /* natural logarithm computed for 4 simultaneous float
  return NaN for x <= 0
@@ -716,11 +725,11 @@ inline void vecSinCos(float4 x, float4* s, float4* c)
 // > plot(f+(x-1)*log(2)-log(x), [1,2]);
 // > f+(x-1)*log(2)
 
-constexpr float4 kSinC1Vec{0.99997937679290771484375f};
-constexpr float4 kSinC2Vec{-0.166624367237091064453125f};
-constexpr float4 kSinC3Vec{8.30897875130176544189453125e-3f};
-constexpr float4 kSinC4Vec{-1.92649182281456887722015380859375e-4f};
-constexpr float4 kSinC5Vec{2.147840177713078446686267852783203125e-6f};
+static const float4 kSinC1Vec{0.99997937679290771484375f};
+static const float4 kSinC2Vec{-0.166624367237091064453125f};
+static const float4 kSinC3Vec{8.30897875130176544189453125e-3f};
+static const float4 kSinC4Vec{-1.92649182281456887722015380859375e-4f};
+static const float4 kSinC5Vec{2.147840177713078446686267852783203125e-6f};
 
 inline __m128 vecSinApprox(__m128 x)
 {
@@ -738,11 +747,11 @@ inline __m128 vecSinApprox(__m128 x)
                                                                   _mm_mul_ps(x2, kSinC5Vec)))))))));
 }
 
-constexpr float4 kCosC1Vec{0.999959766864776611328125f};
-constexpr float4 kCosC2Vec{-0.4997930824756622314453125f};
-constexpr float4 kCosC3Vec{4.1496001183986663818359375e-2f};
-constexpr float4 kCosC4Vec{-1.33926304988563060760498046875e-3f};
-constexpr float4 kCosC5Vec{1.8791708498611114919185638427734375e-5f};
+static const float4 kCosC1Vec{0.999959766864776611328125f};
+static const float4 kCosC2Vec{-0.4997930824756622314453125f};
+static const float4 kCosC3Vec{4.1496001183986663818359375e-2f};
+static const float4 kCosC4Vec{-1.33926304988563060760498046875e-3f};
+static const float4 kCosC5Vec{1.8791708498611114919185638427734375e-5f};
 
 inline float4 vecCosApprox(float4 x)
 {
@@ -758,14 +767,14 @@ inline float4 vecCosApprox(float4 x)
                                                                   _mm_mul_ps(x2, kCosC5Vec))))))));
 }
 
-constexpr float4 kExpC1Vec{2139095040.f};
-constexpr float4 kExpC2Vec{12102203.1615614f};
-constexpr float4 kExpC3Vec{1065353216.f};
-constexpr float4 kExpC4Vec{0.510397365625862338668154f};
-constexpr float4 kExpC5Vec{0.310670891004095530771135f};
-constexpr float4 kExpC6Vec{0.168143436463395944830000f};
-constexpr float4 kExpC7Vec{-2.88093587581985443087955e-3f};
-constexpr float4 kExpC8Vec{1.3671023382430374383648148e-2f};
+static const float4 kExpC1Vec{2139095040.f};
+static const float4 kExpC2Vec{12102203.1615614f};
+static const float4 kExpC3Vec{1065353216.f};
+static const float4 kExpC4Vec{0.510397365625862338668154f};
+static const float4 kExpC5Vec{0.310670891004095530771135f};
+static const float4 kExpC6Vec{0.168143436463395944830000f};
+static const float4 kExpC7Vec{-2.88093587581985443087955e-3f};
+static const float4 kExpC8Vec{1.3671023382430374383648148e-2f};
 
 inline float4 vecExpApprox(float4 x)
 {
@@ -796,13 +805,13 @@ inline float4 vecExpApprox(float4 x)
                                                                 _mm_mul_ps(b, kExpC8Vec))))))))));
 }
 
-constexpr float4 kLogC1Vec{-89.970756366f};
-constexpr float4 kLogC2Vec{3.529304993f};
-constexpr float4 kLogC3Vec{-2.461222105f};
-constexpr float4 kLogC4Vec{1.130626167f};
-constexpr float4 kLogC5Vec{-0.288739945f};
-constexpr float4 kLogC6Vec{3.110401639e-2f};
-constexpr float4 kLogC7Vec{0.69314718055995f};
+static const float4 kLogC1Vec{-89.970756366f};
+static const float4 kLogC2Vec{3.529304993f};
+static const float4 kLogC3Vec{-2.461222105f};
+static const float4 kLogC4Vec{1.130626167f};
+static const float4 kLogC5Vec{-0.288739945f};
+static const float4 kLogC6Vec{3.110401639e-2f};
+static const float4 kLogC7Vec{0.69314718055995f};
 
 inline float4 vecLogApprox(float4 val)
 {
@@ -833,8 +842,8 @@ inline float4 vecLogApprox(float4 val)
 
 // rough cubic tanh approx, valid in [-4, 4]
 
-constexpr float4 k9Vec{9.0f};
-constexpr float4 k27Vec{27.0f};
+static const float4 k9Vec{9.0f};
+static const float4 k27Vec{27.0f};
 
 inline float4 vecTanhApprox(float4 x)
 {
@@ -874,31 +883,3 @@ inline float4 vecShuffleLeft(float4 v1, float4 v2)
 {
   return _mm_shuffle_ps(v1, _mm_shuffle_ps(v1, v2, SHUFFLE(0, 0, 3, 3)), SHUFFLE(3, 0, 2, 1));
 }
-
-// define infix operators for native SSE / MSVC.
-#ifndef ML_SSE_TO_NEON
-#ifdef WIN32
-
-inline float4 operator*(const float4& a, const float4& b)
-{
-  return vecMul(a, b);
-}
-
-inline float4 operator+(const float4& a, const float4& b)
-{
-  return vecAdd(a, b);
-}
-
-inline float4 operator-(const float4& a, const float4& b)
-{
-  return vecSub(a, b);
-}
-
-inline float4 operator/(const float4& a, const float4& b)
-{
-  return vecDiv(a, b);
-}
-
-
-#endif
-#endif

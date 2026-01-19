@@ -1,5 +1,5 @@
 // madronalib: a C++ framework for DSP applications.
-// Copyright (c) 2020-2022 Madrona Labs LLC. http://www.madronalabs.com
+// Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
 // This module contains the DSPVectorArray / DSPVector class and basic
@@ -502,8 +502,8 @@ DEFINE_OP1(log, (vecLog(x)));
 DEFINE_OP1(exp, (vecExp(x)));
 
 // lazy log2 and exp2 from natural log / exp
-constexpr float4 kLogTwoVec{0.69314718055994529f};
-constexpr float4 kLogTwoRVec{1.4426950408889634f};
+static const float4 kLogTwoVec{0.69314718055994529f};
+static const float4 kLogTwoRVec{1.4426950408889634f};
 DEFINE_OP1(log2, (vecMul(vecLog(x), kLogTwoRVec)));
 DEFINE_OP1(exp2, (vecExp(vecMul(kLogTwoVec, x))));
 
