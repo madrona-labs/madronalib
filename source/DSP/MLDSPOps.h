@@ -67,6 +67,18 @@ constexpr auto make_array(Function f)
 
 namespace ml
 {
+
+
+constexpr size_t kSIMDVectorsPerDSPVector = kFloatsPerDSPVector / 4;
+constexpr size_t kBytesPerSIMDVector = 4 * sizeof(float);
+constexpr size_t kSIMDVectorMask = ~(kBytesPerSIMDVector - 1);
+
+inline bool isSIMDAligned(float* p) {
+  uintptr_t pM = (uintptr_t)p;
+  return ((pM & kSIMDVectorMask) == 0);
+}
+
+
 template <size_t ROWS>
 class DSPVectorArray
 {
@@ -326,7 +338,8 @@ class DSPVectorArrayInt
   // set each element of the DSPVectorArray to the int32_t value k.
   inline DSPVectorArrayInt operator=(int32_t k)
   {
-    float4 vk = int4ToFloat4(vecSetInt1(k));
+    int4 i4 = vecSetInt1(k);
+    float4 vk = int4ToFloat4(i4);
     int32_t* py1 = getBufferInt();
 
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
@@ -465,7 +478,7 @@ inline void storeAligned(const DSPVectorArray<ROWS>& vecSrc, float* pDest)
 }
 
 // ----------------------------------------------------------------
-// unary vector operators (float) -> float
+// unary vector operators (float4) -> float4
 
 #define DEFINE_OP1(opName, opComputation)                              \
   template <size_t ROWS>                                               \
@@ -477,23 +490,24 @@ inline void storeAligned(const DSPVectorArray<ROWS>& vecSrc, float* pDest)
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
     {                                                                  \
       float4 x = vecLoad(px1);                                \
-      vecStore(py1, (opComputation));                                  \
+      auto y = (opComputation); \
+      vecStore(py1, y);                                  \
       px1 += 4;                                     \
       py1 += 4;                                     \
     }                                                                  \
     return vy;                                                         \
   }
-
-DEFINE_OP1(recipApprox, (vecRecipApprox(x)));
-DEFINE_OP1(sqrt, (vecSqrt(x)));
-DEFINE_OP1(sqrtApprox, vecSqrtApprox(x));
-DEFINE_OP1(abs, vecAbs(x));
+DEFINE_OP1(recipApprox, (rcp4(x)));
+DEFINE_OP1(sqrt, (sqrt4(x)));
+DEFINE_OP1(sqrtApprox, (mul4(x, rsqrt4(x))));
+DEFINE_OP1(abs, (andNotBits4(set1Float4(-0.0f), x)));
 
 // float sign: -1, 0, or 1
-DEFINE_OP1(sign, vecSign(x));
+DEFINE_OP1(sign, (andBits4(orBits4(andBits4(set1Float4(-0.0f), x), set1Float4(1.0f)),
+                          compareNotEqual4(set1Float4(-0.0f), x))));
 
 // up/down sign: -1 or 1
-DEFINE_OP1(signBit, vecSignBit(x));
+DEFINE_OP1(signBit, (orBits4(andBits4(set1Float4(-0.0f), x), set1Float4(1.0f))));
 
 // trig, log and exp, using accurate cephes-derived library
 DEFINE_OP1(sin, (vecSin(x)));
@@ -504,8 +518,8 @@ DEFINE_OP1(exp, (vecExp(x)));
 // lazy log2 and exp2 from natural log / exp
 static const float4 kLogTwoVec{0.69314718055994529f};
 static const float4 kLogTwoRVec{1.4426950408889634f};
-DEFINE_OP1(log2, (vecMul(vecLog(x), kLogTwoRVec)));
-DEFINE_OP1(exp2, (vecExp(vecMul(kLogTwoVec, x))));
+DEFINE_OP1(log2, (mul4(vecLog(x), kLogTwoRVec)));
+DEFINE_OP1(exp2, (vecExp(mul4(kLogTwoVec, x))));
 
 // trig, log and exp, using polynomial approximations
 DEFINE_OP1(sinApprox, (vecSinApprox(x)));
@@ -514,8 +528,8 @@ DEFINE_OP1(expApprox, (vecExpApprox(x)));
 DEFINE_OP1(logApprox, (vecLogApprox(x)));
 
 // lazy log2 and exp2 approximations from log / exp approximations
-DEFINE_OP1(log2Approx, (vecMul(vecLogApprox(x), kLogTwoRVec)));
-DEFINE_OP1(exp2Approx, (vecExpApprox(vecMul(kLogTwoVec, x))));
+DEFINE_OP1(log2Approx, (mul4(vecLogApprox(x), kLogTwoRVec)));
+DEFINE_OP1(exp2Approx, (vecExpApprox(mul4(kLogTwoVec, x))));
 
 // cubic tanh approx
 DEFINE_OP1(tanhApprox, (vecTanhApprox(x)));
@@ -536,7 +550,8 @@ DEFINE_OP1(tanhApprox, (vecTanhApprox(x)));
     {                                                                  \
       float4 x1 = vecLoad(px1);                               \
       float4 x2 = vecLoad(px2);                               \
-      vecStore(py1, (opComputation));                                  \
+      auto y = (opComputation); \
+      vecStore(py1, y);                                  \
       px1 += 4;                                     \
       px2 += 4;                                     \
       py1 += 4;                                     \
@@ -544,16 +559,16 @@ DEFINE_OP1(tanhApprox, (vecTanhApprox(x)));
     return vy;                                                         \
   }
 
-DEFINE_OP2(add, (vecAdd(x1, x2)));
-DEFINE_OP2(subtract, (vecSub(x1, x2)));
-DEFINE_OP2(multiply, (vecMul(x1, x2)));
-DEFINE_OP2(divide, (vecDiv(x1, x2)));
+DEFINE_OP2(add, (add4(x1, x2)));
+DEFINE_OP2(subtract, (sub4(x1, x2)));
+DEFINE_OP2(multiply, (mul4(x1, x2)));
+DEFINE_OP2(divide, (div4(x1, x2)));
 
-DEFINE_OP2(divideApprox, vecDivApprox(x1, x2));
-DEFINE_OP2(pow, (vecExp(vecMul(vecLog(x1), x2))));
-DEFINE_OP2(powApprox, (vecExpApprox(vecMul(vecLogApprox(x1), x2))));
-DEFINE_OP2(min, (vecMin(x1, x2)));
-DEFINE_OP2(max, (vecMax(x1, x2)));
+DEFINE_OP2(divideApprox, (mul4(x1, rcp4(x2))));
+DEFINE_OP2(pow, (vecExp(mul4(vecLog(x1), x2))));
+DEFINE_OP2(powApprox, (vecExpApprox(mul4(vecLogApprox(x1), x2))));
+DEFINE_OP2(min, (min(x1, x2)));
+DEFINE_OP2(max, (max(x1, x2)));
 
 // ----------------------------------------------------------------
 // binary vector operators (float, float) -> float
@@ -573,7 +588,8 @@ DEFINE_OP2(max, (vecMax(x1, x2)));
     {                                                                  \
       float4 x1 = vecLoad(px1);                               \
       float4 x2 = vecLoad(px2 + px2Offset);                   \
-      vecStore(py1, (opComputation));                                  \
+      auto y = (opComputation); \
+      vecStore(py1, y);                                  \
       px1 += 4;                                     \
       px2Offset += 4;                               \
       px2Offset &= kFloatsPerDSPVector - 1;                            \
@@ -582,16 +598,17 @@ DEFINE_OP2(max, (vecMax(x1, x2)));
     return vy;                                                         \
   }
 
-DEFINE_OP2_MS(add1, (vecAdd(x1, x2)));
-DEFINE_OP2_MS(subtract1, (vecSub(x1, x2)));
-DEFINE_OP2_MS(multiply1, (vecMul(x1, x2)));
-DEFINE_OP2_MS(divide1, (vecDiv(x1, x2)));
+DEFINE_OP2_MS(add1, (add4(x1, x2)));
+DEFINE_OP2_MS(subtract1, (sub4(x1, x2)));
+DEFINE_OP2_MS(multiply1, (mul4(x1, x2)));
+DEFINE_OP2_MS(divide1, (div4(x1, x2)));
 
-DEFINE_OP2_MS(divideApprox1, vecDivApprox(x1, x2));
-DEFINE_OP2_MS(pow1, (vecExp(vecMul(vecLog(x1), x2))));
-DEFINE_OP2_MS(powApprox1, (vecExpApprox(vecMul(vecLogApprox(x1), x2))));
-DEFINE_OP2_MS(min1, (vecMin(x1, x2)));
-DEFINE_OP2_MS(max1, (vecMax(x1, x2)));
+DEFINE_OP2_MS(divideApprox1, (mul4(x1, rcp4(x2))));
+DEFINE_OP2_MS(pow1, (vecExp(mul4(vecLog(x1), x2))));
+DEFINE_OP2_MS(powApprox1, (vecExpApprox(mul4(vecLogApprox(x1), x2))));
+DEFINE_OP2_MS(min1, (min(x1, x2)));
+DEFINE_OP2_MS(max1, (max(x1, x2)));
+
 
 // ----------------------------------------------------------------
 // binary vector operators (int32, int32) -> int32
@@ -607,9 +624,10 @@ DEFINE_OP2_MS(max1, (vecMax(x1, x2)));
     float* py1 = vy.getBuffer();                                             \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)                \
     {                                                                        \
-      int4 x1 = float4ToInt4(vecLoad(px1));                               \
-      int4 x2 = float4ToInt4(vecLoad(px2));                               \
-      vecStore(py1, int4ToFloat4(opComputation));                                  \
+      int4 x1 = castFloatToInt4(vecLoad(px1));                               \
+      int4 x2 = castFloatToInt4(vecLoad(px2));                               \
+auto y = castIntToFloat4(opComputation); \
+      vecStore(py1, y);                                  \
       px1 += 4;                                             \
       px2 += 4;                                             \
       py1 += 4;                                             \
@@ -617,8 +635,8 @@ DEFINE_OP2_MS(max1, (vecMax(x1, x2)));
     return vy;                                                               \
   }
 
-DEFINE_OP2_INT32(subtractInt32, (vecSubInt(x1, x2)));
-DEFINE_OP2_INT32(addInt32, (vecAddInt(x1, x2)));
+DEFINE_OP2_INT32(subtractInt32, (sub4(x1, x2)));
+DEFINE_OP2_INT32(addInt32, (add4(x1, x2)));
 
 // ----------------------------------------------------------------
 // ternary vector operators (float, float, float) -> float
@@ -639,7 +657,8 @@ DEFINE_OP2_INT32(addInt32, (vecAddInt(x1, x2)));
       float4 x1 = vecLoad(px1);                               \
       float4 x2 = vecLoad(px2);                               \
       float4 x3 = vecLoad(px3);                               \
-      vecStore(py1, (opComputation));                                  \
+auto y = (opComputation); \
+      vecStore(py1, y);                                  \
       px1 += 4;                                     \
       px2 += 4;                                     \
       px3 += 4;                                     \
@@ -648,11 +667,12 @@ DEFINE_OP2_INT32(addInt32, (vecAddInt(x1, x2)));
     return vy;                                                         \
   }
 
-DEFINE_OP3(lerp, vecAdd(x1, (vecMul(x3, vecSub(x2, x1)))));       // x = lerp(a, b, mix)
-DEFINE_OP3(inverseLerp, vecDiv(vecSub(x3, x1), vecSub(x2, x1)));  // mix = inverseLerp(a, b, x)
+DEFINE_OP3(lerp, (add4(x1, mul4(x3, sub4(x2, x1)))));       // x = lerp(a, b, mix)
+DEFINE_OP3(inverseLerp, (div4(sub4(x3, x1), sub4(x2, x1))));  // mix = inverseLerp(a, b, x)
 
-DEFINE_OP3(clamp, vecClamp(x1, x2, x3));    // clamp(x, minBound, maxBound)
-DEFINE_OP3(within, vecWithin(x1, x2, x3));  // is x in the open interval [x2, x3) ?
+DEFINE_OP3(clamp, (min4(max4(x1, x2), x3)));    // clamp(x, minBound, maxBound)
+DEFINE_OP3(within, (andBits4(compareGreaterThanOrEqual4(x1, x2), compareLessThan4(x1, x3))));  // is x in the open interval [x2, x3) ?
+
 
 // ----------------------------------------------------------------
 // lerp two vectors with scalar float mixture (constant over each vector)
@@ -666,19 +686,21 @@ inline DSPVectorArray<ROWS> lerp(const DSPVectorArray<ROWS>& vx1, const DSPVecto
   const float* px2 = vx2.getConstBuffer();
   DSPVector vmix(m);
   float* py1 = vy.getBuffer();
-  const float4 vConstMix = vecSet1(m);
-
+  const float4 vConstMix = set1Float4(m);
+  
   for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
   {
     float4 x1 = vecLoad(px1);
     float4 x2 = vecLoad(px2);
-    vecStore(py1, vecAdd(x1, (vecMul(vConstMix, vecSub(x2, x1)))));
+    float4 mix = add4(x1, mul4(vConstMix, sub4(x2, x1)));
+    vecStore(py1, mix);
     px1 += 4;
     px2 += 4;
     py1 += 4;
   }
   return vy;
 }
+
 
 // ----------------------------------------------------------------
 // vector operators (float) -> int
@@ -693,15 +715,16 @@ inline DSPVectorArray<ROWS> lerp(const DSPVectorArray<ROWS>& vx1, const DSPVecto
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
     {                                                                     \
       float4 x = vecLoad(px1);                                   \
-      vecStore((py1), (opComputation));                                   \
+auto y = (opComputation); \
+      vecStore((py1), y);                                   \
       px1 += 4;                                        \
       py1 += 4;                                          \
     }                                                                     \
     return vy;                                                            \
   }
 
-DEFINE_OP1_F2I(roundFloatToInt, (int4ToFloat4(vecFloatToIntRound(x))));
-DEFINE_OP1_F2I(truncateFloatToInt, (int4ToFloat4(vecFloatToIntTruncate(x))));
+DEFINE_OP1_F2I(roundFloatToInt, (castIntToFloat4(floatToIntRound4(x))));
+DEFINE_OP1_F2I(truncateFloatToInt, (castIntToFloat4(floatToIntTruncate4(x))));
 
 // ----------------------------------------------------------------
 // vector operators (int) -> float
@@ -715,21 +738,22 @@ DEFINE_OP1_F2I(truncateFloatToInt, (int4ToFloat4(vecFloatToIntTruncate(x))));
     float* py1 = vy.getBuffer();                                          \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
     {                                                                     \
-      int4 x = float4ToInt4(vecLoad(px1));                             \
-      vecStore((py1), (opComputation));                                   \
+      int4 x = castFloatToInt4(vecLoad(px1));                             \
+auto y = (opComputation); \
+      vecStore((py1), y);                                   \
       px1 += 4;                                          \
       py1 += 4;                                        \
     }                                                                     \
     return vy;                                                            \
   }
 
-DEFINE_OP1_I2F(intToFloat, (vecIntToFloat(x)));
+DEFINE_OP1_I2F(intToFloat, (intToFloat4(x)));
 DEFINE_OP1_I2F(unsignedIntToFloat, (vecUnsignedIntToFloat(x)));
 
 // ----------------------------------------------------------------
 // using the conversions above, define fractionalPart
 
-DEFINE_OP1(fractionalPart, (vecSub(x, vecIntToFloat(vecFloatToIntTruncate(x)))));
+DEFINE_OP1(fractionalPart, (sub4(x, intToFloat4(floatToIntTruncate4(x)))));
 
 // ----------------------------------------------------------------
 // binary float vector, float vector -> int vector operators
@@ -747,7 +771,8 @@ DEFINE_OP1(fractionalPart, (vecSub(x, vecIntToFloat(vecFloatToIntTruncate(x)))))
     {                                                                     \
       float4 x1 = vecLoad(px1);                                  \
       float4 x2 = vecLoad(px2);                                  \
-      vecStore((py1), (opComputation));                                   \
+auto y = (opComputation); \
+      vecStore((py1), y);                                   \
       px1 += 4;                                        \
       px2 += 4;                                        \
       py1 += 4;                                          \
@@ -755,12 +780,12 @@ DEFINE_OP1(fractionalPart, (vecSub(x, vecIntToFloat(vecFloatToIntTruncate(x)))))
     return vy;                                                            \
   }
 
-DEFINE_OP2_FF2I(equal, (vecEqual(x1, x2)));
-DEFINE_OP2_FF2I(notEqual, (vecNotEqual(x1, x2)));
-DEFINE_OP2_FF2I(greaterThan, (vecGreaterThan(x1, x2)));
-DEFINE_OP2_FF2I(greaterThanOrEqual, (vecGreaterThanOrEqual(x1, x2)));
-DEFINE_OP2_FF2I(lessThan, (vecLessThan(x1, x2)));
-DEFINE_OP2_FF2I(lessThanOrEqual, (vecLessThanOrEqual(x1, x2)));
+DEFINE_OP2_FF2I(equal, (compareEqual4(x1, x2)));
+DEFINE_OP2_FF2I(notEqual, (compareNotEqual4(x1, x2)));
+DEFINE_OP2_FF2I(greaterThan, (compareGreaterThan4(x1, x2)));
+DEFINE_OP2_FF2I(greaterThanOrEqual, (compareGreaterThanOrEqual4(x1, x2)));
+DEFINE_OP2_FF2I(lessThan, (compareLessThan4(x1, x2)));
+DEFINE_OP2_FF2I(lessThanOrEqual, (compareLessThanOrEqual4(x1, x2)));
 
 // ----------------------------------------------------------------
 // ternary operators float vector, float vector, int vector -> float vector
@@ -780,8 +805,9 @@ DEFINE_OP2_FF2I(lessThanOrEqual, (vecLessThanOrEqual(x1, x2)));
     {                                                                     \
       float4 x1 = vecLoad(px1);                                  \
       float4 x2 = vecLoad(px2);                                  \
-      int4 x3 = float4ToInt4(vecLoad(px3));                            \
-      vecStore(py1, (opComputation));                                     \
+      int4 x3 = castFloatToInt4(vecLoad(px3));                            \
+auto y = (opComputation); \
+vecStore((py1), y);                                   \
       px1 += 4;                                        \
       px2 += 4;                                        \
       px3 += 4;                                        \
@@ -790,8 +816,8 @@ DEFINE_OP2_FF2I(lessThanOrEqual, (vecLessThanOrEqual(x1, x2)));
     return vy;                                                            \
   }
 
-DEFINE_OP3_FFI2F(select, vecSelectFFI(x1, x2, x3));  // bitwise select(resultIfTrue,
-                                                  // resultIfFalse, conditionMask)
+DEFINE_OP3_FFI2F(select, (vecSelectFFI(x1, x2, x3)));  // bitwise select(resultIfTrue,
+// resultIfFalse, conditionMask)
 
 // ----------------------------------------------------------------
 // ternary operators int vector, int vector, int vector -> int vector
@@ -809,10 +835,11 @@ DEFINE_OP3_FFI2F(select, vecSelectFFI(x1, x2, x3));  // bitwise select(resultIfT
     float* py1 = vy.getBuffer();                                             \
     for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)                \
     {                                                                        \
-      int4 x1 = float4ToInt4(vecLoad(px1));                               \
-      int4 x2 = float4ToInt4(vecLoad(px2));                               \
-      int4 x3 = float4ToInt4(vecLoad(px3));                               \
-      vecStore(py1, int4ToFloat4(opComputation));                                  \
+      int4 x1 = castFloatToInt4(vecLoad(px1));                               \
+      int4 x2 = castFloatToInt4(vecLoad(px2));                               \
+      int4 x3 = castFloatToInt4(vecLoad(px3));                               \
+auto y = castIntToFloat4(opComputation); \
+vecStore((py1), y);                                   \
       px1 += 4;                                             \
       px2 += 4;                                             \
       px3 += 4;                                             \
@@ -821,8 +848,8 @@ DEFINE_OP3_FFI2F(select, vecSelectFFI(x1, x2, x3));  // bitwise select(resultIfT
     return vy;                                                               \
   }
 
-DEFINE_OP3_III2I(select, vecSelectIII(x1, x2, x3));  // bitwise select(resultIfTrue,
-                                                  // resultIfFalse, conditionMask)
+DEFINE_OP3_III2I(select, (vecSelectIII(x1, x2, x3)));  // bitwise select(resultIfTrue,
+// resultIfFalse, conditionMask)
 
 // ----------------------------------------------------------------
 // n-ary operators
@@ -1107,34 +1134,35 @@ inline DSPVectorArray<ROWSA + ROWSB + ROWSC + ROWSD> concatRows(const DSPVectorA
   }
   return vy;
 }
-
 // Rotate the elements of each row of a DSPVectorArray by one element left.
 // The first element of each row is moved to the end
 template <size_t ROWS>
 inline ml::DSPVectorArray<ROWS> rotateLeft(const ml::DSPVectorArray<ROWS>& x)
 {
   ml::DSPVectorArray<ROWS> vy;
-
+  
   for (size_t row = 0; row < ROWS; row++)
   {
     const float* px1 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
     const float* px2 = px1 + 4;
     float* py1 = vy.getBuffer() + (row * kFloatsPerDSPVector);
-
+    
     for (int n = 0; n < kSIMDVectorsPerDSPVector - 1; ++n)
     {
-      vecStore(py1, vecShuffleLeft(vecLoad(px1), vecLoad(px2)));
-
+      auto y = vecShuffleLeft(vecLoad(px1), vecLoad(px2));
+      vecStore(py1, y);
+      
       px1 += 4;
       px2 += 4;
       py1 += 4;
     }
-
+    
     px2 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
-
-    vecStore(py1, vecShuffleLeft(vecLoad(px1), vecLoad(px2)));
+    
+    auto y = vecShuffleLeft(vecLoad(px1), vecLoad(px2));
+    vecStore(py1, y);
   }
-
+  
   return vy;
 }
 
@@ -1144,31 +1172,32 @@ template <size_t ROWS>
 inline ml::DSPVectorArray<ROWS> rotateRight(const ml::DSPVectorArray<ROWS>& x)
 {
   ml::DSPVectorArray<ROWS> vy;
-
+  
   for (size_t row = 0; row < ROWS; row++)
   {
     const float* px1 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
     const float* px2 = px1 + 4;
     float* py1 = vy.getBuffer() + (row * kFloatsPerDSPVector) + 4;
-
+    
     for (int n = 0; n < kSIMDVectorsPerDSPVector - 1; ++n)
     {
-      vecStore(py1, vecShuffleRight(vecLoad(px1), vecLoad(px2)));
-
+      auto y = vecShuffleRight(vecLoad(px1), vecLoad(px2));
+      vecStore(py1, y);
+      
       px1 += 4;
       px2 += 4;
       py1 += 4;
     }
-
+    
     px2 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
     py1 = vy.getBuffer() + (row * kFloatsPerDSPVector);
-
-    vecStore(py1, vecShuffleRight(vecLoad(px1), vecLoad(px2)));
+    
+    auto y = vecShuffleRight(vecLoad(px1), vecLoad(px2));
+    vecStore(py1, y);
   }
-
+  
   return vy;
 }
-
 // shuffle two DSPVectorArrays, alternating x1 to even rows of result and x2 to
 // odd rows. if the sources are different sizes, the excess rows are all
 // appended to the destination after shuffling is done.
