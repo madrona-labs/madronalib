@@ -377,18 +377,4 @@ TEST_CASE("madronalib/core/tanh", "[tanh]")
       if(bad > 64) break;
     }
   }
-
-}
-
-// TODO clean up SSE prims and test in a separate module
-TEST_CASE("madronalib/core/vec-math", "[vec-math]")
-{
-  SIMDVectorFloat v1{2.0f, 3.f, 4.f};
-  
-  //std::cout << "v1: " << v1 << "\n";
-  
-  SIMDVectorFloat v2 = v1 * 2.f;
-  
-  //std::cout << "v2: " << v2 << "\n";
-
 }
