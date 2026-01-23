@@ -32,6 +32,21 @@ set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 
 project(madronalib)
 
+#--------------------------------------------------------------------
+# FetchContent for cJSON (source only - we compile cJSON.c directly into madronalib)
+#--------------------------------------------------------------------
+
+include(FetchContent)
+
+FetchContent_Declare(
+  cjson
+  GIT_REPOSITORY https://github.com/DaveGamble/cJSON.git
+  GIT_TAG v1.7.18
+  SOURCE_SUBDIR this_does_not_exist  # Prevents add_subdirectory, we just want the source
+)
+
+FetchContent_MakeAvailable(cjson)
+
 set(madronalib_VERSION_MAJOR "0")
 set(madronalib_VERSION_MINOR "1")
 set(madronalib_VERSION_PATCH "0")
@@ -126,9 +141,9 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/aes256)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/clap)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/cJSON)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/ffft)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/utf)
+include_directories(${cjson_SOURCE_DIR})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/app)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/DSP)
@@ -155,7 +170,9 @@ file(GLOB MATRIX_SOURCES "source/matrix/*.cpp")
 file(GLOB MATRIX_HEADERS "source/matrix/*.h")
 
 file(GLOB AES_SOURCES "external/aes256/*.cpp")
-file(GLOB JSON_SOURCES "external/cJSON/*.c")
+
+# cJSON source (fetched via FetchContent, compiled directly into madronalib)
+set(CJSON_SOURCES ${cjson_SOURCE_DIR}/cJSON.c)
 
 file(GLOB OSC_HEADERS_IP "external/oscpack/ip/*.h")
 file(GLOB OSC_HEADERS_OSC "external/oscpack/osc/*.h")
@@ -203,8 +220,8 @@ set(madronalib_SOURCES
     ${DSP_HEADERS}
     ${MATRIX_SOURCES}
     ${MATRIX_HEADERS}
-    ${JSON_SOURCES}
     ${AES_SOURCES}
+    ${CJSON_SOURCES}
         source/app/MLMIDI.h
         source/app/MLMIDI.cpp
         source/app/MLAudioTask.cpp
@@ -264,6 +281,8 @@ set_target_properties(${target} PROPERTIES
 
 target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/rtaudio)
 
+# cJSON is now compiled directly into madronalib (no separate target)
+# cJSON.h is installed alongside madronalib headers for consumers
 
 # choose driver for Rtaudio
 if(WIN32)
@@ -321,6 +340,9 @@ install(FILES include/madronalib.h DESTINATION ${HEADERS_INCLUDE_DIR})
 install(FILES include/mldsp.h DESTINATION ${HEADERS_INCLUDE_DIR})
 
 # TODO: ideally we don't install these?
+
+# Install cJSON header (fetched via FetchContent, consumers get it from here)
+install(FILES ${cjson_SOURCE_DIR}/cJSON.h DESTINATION ${HEADERS_INCLUDE_DIR})
 install(FILES
     ${APP_HEADERS}
     ${DSP_HEADERS}
@@ -338,7 +360,7 @@ install(FILES
 #--------------------------------------------------------------------
 
 # note: ffft and utf are header-only
-# cJSON, aes256 and others added as source
+# aes256 and cJSON added as source (cJSON fetched via FetchContent)
 
 if(APPLE)
   target_link_libraries(madronalib PRIVATE "-framework Carbon")
