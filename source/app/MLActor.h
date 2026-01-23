@@ -27,6 +27,7 @@ class ActorRegistry
   ~ActorRegistry() = default;
 
   Actor* getActor(Path actorName);
+  Path getActorNameFromPointer(Actor* ptr);
   void doRegister(Path actorName, Actor* a);
   void doRemove(Actor* actorToRemove);
 
@@ -50,6 +51,15 @@ class Actor
   Actor() = default;
   virtual ~Actor() = default;
 
+  // delete copy and move constructors and assign operators
+  Actor(Actor const&) = delete;             // Copy construct
+  Actor(Actor&&) = delete;                  // Move construct
+  Actor& operator=(Actor const&) = delete;  // Copy assign
+  Actor& operator=(Actor&&) = delete;       // Move assign
+
+  // return own name
+  Path self();
+
   void resizeQueue(size_t n) { messageQueue_.resize(n); }
 
   // Actors can override onFullQueue to specify what action to take when
@@ -60,11 +70,6 @@ class Actor
   // handler method has a different name.
   virtual void onMessage(Message m) = 0;
 
-  // delete copy and move constructors and assign operators
-  Actor(Actor const&) = delete;             // Copy construct
-  Actor(Actor&&) = delete;                  // Move construct
-  Actor& operator=(Actor const&) = delete;  // Copy assign
-  Actor& operator=(Actor&&) = delete;       // Move assign
 
   void start(size_t interval = kDefaultMessageInterval)
   {
@@ -93,12 +98,15 @@ class Actor
     }
   }
 
-  // handle all the messages in the queue immediately.
   void handleMessagesInQueue()
   {
-    while (Message m = messageQueue_.pop())
+    // handle all the messages currently in the queue.
+    // we don't want to handle messages that are added
+    // to the queue during this function call! So count first.
+    size_t n = messageQueue_.size();
+    for(int i=0; i<n; ++i)
     {
-      onMessage(m);
+      onMessage(messageQueue_.pop());
     }
   }
 
