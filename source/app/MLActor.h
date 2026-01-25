@@ -103,7 +103,8 @@ class Actor
     // handle all the messages currently in the queue.
     // we don't want to handle messages that are added
     // to the queue during this function call! So count first.
-    size_t n = messageQueue_.size();
+    size_t n = messageQueue_.elementsAvailable();
+    
     for(int i=0; i<n; ++i)
     {
       onMessage(messageQueue_.pop());
