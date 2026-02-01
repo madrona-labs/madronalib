@@ -28,7 +28,7 @@ ENDIF(APPLE)
 # project and version
 #--------------------------------------------------------------------
 
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo" CACHE STRING "" FORCE)
 
 project(madronalib)
 
@@ -281,6 +281,26 @@ set_target_properties(${target} PROPERTIES
 
 target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/rtaudio)
 
+# Define where headers are installed (needed for PUBLIC include directories below)
+if(APPLE)
+    set(HEADERS_INCLUDE_DIR "include/madronalib")
+elseif(WIN32)
+    set(HEADERS_INCLUDE_DIR "include")
+else()
+    set(HEADERS_INCLUDE_DIR "include/madronalib")  # Linux
+endif()
+
+# PUBLIC include directories for consumers - using generator expressions for build vs install paths
+target_include_directories(${target} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/app>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/DSP>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/matrix>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external>
+    $<BUILD_INTERFACE:${cjson_SOURCE_DIR}>
+    $<INSTALL_INTERFACE:${HEADERS_INCLUDE_DIR}>
+)
+
 # cJSON is now compiled directly into madronalib (no separate target)
 # cJSON.h is installed alongside madronalib headers for consumers
 
@@ -317,9 +337,37 @@ endif()
 
 install(
     TARGETS ${target}
+    EXPORT madronalib-targets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+# Install CMake package config files
+include(CMakePackageConfigHelpers)
+
+install(EXPORT madronalib-targets
+    FILE madronalibTargets.cmake
+    NAMESPACE madronalib::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/madronalib
+)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/madronalibConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/madronalib
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfigVersion.cmake
+    VERSION ${madronalib_VERSION_FULL}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/madronalib
 )
 
 message("madronalib destination: " ${CMAKE_INSTALL_LIBDIR} )
@@ -328,13 +376,7 @@ message("madronalib destination: " ${CMAKE_INSTALL_LIBDIR} )
 # install headers
 #--------------------------------------------------------------------
 
-if(APPLE)
-    set(HEADERS_INCLUDE_DIR "include/madronalib")
-elseif(WIN32)
-    set(HEADERS_INCLUDE_DIR "include")
-else()
-    set(HEADERS_INCLUDE_DIR "include/madronalib")  # Linux
-endif()
+# HEADERS_INCLUDE_DIR is defined earlier (needed for PUBLIC include directories)
 
 install(FILES include/madronalib.h DESTINATION ${HEADERS_INCLUDE_DIR})
 install(FILES include/mldsp.h DESTINATION ${HEADERS_INCLUDE_DIR})
