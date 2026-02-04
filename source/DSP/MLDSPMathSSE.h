@@ -7,10 +7,8 @@
 
 #include "MLPlatform.h"
 
-#ifndef ML_SSE_TO_NEON
 // SSE 4.1 required
 #include <smmintrin.h>
-#endif
 
 #include <float.h>
 #include <assert.h>
@@ -108,7 +106,7 @@ inline float4 sqrt(float4 a) { return float4(_mm_sqrt_ps(a)); }
 inline float4 rsqrt(float4 a) { return float4(_mm_rsqrt_ps(a)); }
 inline float4 rcp(float4 a) { return float4(_mm_rcp_ps(a)); }
 
-// multiply-add: a*b + c (no native FMA in SSE 4.1; two instructions)
+// multiply-add
 inline float4 multiplyAdd(float4 a, float4 b, float4 c) { return float4(_mm_add_ps(_mm_mul_ps(a, b), c)); }
 
 // Float logical
