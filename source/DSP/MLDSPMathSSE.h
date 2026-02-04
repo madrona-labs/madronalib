@@ -43,8 +43,9 @@ struct int4 {
 
 // ----------------------------------------------------------------
 // Load/store functions
-
+__attribute__((always_inline))
 inline float4 loadFloat4(const float* ptr) { return float4(_mm_load_ps(ptr)); }
+__attribute__((always_inline))
 inline void storeFloat4(float* ptr, float4 v) { _mm_store_ps(ptr, v); }
 
 inline int4 loadInt4(const int32_t* ptr) { return int4(_mm_load_si128((const __m128i*)ptr)); }
@@ -71,9 +72,13 @@ inline void setFloat4Lane(float4& v, size_t lane, float val) {
 // ----------------------------------------------------------------
 // Arithmetic operators for float4
 
+__attribute__((always_inline))
 inline float4 operator+(float4 a, float4 b) { return float4(_mm_add_ps(a, b)); }
+__attribute__((always_inline))
 inline float4 operator-(float4 a, float4 b) { return float4(_mm_sub_ps(a, b)); }
+__attribute__((always_inline))
 inline float4 operator*(float4 a, float4 b) { return float4(_mm_mul_ps(a, b)); }
+__attribute__((always_inline))
 inline float4 operator/(float4 a, float4 b) { return float4(_mm_div_ps(a, b)); }
 
 inline float4& operator+=(float4& a, float4 b) { a = a + b; return a; }
