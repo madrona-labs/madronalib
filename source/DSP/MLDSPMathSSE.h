@@ -43,9 +43,7 @@ struct int4 {
 
 // ----------------------------------------------------------------
 // Load/store functions
-__attribute__((always_inline))
 inline float4 loadFloat4(const float* ptr) { return float4(_mm_load_ps(ptr)); }
-__attribute__((always_inline))
 inline void storeFloat4(float* ptr, float4 v) { _mm_store_ps(ptr, v); }
 
 inline int4 loadInt4(const int32_t* ptr) { return int4(_mm_load_si128((const __m128i*)ptr)); }
@@ -72,13 +70,9 @@ inline void setFloat4Lane(float4& v, size_t lane, float val) {
 // ----------------------------------------------------------------
 // Arithmetic operators for float4
 
-__attribute__((always_inline))
 inline float4 operator+(float4 a, float4 b) { return float4(_mm_add_ps(a, b)); }
-__attribute__((always_inline))
 inline float4 operator-(float4 a, float4 b) { return float4(_mm_sub_ps(a, b)); }
-__attribute__((always_inline))
 inline float4 operator*(float4 a, float4 b) { return float4(_mm_mul_ps(a, b)); }
-__attribute__((always_inline))
 inline float4 operator/(float4 a, float4 b) { return float4(_mm_div_ps(a, b)); }
 
 inline float4& operator+=(float4& a, float4 b) { a = a + b; return a; }
@@ -113,6 +107,9 @@ inline float4 max(float4 a, float4 b) { return float4(_mm_max_ps(a, b)); }
 inline float4 sqrt(float4 a) { return float4(_mm_sqrt_ps(a)); }
 inline float4 rsqrt(float4 a) { return float4(_mm_rsqrt_ps(a)); }
 inline float4 rcp(float4 a) { return float4(_mm_rcp_ps(a)); }
+
+// multiply-add: a*b + c (no native FMA in SSE 4.1; two instructions)
+inline float4 multiplyAdd(float4 a, float4 b, float4 c) { return float4(_mm_add_ps(_mm_mul_ps(a, b), c)); }
 
 // Float logical
 inline float4 andBits(float4 a, float4 b) { return float4(_mm_and_ps(a, b)); }
