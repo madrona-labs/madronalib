@@ -37,6 +37,7 @@
 #include <utility>
 
 #include "MLDSPMath.h"
+#include "MLDSPMathApprox.h"
 #include "MLDSPScalarMath.h"
 
 // make_array, used in constructors

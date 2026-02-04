@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "MLDSPMathApprox.h"
 #include "MLDSPOps.h"
 #include "MLDSPFilters.h"
 #include "MLDSPGens.h"
