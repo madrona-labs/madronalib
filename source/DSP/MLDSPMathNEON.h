@@ -16,7 +16,7 @@
 #include <assert.h>
 
 // ----------------------------------------------------------------
-// Type definitions with proper struct wrappers
+// Type definitions
 
 struct float4 {
   float32x4_t v;
@@ -87,7 +87,6 @@ inline float4& operator-=(float4& a, float4 b) { a = a - b; return a; }
 inline float4& operator*=(float4& a, float4 b) { a = a * b; return a; }
 inline float4& operator/=(float4& a, float4 b) { a = a / b; return a; }
 
-// Unary negation
 inline float4 operator-(float4 a) {
   return float4(vnegq_f32(a.v));
 }
@@ -101,7 +100,6 @@ inline int4 operator-(int4 a, int4 b) { return int4(vsubq_s32(a.v, b.v)); }
 inline int4& operator+=(int4& a, int4 b) { a = a + b; return a; }
 inline int4& operator-=(int4& a, int4 b) { a = a - b; return a; }
 
-// Unary negation for int4
 inline int4 operator-(int4 a) {
   return int4(vnegq_s32(a.v));
 }
@@ -129,7 +127,7 @@ inline float4 rcp(float4 a) {
   return float4(e);
 }
 
-// fused multiply-add: a*b + c in a single FMADD instruction
+// fused multiply-add: a*b + c in a single instruction
 // note: typically your DSP code will not need this, because the compiler is very good at finding opportunities to fuse
 // multiplies and adds when the -ffp-contract=fast flag is set. However, if other code prevents that flag from being
 // set, this function provides a way to use the fused multiply-add instruction anyway.
@@ -263,32 +261,6 @@ inline float4 unsignedIntToFloat(int4 v) {
 inline int4 castFloatToInt(float4 a) { return int4(vreinterpretq_s32_f32(a.v)); }
 inline float4 castIntToFloat(int4 a) { return float4(vreinterpretq_f32_s32(a.v)); }
 
-// Other functions
-inline float4 clamp(float4 a, float4 b, float4 c) { return min(max(a, b), c); }
-inline void transpose4x4(float4& r0, float4& r1, float4& r2, float4& r3) {
-  float4 t0 = unpackLo(r0, r1);
-  float4 t1 = unpackLo(r2, r3);
-  float4 t2 = unpackHi(r0, r1);
-  float4 t3 = unpackHi(r2, r3);
-  r0 = moveLH(t0, t1);
-  r1 = moveHL(t1, t0);
-  r2 = moveLH(t2, t3);
-  r3 = moveHL(t3, t2);
-}
-
-inline std::ostream& operator<<(std::ostream& out, float4 x) {
-  out << "[";
-  out << getFloat4Lane(x, 0);
-  out << ", ";
-  out << getFloat4Lane(x, 1);
-  out << ", ";
-  out << getFloat4Lane(x, 2);
-  out << ", ";
-  out << getFloat4Lane(x, 3);
-  out << "]";
-  return out;
-}
-
 // ----------------------------------------------------------------
 // select functions
 
@@ -314,28 +286,6 @@ inline int4 vecSelectIII(int4 a, int4 b, int4 conditionMask) {
     vreinterpretq_u32_s32(a.v),
     vreinterpretq_u32_s32(b.v)
   )));
-}
-
-// ----------------------------------------------------------------
-// Conversions
-
-inline float4 vecIntPart(float4 val) {
-  return intToFloat(floatToIntTruncate(val));
-}
-
-inline float4 vecFracPart(float4 val) {
-  return val - vecIntPart(val);
-}
-
-// ----------------------------------------------------------------
-// Shuffles
-
-inline float4 vecShuffleRight(float4 v1, float4 v2) {
-  return shuffle<3, 0, 1, 2>(shuffle<0, 0, 3, 3>(v2, v1), v2);
-}
-
-inline float4 vecShuffleLeft(float4 v1, float4 v2) {
-  return shuffle<1, 2, 0, 3>(v1, shuffle<3, 3, 0, 0>(v1, v2));
 }
 
 // ----------------------------------------------------------------
