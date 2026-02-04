@@ -45,11 +45,9 @@ struct int4 {
 
 // ----------------------------------------------------------------
 // Load/store functions
-__attribute__((always_inline))
-inline float4 loadFloat4(const float* ptr) { return float4(vld1q_f32(ptr)); }
-__attribute__((always_inline))
-inline void storeFloat4(float* ptr, float4 v) { vst1q_f32(ptr, v.v); }
 
+inline float4 loadFloat4(const float* ptr) { return float4(vld1q_f32(ptr)); }
+inline void storeFloat4(float* ptr, float4 v) { vst1q_f32(ptr, v.v); }
 inline int4 loadInt4(const int32_t* ptr) { return int4(vld1q_s32(ptr)); }
 inline void storeInt4(int32_t* ptr, int4 v) { vst1q_s32(ptr, v.v); }
 
@@ -79,13 +77,9 @@ inline void setFloat4Lane(float4& v, size_t lane, float val) {
 // ----------------------------------------------------------------
 // Arithmetic operators for float4
 
-__attribute__((always_inline))
 inline float4 operator+(float4 a, float4 b) { return float4(vaddq_f32(a.v, b.v)); }
-__attribute__((always_inline))
 inline float4 operator-(float4 a, float4 b) { return float4(vsubq_f32(a.v, b.v)); }
-__attribute__((always_inline))
 inline float4 operator*(float4 a, float4 b) { return float4(vmulq_f32(a.v, b.v)); }
-__attribute__((always_inline))
 inline float4 operator/(float4 a, float4 b) { return float4(vdivq_f32(a.v, b.v)); }
 
 inline float4& operator+=(float4& a, float4 b) { a = a + b; return a; }
@@ -134,6 +128,9 @@ inline float4 rcp(float4 a) {
   e = vmulq_f32(e, vrecpsq_f32(e, a.v));
   return float4(e);
 }
+
+// fused multiply-add: a*b + c in a single FMADD instruction
+inline float4 multiplyAdd(float4 a, float4 b, float4 c) { return float4(vmlaq_f32(c.v, a.v, b.v)); }
 
 // Float logical
 inline float4 andBits(float4 a, float4 b) {
