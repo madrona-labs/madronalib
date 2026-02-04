@@ -5,11 +5,6 @@
 // This module contains the DSPVectorArray / DSPVector class and basic
 // operations on it. Any stateless operations on DSPVectors should also be added
 // here.
-//
-// These objects are for building fixed DSP graphs in a functional style. The
-// compiler should have many opportunities to optimize these graphs. For dynamic
-// graphs changeable at runtime, see MLProcs. In general MLProcs will be written
-// using DSPGens, DSPOps, DSPFilters.
 
 #pragma once
 
@@ -39,6 +34,13 @@
 #include "MLDSPMath.h"
 #include "MLDSPMathApprox.h"
 #include "MLDSPScalarMath.h"
+
+
+// Here is the DSP vector size, an important constant.
+constexpr size_t kFloatsPerDSPVectorBits = 6;
+constexpr size_t kFloatsPerDSPVector = 1 << kFloatsPerDSPVectorBits;
+static_assert((kFloatsPerDSPVectorBits <= 8),
+              "We count on kFloatsPerDSPVectorBits to be 8 or less.");
 
 // make_array, used in constructors
 

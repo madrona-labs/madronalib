@@ -4,12 +4,6 @@
 
 #pragma once
 
-// Here is the DSP vector size, an important constant.
-constexpr size_t kFloatsPerDSPVectorBits = 6;
-constexpr size_t kFloatsPerDSPVector = 1 << kFloatsPerDSPVectorBits;
-static_assert((kFloatsPerDSPVectorBits <= 8),
-              "We count on kFloatsPerDSPVectorBits to be 8 or less.");
-
 // Load definitions for low-level SIMD math.
 // These define float4, int4, and a bunch of operations on them.
 // We are currently only using 4-element vectors on both SSE and NEON.
