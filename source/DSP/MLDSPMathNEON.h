@@ -130,6 +130,9 @@ inline float4 rcp(float4 a) {
 }
 
 // fused multiply-add: a*b + c in a single FMADD instruction
+// note: typically your DSP code will not need this, because the compiler is very good at finding opportunities to fuse
+// multiplies and adds when the -ffp-contract=fast flag is set. However, if other code prevents that flag from being
+// set, this function provides a way to use the fused multiply-add instruction anyway.
 inline float4 multiplyAdd(float4 a, float4 b, float4 c) { return float4(vmlaq_f32(c.v, a.v, b.v)); }
 
 // Float logical
@@ -137,7 +140,6 @@ inline float4 andBits(float4 a, float4 b) {
   return float4(vreinterpretq_f32_u32(vandq_u32(vreinterpretq_u32_f32(a.v), vreinterpretq_u32_f32(b.v))));
 }
 inline float4 andNotBits(float4 a, float4 b) {
-  // andnot(a, b) = (~a) & b — NEON BIC does exactly this
   return float4(vreinterpretq_f32_u32(vbicq_u32(vreinterpretq_u32_f32(b.v), vreinterpretq_u32_f32(a.v))));
 }
 inline float4 orBits(float4 a, float4 b) {
@@ -252,7 +254,7 @@ inline int4 floatToIntRound(float4 a) { return int4(vcvtnq_s32_f32(a.v)); }
 inline int4 floatToIntTruncate(float4 a) { return int4(vcvtq_s32_f32(a.v)); }
 inline float4 intToFloat(int4 a) { return float4(vcvtq_f32_s32(a.v)); }
 
-// Native NEON unsigned int->float (replaces the SSE shift-and-double workaround)
+// Native NEON unsigned int->float
 inline float4 unsignedIntToFloat(int4 v) {
   return float4(vcvtq_f32_u32(vreinterpretq_u32_s32(v.v)));
 }
@@ -288,7 +290,7 @@ inline std::ostream& operator<<(std::ostream& out, float4 x) {
 }
 
 // ----------------------------------------------------------------
-// select functions — use NEON BSL (bit select) for efficiency
+// select functions
 
 inline float4 vecSelectFFI(float4 a, float4 b, int4 conditionMask) {
   return float4(vreinterpretq_f32_u32(vbslq_u32(

@@ -9,10 +9,7 @@
 // We are currently only using 4-element vectors on both SSE and NEON.
 
 #if (defined __ARM_NEON) || (defined __ARM_NEON__)
-// NEON
-#define ML_SSE_TO_NEON
-#include "MLDSPMathNEON.h"
+#include "MLDSPMathNEON.h" // NEON
 #else
-// SSE2
-#include "MLDSPMathSSE.h"
+#include "MLDSPMathSSE.h" // SSE 4.1
 #endif

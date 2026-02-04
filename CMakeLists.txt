@@ -64,9 +64,6 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN OFF)
 #--------------------------------------------------------------------
 
 if(APPLE)
-    # Disable C++17 aligned new feature for compatibility
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-aligned-new")
-    
     # Debug info in Release builds
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g")
     
