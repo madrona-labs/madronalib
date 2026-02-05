@@ -15,6 +15,8 @@
 #include <iostream>
 #include <iomanip> // Required for setprecision
 
+#define DO_TIME_TESTS 0
+
 using namespace ml;
 using namespace testUtils;
 
@@ -95,11 +97,6 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
       float preciseMaxDiff = max(abs(native - precise));
       float approxMaxDiff = max(abs(native - approx));
 
-      /*
-      std::cout << fnVec.first << " native: " << nativeMaxDiff
-                << ", precise: " << preciseMaxDiff
-                << ", approx: " << approxMaxDiff << " \n";
-*/
       
       // these differences are to accommodate the exp functions, the other ones
       // are a lot more precise.
@@ -108,6 +105,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     }
   }
 
+#if DO_TIME_TESTS
   SECTION("time")
   {
     // test speed of precise functions relative to native ones.
@@ -139,15 +137,16 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
         timeIterations<DSPVector>(fnVec.second[2]);
 #endif
         
-      /*
+
         std::cout << fnVec.first << " native: " << fnTimeNative.ns
                   << ", precise: " << fnTimePrecise.ns
                   << ", approx: " << fnTimeApprox.ns << " \n";
-       */
         i++;
     }
   }
-
+#endif
+  
+  
   SECTION("lerp")
   {
     // lerp with constant mix value
