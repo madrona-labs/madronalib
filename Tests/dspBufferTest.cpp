@@ -162,7 +162,7 @@ TEST_CASE("madronalib/core/dspbuffer/overlap", "[dspbuffer][overlap]")
   // write constant window buffer
   SignalBlock windowVec;
   makeWindow(windowVec.getBuffer(), kFramesPerBlock, dspwindows::triangle);
-  // TODO ConstDSPVector windowVec(dspwindows::triangle);
+  // TODO ConstSignalBlock windowVec(dspwindows::triangle);
   // - would require constexpr-capable reimplementation of Projections, not
   // using std::function
 

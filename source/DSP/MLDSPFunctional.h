@@ -44,10 +44,10 @@ inline SignalBlockArray<ROWS> map(std::function<float(float)> f, const SignalBlo
   return y;
 }
 
-// Apply a function (int)->(float) to each element of the DSPVectorArrayInt x
+// Apply a function (int)->(float) to each element of the SignalBlockArrayInt x
 // and return the result.
 template <size_t ROWS>
-inline SignalBlockArray<ROWS> map(std::function<float(int)> f, const DSPVectorArrayInt<ROWS> x)
+inline SignalBlockArray<ROWS> map(std::function<float(int)> f, const SignalBlockArrayInt<ROWS> x)
 {
   SignalBlockArray<ROWS> y;
   for (int n = 0; n < kFramesPerBlock * ROWS; ++n)
