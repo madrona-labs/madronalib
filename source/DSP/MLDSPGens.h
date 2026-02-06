@@ -73,7 +73,7 @@ class ImpulseGen
                   float pi_x = ml::kTwoPi * omega * i;
                   return (i == 0) ? 1.f : sinf(pi_x) / pi_x;
                 }};
-    SignalBlock sincVec = map(sincFn, columnIndexInt() - DSPVectorInt((kTableSize - 1) / 2));
+    SignalBlock sincVec = map(sincFn, columnIndexInt() - SignalBlockInt((kTableSize - 1) / 2));
     _table = normalize(sincVec * windowVec);
   }
   ~ImpulseGen() {}
@@ -188,10 +188,10 @@ class PhasorGen
   {
     // calculate int steps per sample
     SignalBlock stepsPerSampleV = cyclesPerSample * SignalBlock(stepsPerCycle);
-    DSPVectorInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
+    SignalBlockInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
 
     // accumulate 32-bit phase with wrap
-    DSPVectorInt omega32V;
+    SignalBlockInt omega32V;
     for (int n = 0; n < kIntsPerDSPVector; ++n)
     {
       mOmega32 += intStepsPerSampleV[n];
@@ -239,11 +239,11 @@ class OneShotGen
   {
     // calculate int steps per sample
     SignalBlock stepsPerSampleV = cyclesPerSample * SignalBlock(stepsPerCycle);
-    DSPVectorInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
+    SignalBlockInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
 
     // accumulate 32-bit phase with wrap
     // we test for wrap at every sample to get a clean ending
-    DSPVectorInt omega32V;
+    SignalBlockInt omega32V;
     for (int n = 0; n < kIntsPerDSPVector; ++n)
     {
       mOmega32 += intStepsPerSampleV[n] * mGate;
@@ -266,7 +266,7 @@ class OneShotGen
 
     // accumulate 32-bit phase with wrap
     // we test for wrap at every sample to get a clean ending
-    DSPVectorInt omega32V;
+    SignalBlockInt omega32V;
 
     mOmega32 += intStepsPerSample * mGate;
     if (mOmega32 < mOmegaPrev)
@@ -342,7 +342,7 @@ inline SignalBlock phasorToSine(SignalBlock phasorV)
 inline SignalBlock phasorToPulse(SignalBlock omegaV, SignalBlock freqV, SignalBlock pulseWidthV)
 {
   // get pulse selector mask
-  DSPVectorInt maskV = greaterThanOrEqual(omegaV, pulseWidthV);
+  SignalBlockInt maskV = greaterThanOrEqual(omegaV, pulseWidthV);
 
   // select -1 or 1 (could be a multiply instead?)
   SignalBlock pulseV = select(SignalBlock(-1.f), SignalBlock(1.f), maskV);
@@ -407,7 +407,7 @@ class SawGen
 // linear interpolate over signal length to next value.
 
 constexpr float unityRampFn(int i) { return (i + 1) / static_cast<float>(kFramesPerBlock); }
-ConstDSPVector kUnityRampVec{unityRampFn};
+ConstSignalBlock kUnityRampVec{unityRampFn};
 
 struct Interpolator1
 {

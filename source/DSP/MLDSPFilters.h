@@ -1019,7 +1019,7 @@ class FractionalDelay
   // return the input signal, delayed by the varying delay time vDelayInSamples,
   // but only allow changes to the delay time when vChangeTicks is nonzero.
   inline SignalBlock operator()(const SignalBlock vx, const SignalBlock vDelayInSamples,
-                              const DSPVectorInt vChangeTicks)
+                              const SignalBlockInt vChangeTicks)
   {
     SignalBlock vy;
     for (int n = 0; n < kFramesPerBlock; ++n)
@@ -1062,9 +1062,9 @@ constexpr float fadeFn(int n)
 //
 // constexpr fill is used. unfortunately this cannot be made to work with a
 // lambda in C++11. TODO Revisit.
-constexpr DSPVectorInt test1(fadeRamp);
-constexpr DSPVectorInt kvDelay1Changes(ticks1);
-constexpr DSPVectorInt kvDelay2Changes(ticks2);
+constexpr SignalBlockInt test1(fadeRamp);
+constexpr SignalBlockInt kvDelay1Changes(ticks1);
+constexpr SignalBlockInt kvDelay2Changes(ticks2);
 constexpr SignalBlock kvFade(fadeFn);
 };  // namespace PitchbendableDelayConsts
 

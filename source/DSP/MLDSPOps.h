@@ -36,11 +36,12 @@
 #include "MLDSPScalarMath.h"
 
 
-// Here is the DSP vector size, an important constant.
-constexpr size_t kFloatsPerDSPVectorBits = 6;
-constexpr size_t kFramesPerBlock = 1 << kFloatsPerDSPVectorBits;
-static_assert((kFloatsPerDSPVectorBits <= 8),
-              "We count on kFloatsPerDSPVectorBits to be 8 or less.");
+// Here is the signal block size, an important constant. All processing is done in
+// chunks of this block size so that loops can be unrolled at compile time.
+constexpr size_t kFramesPerBlockBits = 6;
+constexpr size_t kFramesPerBlock = 1 << kFramesPerBlockBits;
+static_assert((kFramesPerBlockBits <= 8),
+              "We count on kFramesPerBlockBits to be 8 or less.");
 
 
 constexpr size_t kSIMDAlignBytes{16};
@@ -433,14 +434,14 @@ public:
 typedef SignalBlockArray<1> SignalBlock;
 
 // ----------------------------------------------------------------
-// DSPVectorArrayInt
+// SignalBlockArrayInt
 //
 // DSP Vector holding int32 values.
 
 constexpr size_t kIntsPerDSPVector = kFramesPerBlock;
 
 template <size_t ROWS>
-class DSPVectorArrayInt
+class SignalBlockArrayInt
 {
   union Data
   {
@@ -462,14 +463,14 @@ public:
   inline int32_t* getBufferInt() { return data_.asInt; }
   inline const int32_t* getConstBufferInt() const { return data_.asInt; }
   
-  explicit DSPVectorArrayInt() { operator=(0); }
-  explicit DSPVectorArrayInt(int32_t k) { operator=(k); }
+  explicit SignalBlockArrayInt() { operator=(0); }
+  explicit SignalBlockArrayInt(int32_t k) { operator=(k); }
   
   inline int32_t& operator[](int i) { return getBufferInt()[i]; }
   inline const int32_t operator[](int i) const { return getConstBufferInt()[i]; }
   
   // set each element of the SignalBlockArray to the int32_t value k.
-  inline DSPVectorArrayInt operator=(int32_t k)
+  inline SignalBlockArrayInt operator=(int32_t k)
   {
     int4 i4 = set1Int(k);
     float4 vk = castIntToFloat(i4);
@@ -484,19 +485,19 @@ public:
   }
   
   // constexpr constructor taking a std::array. Use with make_array
-  constexpr DSPVectorArrayInt(std::array<int32_t, kFramesPerBlock * ROWS> a) : data_(a) {}
+  constexpr SignalBlockArrayInt(std::array<int32_t, kFramesPerBlock * ROWS> a) : data_(a) {}
   
   // constexpr constructor taking a function(int -> int)
-  constexpr DSPVectorArrayInt(int (*fn)(int))
-  : DSPVectorArrayInt(make_array<kFramesPerBlock * ROWS>(fn))
+  constexpr SignalBlockArrayInt(int (*fn)(int))
+  : SignalBlockArrayInt(make_array<kFramesPerBlock * ROWS>(fn))
   {
   }
   
-  DSPVectorArrayInt(const DSPVectorArrayInt& x1) noexcept = default;
-  DSPVectorArrayInt& operator=(const DSPVectorArrayInt& x1) noexcept = default;
+  SignalBlockArrayInt(const SignalBlockArrayInt& x1) noexcept = default;
+  SignalBlockArrayInt& operator=(const SignalBlockArrayInt& x1) noexcept = default;
   
   // equality by value
-  bool operator==(const DSPVectorArrayInt& x1)
+  bool operator==(const SignalBlockArrayInt& x1)
   {
     const int* px1 = x1.getConstBufferInt();
     const int* py1 = getConstBufferInt();
@@ -508,43 +509,43 @@ public:
     return true;
   }
   
-  // return a reference to a row of this DSPVectorArrayInt.
-  inline DSPVectorArrayInt<1>& row(int j)
+  // return a reference to a row of this SignalBlockArrayInt.
+  inline SignalBlockArrayInt<1>& row(int j)
   {
     float* py1 = getBuffer() + kIntsPerDSPVector * j;
-    DSPVectorArrayInt<1>* pRow = reinterpret_cast<DSPVectorArrayInt<1>*>(py1);
+    SignalBlockArrayInt<1>* pRow = reinterpret_cast<SignalBlockArrayInt<1>*>(py1);
     return *pRow;
   }
   
-  // return a reference to a row of this DSPVectorArrayInt.
-  inline const DSPVectorArrayInt<1>& constRow(int j) const
+  // return a reference to a row of this SignalBlockArrayInt.
+  inline const SignalBlockArrayInt<1>& constRow(int j) const
   {
     const float* py1 = getConstBuffer() + kIntsPerDSPVector * j;
-    const DSPVectorArrayInt<1>* pRow = reinterpret_cast<const DSPVectorArrayInt<1>*>(py1);
+    const SignalBlockArrayInt<1>* pRow = reinterpret_cast<const SignalBlockArrayInt<1>*>(py1);
     return *pRow;
   }
   
-  friend inline DSPVectorArrayInt operator+(const DSPVectorArrayInt& x1,
-                                            const DSPVectorArrayInt& x2)
+  friend inline SignalBlockArrayInt operator+(const SignalBlockArrayInt& x1,
+                                            const SignalBlockArrayInt& x2)
   {
     return addInt32(x1, x2);
   }
   
-  friend inline DSPVectorArrayInt operator-(const DSPVectorArrayInt& x1)
+  friend inline SignalBlockArrayInt operator-(const SignalBlockArrayInt& x1)
   {
-    DSPVectorArrayInt zero(0);
+    SignalBlockArrayInt zero(0);
     return subtractInt32(zero, x1);
   }
   
-  friend inline DSPVectorArrayInt operator-(const DSPVectorArrayInt& x1,
-                                            const DSPVectorArrayInt& x2)
+  friend inline SignalBlockArrayInt operator-(const SignalBlockArrayInt& x1,
+                                            const SignalBlockArrayInt& x2)
   {
     return subtractInt32(x1, x2);
   }
   
-};  // class DSPVectorArrayInt
+};  // class SignalBlockArrayInt
 
-typedef DSPVectorArrayInt<1> DSPVectorInt;
+typedef SignalBlockArrayInt<1> SignalBlockInt;
 
 // ----------------------------------------------------------------
 // SignalBlockDynamic: for holding a number of SignalBlocks only known at runtime.
@@ -748,10 +749,10 @@ DEFINE_OP2_MS(max1, (max(x1, x2)));
 
 #define DEFINE_OP2_INT32(opName, opComputation)                              \
 template <size_t ROWS>                                                     \
-inline DSPVectorArrayInt<ROWS>(opName)(const DSPVectorArrayInt<ROWS>& vx1, \
-const DSPVectorArrayInt<ROWS>& vx2) \
+inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArrayInt<ROWS>& vx1, \
+const SignalBlockArrayInt<ROWS>& vx2) \
 {                                                                          \
-DSPVectorArrayInt<ROWS> vy;                                              \
+SignalBlockArrayInt<ROWS> vy;                                              \
 const float* px1 = vx1.getConstBuffer();                                 \
 const float* px2 = vx2.getConstBuffer();                                 \
 float* py1 = vy.getBuffer();                                             \
@@ -840,9 +841,9 @@ inline SignalBlockArray<ROWS> lerp(const SignalBlockArray<ROWS>& vx1, const Sign
 
 #define DEFINE_OP1_F2I(opName, opComputation)                             \
 template <size_t ROWS>                                                  \
-inline DSPVectorArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1) \
+inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1) \
 {                                                                       \
-DSPVectorArrayInt<ROWS> vy;                                           \
+SignalBlockArrayInt<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                              \
 float* py1 = vy.getBuffer();                                          \
 for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
@@ -864,7 +865,7 @@ DEFINE_OP1_F2I(truncateFloatToInt, (castIntToFloat(floatToIntTruncate(x))));
 
 #define DEFINE_OP1_I2F(opName, opComputation)                             \
 template <size_t ROWS>                                                  \
-inline SignalBlockArray<ROWS>(opName)(const DSPVectorArrayInt<ROWS>& vx1) \
+inline SignalBlockArray<ROWS>(opName)(const SignalBlockArrayInt<ROWS>& vx1) \
 {                                                                       \
 SignalBlockArray<ROWS> vy;                                              \
 const float* px1 = vx1.getConstBuffer();                              \
@@ -893,10 +894,10 @@ DEFINE_OP1(fractionalPart, (x - intToFloat(floatToIntTruncate(x))));
 
 #define DEFINE_OP2_FF2I(opName, opComputation)                            \
 template <size_t ROWS>                                                  \
-inline DSPVectorArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
+inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
 const SignalBlockArray<ROWS>& vx2) \
 {                                                                       \
-DSPVectorArrayInt<ROWS> vy;                                           \
+SignalBlockArrayInt<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                              \
 const float* px2 = vx2.getConstBuffer();                              \
 float* py1 = vy.getBuffer();                                          \
@@ -927,7 +928,7 @@ DEFINE_OP2_FF2I(lessThanOrEqual, (compareLessThanOrEqual(x1, x2)));
 template <size_t ROWS>                                                  \
 inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1,    \
 const SignalBlockArray<ROWS>& vx2,    \
-const DSPVectorArrayInt<ROWS>& vx3) \
+const SignalBlockArrayInt<ROWS>& vx3) \
 {                                                                       \
 SignalBlockArray<ROWS> vy;                                              \
 const float* px1 = vx1.getConstBuffer();                              \
@@ -957,11 +958,11 @@ DEFINE_OP3_FFI2F(select, (vecSelectFFI(x1, x2, x3)));  // bitwise select(resultI
 
 #define DEFINE_OP3_III2I(opName, opComputation)                              \
 template <size_t ROWS>                                                     \
-inline DSPVectorArrayInt<ROWS>(opName)(const DSPVectorArrayInt<ROWS>& vx1, \
-const DSPVectorArrayInt<ROWS>& vx2, \
-const DSPVectorArrayInt<ROWS>& vx3) \
+inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArrayInt<ROWS>& vx1, \
+const SignalBlockArrayInt<ROWS>& vx2, \
+const SignalBlockArrayInt<ROWS>& vx3) \
 {                                                                          \
-DSPVectorArrayInt<ROWS> vy;                                              \
+SignalBlockArrayInt<ROWS> vy;                                              \
 const float* px1 = vx1.getConstBuffer();                                 \
 const float* px2 = vx2.getConstBuffer();                                 \
 const float* px3 = vx3.getConstBuffer();                                 \
@@ -1005,10 +1006,10 @@ SignalBlockArray<ROWS> add(SignalBlockArray<ROWS> first, Args... args)
 // ----------------------------------------------------------------
 // constexpr definitions
 
-#define ConstDSPVector constexpr SignalBlock
-#define ConstDSPVectorArray constexpr SignalBlockArray
-#define ConstDSPVectorInt constexpr DSPVectorInt
-#define ConstDSPVectorArrayInt constexpr DSPVectorArrayInt
+#define ConstSignalBlock constexpr SignalBlock
+#define ConstSignalBlockArray constexpr SignalBlockArray
+#define ConstSignalBlockInt constexpr SignalBlockInt
+#define ConstSignalBlockArrayInt constexpr SignalBlockArrayInt
 
 // ----------------------------------------------------------------
 // single-vector index and sequence generators
@@ -1016,8 +1017,8 @@ SignalBlockArray<ROWS> add(SignalBlockArray<ROWS> first, Args... args)
 constexpr float intToFloatCastFn(int i) { return (float)i; }
 constexpr int indexFn(int i) { return i; }
 
-inline ConstDSPVector columnIndex() { return (make_array<kFramesPerBlock>(intToFloatCastFn)); }
-inline ConstDSPVectorInt columnIndexInt() { return (make_array<kIntsPerDSPVector>(indexFn)); }
+inline ConstSignalBlock columnIndex() { return (make_array<kFramesPerBlock>(intToFloatCastFn)); }
+inline ConstSignalBlockInt columnIndexInt() { return (make_array<kIntsPerDSPVector>(indexFn)); }
 
 // return a linear sequence from start to end, where end will fall on the first
 // index of the next vector.
@@ -1463,7 +1464,7 @@ inline std::ostream& operator<<(std::ostream& out, const SignalBlockArray<ROWS>&
 }
 
 template <size_t ROWS>
-inline std::ostream& operator<<(std::ostream& out, const DSPVectorArrayInt<ROWS>& vecArray)
+inline std::ostream& operator<<(std::ostream& out, const SignalBlockArrayInt<ROWS>& vecArray)
 {
   out << "@" << std::hex << reinterpret_cast<unsigned long>(&vecArray) << std::dec << "\n ";
   //    if(ROWS > 1) out << "[   ";
