@@ -17,8 +17,8 @@ namespace ml
 // AudioContext: where our signal processors meet the rest of the world.
 // an AudioContext defines the sample rate and provides audio and event I/O.
 
-using MainInputs = const DSPVectorDynamic&;
-using MainOutputs = DSPVectorDynamic&;
+using MainInputs = const SignalBlockDynamic&;
+using MainOutputs = SignalBlockDynamic&;
 
 class AudioContext final
 {
@@ -42,7 +42,7 @@ class AudioContext final
     void processVector(int startOffset);
 
     // externally readable values updated by processVector()
-    DSPVector quarterNotesPhase_;
+    SignalBlock quarterNotesPhase_;
     double bpm{0};
     double sampleRate{0};
     uint64_t samplesSinceStart{0};
@@ -73,7 +73,7 @@ class AudioContext final
   size_t getInputPolyphony() { return eventsToSignals.getPolyphony(); }
 
   void updateTime(const double ppqPos, const double bpmIn, bool isPlaying, double sampleRateIn);
-  DSPVector getBeatPhase() { return currentTime.quarterNotesPhase_; }
+  SignalBlock getBeatPhase() { return currentTime.quarterNotesPhase_; }
 
   void addInputEvent(const Event& e);
   void clearInputEvents() { eventsToSignals.clearEvents(); }
@@ -88,14 +88,14 @@ class AudioContext final
   const EventsToSignals::Voice& getInputVoice(int n) { return eventsToSignals.getVoice(n); }
 
   int getNewestInputVoice() { return eventsToSignals.getNewestVoice(); }
-  DSPVector getInputController(size_t n) const;
+  SignalBlock getInputController(size_t n) const;
 
   double getSampleRate() { return currentTime.sampleRate; }
   const ProcessTime& getTimeInfo() { return currentTime; }
 
   // clients can access these directly to do processing
-  DSPVectorDynamic inputs;
-  DSPVectorDynamic outputs;
+  SignalBlockDynamic inputs;
+  SignalBlockDynamic outputs;
 
  private:
   ProcessTime currentTime;

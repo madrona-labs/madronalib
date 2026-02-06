@@ -33,15 +33,15 @@ public:
   virtual ~Synth() = default;
 
   // Default implementation of processVector - handles voice iteration
-  void processVector(const DSPVectorDynamic& inputs,
-                    DSPVectorDynamic& outputs,
+  void processVector(const SignalBlockDynamic& inputs,
+                    SignalBlockDynamic& outputs,
                     void* stateData) override {
     auto* audioContext = static_cast<AudioContext*>(stateData);
     if (!audioContext) return;
 
     // Clear output buffers
     for (int i = 0; i < outputs.size(); ++i) {
-      outputs[i] = DSPVector{0.f};
+      outputs[i] = SignalBlock{0.f};
     }
 
     // Process each voice and mix
@@ -67,8 +67,8 @@ public:
   // audioContext: provides sample rate, timing, etc.
   virtual void processVoice(int voiceIndex,
                            const EventsToSignals::Voice& voice,
-                           const DSPVectorDynamic& inputs,
-                           DSPVectorDynamic& outputs,
+                           const SignalBlockDynamic& inputs,
+                           SignalBlockDynamic& outputs,
                            AudioContext* audioContext) = 0;
 
   // Subclasses can override to define when voices are active

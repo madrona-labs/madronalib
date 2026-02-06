@@ -113,7 +113,7 @@ void EventsToSignals::Voice::beginProcess()
   }
 
   nextFrameToProcess = 0;
-  driftCounter += kFloatsPerDSPVector;
+  driftCounter += kFramesPerBlock;
 
   int driftIntervalSamples = (int)(sr * kDriftTimeSeconds);
   if (driftCounter >= nextDriftTimeInSamples)
@@ -141,8 +141,8 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
     nextFrameToProcess = endFrame;
   };
 
-  // incoming time in the event e is the sample offset into the DSPVector.
-  size_t destTime = clamp((size_t)e.time, (size_t)0, (size_t)kFloatsPerDSPVector);
+  // incoming time in the event e is the sample offset into the SignalBlock.
+  size_t destTime = clamp((size_t)e.time, (size_t)0, (size_t)kFramesPerBlock);
 
   switch (e.type)
   {
@@ -223,7 +223,7 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
 
 void EventsToSignals::Voice::endProcess(float pitchBend)
 {
-  for (int t = (int)nextFrameToProcess; t < kFloatsPerDSPVector; ++t)
+  for (int t = (int)nextFrameToProcess; t < kFramesPerBlock; ++t)
   {
     // write velocity to end of buffer.
     outputs.row(kGate)[t] = currentVelocity;
@@ -296,7 +296,7 @@ EventsToSignals::EventsToSignals()
     voices[i].reset();
 
     // set vox output signal
-    voices[i].outputs.row(kVoice) = DSPVector((float)i - 1);
+    voices[i].outputs.row(kVoice) = SignalBlock((float)i - 1);
   }
 
   controllers.resize(kNumControllers);
@@ -403,7 +403,7 @@ void EventsToSignals::processVector(int startTime)
 
   // process any events in the buffer that are within this vector,
   // sending changes to voices and controller smoothers
-  int endTime = startTime + kFloatsPerDSPVector;
+  int endTime = startTime + kFramesPerBlock;
   for (const auto& e : eventBuffer_)
   {
     if (within(e.time, startTime, endTime))
@@ -464,7 +464,7 @@ void EventsToSignals::processVector(int startTime)
     }
   }
 
-  testCounter += kFloatsPerDSPVector;
+  testCounter += kFramesPerBlock;
   const int samples = 48000;
   if (testCounter > samples)
   {

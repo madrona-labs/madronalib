@@ -147,7 +147,7 @@ int RtAudioCallbackFn(void* outputBuffer, void* inputBuffer, unsigned int nBuffe
     outputs[i] = pOutputBuffer + i * nBufferFrames;
   }
 
-  // Buffer the data to and from the outside world and run the process in DSPVector-sized chunks
+  // Buffer the data to and from the outside world and run the process in SignalBlock-sized chunks
   // within the context.
   pData->buffer->process(inputs, outputs, nBufferFrames, pData->processContext, pData->processFn,
                          pData->processState);

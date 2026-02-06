@@ -47,31 +47,31 @@ Parallel
 
 */
 
-// mix (DSPVectorArray<INPUTS>gains, a, b, c, ... )
-// returns the sum of each input DSPVectorArray multiplied by the corresponding row
+// mix (SignalBlockArray<INPUTS>gains, a, b, c, ... )
+// returns the sum of each input SignalBlockArray multiplied by the corresponding row
 // of the gains array.
-// NOTE: if the gains DSPVectorArray contains a number of rows smaller than the number of inputs,
+// NOTE: if the gains SignalBlockArray contains a number of rows smaller than the number of inputs,
 // unsafe behavior results.
 // TODO: with the right template-fu it should be possible to check the sizes at compile time,
 // and to avoid passing inputIndex at runtime.
 
 template <size_t ROWS, size_t INPUTS, typename... Args>
-DSPVectorArray<ROWS> mix_n(size_t inputIndex, DSPVectorArray<INPUTS> gains,
-                           DSPVectorArray<ROWS> first)
+SignalBlockArray<ROWS> mix_n(size_t inputIndex, SignalBlockArray<INPUTS> gains,
+                           SignalBlockArray<ROWS> first)
 {
   return first * repeatRows<ROWS>(gains.getRowVectorUnchecked(inputIndex));
 }
 
 template <size_t ROWS, size_t INPUTS, typename... Args>
-DSPVectorArray<ROWS> mix_n(size_t inputIndex, DSPVectorArray<INPUTS> gains,
-                           DSPVectorArray<ROWS> first, Args... args)
+SignalBlockArray<ROWS> mix_n(size_t inputIndex, SignalBlockArray<INPUTS> gains,
+                           SignalBlockArray<ROWS> first, Args... args)
 {
   return first * repeatRows<ROWS>(gains.getRowVectorUnchecked(inputIndex)) +
          mix_n(inputIndex + 1, gains, args...);
 }
 
 template <size_t ROWS, size_t INPUTS, typename... Args>
-DSPVectorArray<ROWS> mix(DSPVectorArray<INPUTS> gains, DSPVectorArray<ROWS> first, Args... args)
+SignalBlockArray<ROWS> mix(SignalBlockArray<INPUTS> gains, SignalBlockArray<ROWS> first, Args... args)
 {
   return mix_n(0, gains, first, args...);
 }
@@ -80,18 +80,18 @@ DSPVectorArray<ROWS> mix(DSPVectorArray<INPUTS> gains, DSPVectorArray<ROWS> firs
 // the selector range [0--1) is mapped to cover the range of inputs equally.
 
 template <size_t ROWS, typename... Args>
-DSPVectorArray<ROWS> multiplex(DSPVector selector, DSPVectorArray<ROWS> first, Args... args)
+SignalBlockArray<ROWS> multiplex(SignalBlock selector, SignalBlockArray<ROWS> first, Args... args)
 {
-  DSPVectorArray<ROWS> inputs[]{first, args...};
+  SignalBlockArray<ROWS> inputs[]{first, args...};
   constexpr int nInputs = sizeof...(Args) + 1;
 
-  DSPVectorArray<ROWS> y;
+  SignalBlockArray<ROWS> y;
 
   // iterate on each sample of input selector
-  for (int i = 0; i < kFloatsPerDSPVector * ROWS; ++i)
+  for (int i = 0; i < kFramesPerBlock * ROWS; ++i)
   {
     // TODO SIMD
-    int selectorIdx = i % kFloatsPerDSPVector;
+    int selectorIdx = i % kFramesPerBlock;
     float s = selector[selectorIdx];
 
     // get input index from 0 - nInputs-1
@@ -108,18 +108,18 @@ DSPVectorArray<ROWS> multiplex(DSPVector selector, DSPVectorArray<ROWS> first, A
 // the selector range [0--1) is mapped so that 1.0 = the last input.
 
 template <size_t ROWS, typename... Args>
-DSPVectorArray<ROWS> multiplexLinear(DSPVector selector, DSPVectorArray<ROWS> first, Args... args)
+SignalBlockArray<ROWS> multiplexLinear(SignalBlock selector, SignalBlockArray<ROWS> first, Args... args)
 {
-  DSPVectorArray<ROWS> inputs[]{first, args...};
+  SignalBlockArray<ROWS> inputs[]{first, args...};
   constexpr int nInputs = sizeof...(Args) + 1;
 
-  DSPVectorArray<ROWS> y;
+  SignalBlockArray<ROWS> y;
 
   // iterate on each sample of input selector
-  for (int i = 0; i < kFloatsPerDSPVector * ROWS; ++i)
+  for (int i = 0; i < kFramesPerBlock * ROWS; ++i)
   {
     // TODO SIMD
-    int selectorIdx = i % kFloatsPerDSPVector;
+    int selectorIdx = i % kFramesPerBlock;
     float s = selector[selectorIdx];
 
     // get input index from 0 - nInputs-1
@@ -139,16 +139,16 @@ DSPVectorArray<ROWS> multiplexLinear(DSPVector selector, DSPVectorArray<ROWS> fi
 // demultiplex the input to the outputs based on the value of the selector at each sample.
 
 template <size_t ROWS, typename... Args>
-void demultiplex(DSPVector selector, DSPVectorArray<ROWS> input, DSPVectorArray<ROWS>* firstOutput,
+void demultiplex(SignalBlock selector, SignalBlockArray<ROWS> input, SignalBlockArray<ROWS>* firstOutput,
                  Args... args)
 {
-  DSPVectorArray<ROWS>* outputs[]{firstOutput, args...};
+  SignalBlockArray<ROWS>* outputs[]{firstOutput, args...};
   constexpr int nOutputs = sizeof...(Args) + 1;
 
-  DSPVector outputIntSafe;
+  SignalBlock outputIntSafe;
 
   // for each sample, get the output index from the selector
-  for (int i = 0; i < kFloatsPerDSPVector; ++i)
+  for (int i = 0; i < kFramesPerBlock; ++i)
   {
     // TODO SIMD
     float s = selector[i];
@@ -163,10 +163,10 @@ void demultiplex(DSPVector selector, DSPVectorArray<ROWS> input, DSPVectorArray<
   // sample equals the output, write the input that that output. Else write 0.
   for (int j = 0; j < nOutputs; ++j)
   {
-    DSPVectorArray<ROWS>* pOutput = outputs[j];
-    for (int i = 0; i < kFloatsPerDSPVector * ROWS; ++i)
+    SignalBlockArray<ROWS>* pOutput = outputs[j];
+    for (int i = 0; i < kFramesPerBlock * ROWS; ++i)
     {
-      int selectorIdx = i % kFloatsPerDSPVector;
+      int selectorIdx = i % kFramesPerBlock;
       size_t outputInt = outputIntSafe[selectorIdx];
       (*pOutput)[i] = (outputInt == j) ? input[i] : 0;
     }
@@ -177,18 +177,18 @@ void demultiplex(DSPVector selector, DSPVectorArray<ROWS> input, DSPVectorArray<
 // deinterpolate linearly to neighboring outputs.
 
 template <size_t ROWS, typename... Args>
-void demultiplexLinear(DSPVector selector, DSPVectorArray<ROWS> input,
-                       DSPVectorArray<ROWS>* firstOutput, Args... args)
+void demultiplexLinear(SignalBlock selector, SignalBlockArray<ROWS> input,
+                       SignalBlockArray<ROWS>* firstOutput, Args... args)
 {
-  DSPVectorArray<ROWS>* outputs[]{firstOutput, args...};
+  SignalBlockArray<ROWS>* outputs[]{firstOutput, args...};
   constexpr int nOutputs = sizeof...(Args) + 1;
 
-  DSPVector outputInt1Safe;
-  DSPVector outputInt2Safe;
-  DSPVector outputMix;
+  SignalBlock outputInt1Safe;
+  SignalBlock outputInt2Safe;
+  SignalBlock outputMix;
 
   // for each sample, get the two output indexes and mix amount from the selector
-  for (int i = 0; i < kFloatsPerDSPVector; ++i)
+  for (int i = 0; i < kFramesPerBlock; ++i)
   {
     // TODO SIMD
     float s = selector[i];
@@ -207,10 +207,10 @@ void demultiplexLinear(DSPVector selector, DSPVectorArray<ROWS> input,
   // sample equals the output, write the input that that output. Else write 0.
   for (int j = 0; j < nOutputs; ++j)
   {
-    DSPVectorArray<ROWS>* pOutput = outputs[j];
-    for (int i = 0; i < kFloatsPerDSPVector * ROWS; ++i)
+    SignalBlockArray<ROWS>* pOutput = outputs[j];
+    for (int i = 0; i < kFramesPerBlock * ROWS; ++i)
     {
-      int selectorIdx = i % kFloatsPerDSPVector;
+      int selectorIdx = i % kFramesPerBlock;
       size_t outputInt1 = outputInt1Safe[selectorIdx];
       size_t outputInt2 = outputInt2Safe[selectorIdx];
       float m = outputMix[selectorIdx];
@@ -235,7 +235,7 @@ void demultiplexLinear(DSPVector selector, DSPVectorArray<ROWS> input,
 
 // should multiplex be on multiple inputs, rows of one input, different flavors for both??
 
-// demultiplex(outputSelector, signalInput ) -> DSPVectorArray<inputs> ;
+// demultiplex(outputSelector, signalInput ) -> SignalBlockArray<inputs> ;
 
 // splitRows(demultiplex(outputSelector, signalInput )
 

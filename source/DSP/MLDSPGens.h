@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
-// DSP generators: functor objects implementing an inline DSPVector operator()
+// DSP generators: functor objects implementing an inline SignalBlock operator()
 // in order to make time-varying signals. Generators all have some state, for
 // example the frequency of an oscillator or the seed in a noise generator.
 // Otherwise they would be DSPOps.
@@ -26,14 +26,14 @@ class TickGen
   float mOmega{0};
 
  public:
-  inline DSPVector operator()(const DSPVector cyclesPerSample)
+  inline SignalBlock operator()(const SignalBlock cyclesPerSample)
   {
     // calculate counter delta per sample
-    DSPVector stepsPerSampleV = cyclesPerSample;
+    SignalBlock stepsPerSampleV = cyclesPerSample;
 
     // accumulate phase and wrap to generate ticks
-    DSPVector vy{0.f};
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy{0.f};
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       mOmega += stepsPerSampleV[n];
       if (mOmega > 1.0f)
@@ -54,8 +54,8 @@ class ImpulseGen
 {
   // pick odd table size to get sample-centered sinc and window
   static constexpr int kTableSize{17};
-  DSPVector _table;
-  static_assert(kTableSize < kFloatsPerDSPVector,
+  SignalBlock _table;
+  static_assert(kTableSize < kFramesPerBlock,
                 "ImpulseGen: table size must be < the DSP vector size.");
 
   int _outputCounter{0};
@@ -65,7 +65,7 @@ class ImpulseGen
   ImpulseGen()
   {
     // make windowed sinc table
-    DSPVector windowVec;
+    SignalBlock windowVec;
     makeWindow(windowVec.getBuffer(), kTableSize, dspwindows::blackman);
     const float omega = 0.25f;
     auto sincFn{[&](int i)
@@ -73,16 +73,16 @@ class ImpulseGen
                   float pi_x = ml::kTwoPi * omega * i;
                   return (i == 0) ? 1.f : sinf(pi_x) / pi_x;
                 }};
-    DSPVector sincVec = map(sincFn, columnIndexInt() - DSPVectorInt((kTableSize - 1) / 2));
+    SignalBlock sincVec = map(sincFn, columnIndexInt() - DSPVectorInt((kTableSize - 1) / 2));
     _table = normalize(sincVec * windowVec);
   }
   ~ImpulseGen() {}
 
-  inline DSPVector operator()(const DSPVector cyclesPerSample)
+  inline SignalBlock operator()(const SignalBlock cyclesPerSample)
   {
     // accumulate phase and wrap to generate ticks
-    DSPVector vy{0.f};
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy{0.f};
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       _omega += cyclesPerSample[n];
       if (_omega > 1.0f)
@@ -129,10 +129,10 @@ class NoiseGen
   }
 
   // TODO SIMD
-  inline DSPVector operator()()
+  inline SignalBlock operator()()
   {
-    DSPVector y;
-    for (int i = 0; i < kFloatsPerDSPVector; ++i)
+    SignalBlock y;
+    for (int i = 0; i < kFramesPerBlock; ++i)
     {
       step();
       uint32_t temp = ((mSeed >> 9) & 0x007FFFFF) | 0x3F800000;
@@ -155,11 +155,11 @@ class TestSineGen
  public:
   void clear() { mOmega = 0; }
 
-  DSPVector operator()(const DSPVector freq)
+  SignalBlock operator()(const SignalBlock freq)
   {
-    DSPVector vy;
+    SignalBlock vy;
 
-    for (int i = 0; i < kFloatsPerDSPVector; ++i)
+    for (int i = 0; i < kFramesPerBlock; ++i)
     {
       float step = ml::kTwoPi * freq[i];
       mOmega += step;
@@ -184,10 +184,10 @@ class PhasorGen
   static constexpr float stepsPerCycle{static_cast<float>(const_math::pow(2., 32))};
   static constexpr float cyclesPerStep{1.f / stepsPerCycle};
 
-  DSPVector operator()(const DSPVector cyclesPerSample)
+  SignalBlock operator()(const SignalBlock cyclesPerSample)
   {
     // calculate int steps per sample
-    DSPVector stepsPerSampleV = cyclesPerSample * DSPVector(stepsPerCycle);
+    SignalBlock stepsPerSampleV = cyclesPerSample * SignalBlock(stepsPerCycle);
     DSPVectorInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
 
     // accumulate 32-bit phase with wrap
@@ -199,7 +199,7 @@ class PhasorGen
     }
 
     // convert counter to float output range
-    return unsignedIntToFloat(omega32V) * DSPVector(cyclesPerStep);
+    return unsignedIntToFloat(omega32V) * SignalBlock(cyclesPerStep);
   }
 
   float nextSample(const float cyclesPerSample)
@@ -235,10 +235,10 @@ class OneShotGen
   static constexpr float stepsPerCycle{static_cast<float>(const_math::pow(2., 32))};
   static constexpr float cyclesPerStep{1.f / stepsPerCycle};
 
-  DSPVector operator()(const DSPVector cyclesPerSample)
+  SignalBlock operator()(const SignalBlock cyclesPerSample)
   {
     // calculate int steps per sample
-    DSPVector stepsPerSampleV = cyclesPerSample * DSPVector(stepsPerCycle);
+    SignalBlock stepsPerSampleV = cyclesPerSample * SignalBlock(stepsPerCycle);
     DSPVectorInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
 
     // accumulate 32-bit phase with wrap
@@ -255,7 +255,7 @@ class OneShotGen
       omega32V[n] = mOmegaPrev = mOmega32;
     }
     // convert counter to float output range
-    return unsignedIntToFloat(omega32V) * DSPVector(cyclesPerStep);
+    return unsignedIntToFloat(omega32V) * SignalBlock(cyclesPerStep);
   }
 
   float nextSample(const float cyclesPerSample)
@@ -282,11 +282,11 @@ class OneShotGen
 };
 
 // bandlimited step function for reducing aliasing.
-static DSPVector polyBLEP(const DSPVector phase, const DSPVector freq)
+static SignalBlock polyBLEP(const SignalBlock phase, const SignalBlock freq)
 {
-  DSPVector blep;
+  SignalBlock blep;
 
-  for (int n = 0; n < kFloatsPerDSPVector; ++n)
+  for (int n = 0; n < kFramesPerBlock; ++n)
   {
     // could possibly differentiate to get dt instead of passing it in.
     // but that would require state.
@@ -313,25 +313,25 @@ static DSPVector polyBLEP(const DSPVector phase, const DSPVector freq)
 // input: phasor on (0, 1)
 // output: sine aproximation using Taylor series on range(-1, 1). There is distortion in odd
 // harmonics only, with the 3rd harmonic at about -40dB.
-inline DSPVector phasorToSine(DSPVector phasorV)
+inline SignalBlock phasorToSine(SignalBlock phasorV)
 {
   constexpr float sqrt2(static_cast<float>(const_math::sqrt(2.0f)));
   constexpr float domain(sqrt2 * 4.f);
-  DSPVector domainScaleV(domain);
-  DSPVector domainOffsetV(-sqrt2);
+  SignalBlock domainScaleV(domain);
+  SignalBlock domainOffsetV(-sqrt2);
   constexpr float range(sqrt2 - sqrt2 * sqrt2 * sqrt2 / 6.f);
-  DSPVector scaleV(1.0f / range);
-  DSPVector flipOffsetV(sqrt2 * 2.f);
-  DSPVector zeroV(0.f);
-  DSPVector oneV(1.f);
-  DSPVector oneSixthV(1.0f / 6.f);
+  SignalBlock scaleV(1.0f / range);
+  SignalBlock flipOffsetV(sqrt2 * 2.f);
+  SignalBlock zeroV(0.f);
+  SignalBlock oneV(1.f);
+  SignalBlock oneSixthV(1.0f / 6.f);
 
   // scale and offset input phasor on (0, 1) to sine approx domain (-sqrt(2), 3*sqrt(2))
-  DSPVector omegaV = phasorV * (domainScaleV) + (domainOffsetV);
+  SignalBlock omegaV = phasorV * (domainScaleV) + (domainOffsetV);
 
   // reverse upper half of phasor to get triangle
   // equivalent to: if (phasor > 0) x = flipOffset - fOmega; else x = fOmega;
-  DSPVector triangleV = select(flipOffsetV - omegaV, omegaV, greaterThan(omegaV, DSPVector(sqrt2)));
+  SignalBlock triangleV = select(flipOffsetV - omegaV, omegaV, greaterThan(omegaV, SignalBlock(sqrt2)));
 
   // convert triangle to sine approx.
   return scaleV * triangleV * (oneV - triangleV * triangleV * oneSixthV);
@@ -339,19 +339,19 @@ inline DSPVector phasorToSine(DSPVector phasorV)
 
 // input: phasor on (0, 1), normalized freq, pulse width
 // output: antialiased pulse
-inline DSPVector phasorToPulse(DSPVector omegaV, DSPVector freqV, DSPVector pulseWidthV)
+inline SignalBlock phasorToPulse(SignalBlock omegaV, SignalBlock freqV, SignalBlock pulseWidthV)
 {
   // get pulse selector mask
   DSPVectorInt maskV = greaterThanOrEqual(omegaV, pulseWidthV);
 
   // select -1 or 1 (could be a multiply instead?)
-  DSPVector pulseV = select(DSPVector(-1.f), DSPVector(1.f), maskV);
+  SignalBlock pulseV = select(SignalBlock(-1.f), SignalBlock(1.f), maskV);
 
   // add blep for up-going transition
   pulseV += polyBLEP(omegaV, freqV);
 
   // subtract blep for down-going transition
-  DSPVector omegaVDown = fractionalPart(omegaV - pulseWidthV + DSPVector(1.0f));
+  SignalBlock omegaVDown = fractionalPart(omegaV - pulseWidthV + SignalBlock(1.0f));
   pulseV -= polyBLEP(omegaVDown, freqV);
 
   return pulseV;
@@ -359,10 +359,10 @@ inline DSPVector phasorToPulse(DSPVector omegaV, DSPVector freqV, DSPVector puls
 
 // input: phasor on (0, 1), normalized freq
 // output: antialiased saw on (-1, 1)
-inline DSPVector phasorToSaw(DSPVector omegaV, DSPVector freqV)
+inline SignalBlock phasorToSaw(SignalBlock omegaV, SignalBlock freqV)
 {
   // scale phasor to saw range (-1, 1)
-  DSPVector sawV = omegaV * DSPVector(2.f) - DSPVector(1.f);
+  SignalBlock sawV = omegaV * SignalBlock(2.f) - SignalBlock(1.f);
 
   // subtract BLEP from saw to smooth down-going transition
   return sawV - polyBLEP(omegaV, freqV);
@@ -377,7 +377,7 @@ class SineGen
 
  public:
   void clear() { _phasor.clear(kZeroPhase); }
-  DSPVector operator()(const DSPVector freq) { return phasorToSine(_phasor(freq)); }
+  SignalBlock operator()(const SignalBlock freq) { return phasorToSine(_phasor(freq)); }
 };
 
 class PulseGen
@@ -386,7 +386,7 @@ class PulseGen
 
  public:
   void clear() { _phasor.clear(0); }
-  DSPVector operator()(const DSPVector freq, const DSPVector width)
+  SignalBlock operator()(const SignalBlock freq, const SignalBlock width)
   {
     return phasorToPulse(_phasor(freq), freq, width);
   }
@@ -398,7 +398,7 @@ class SawGen
 
  public:
   void clear() { _phasor.clear(0); }
-  DSPVector operator()(const DSPVector freq) { return phasorToSaw(_phasor(freq), freq); }
+  SignalBlock operator()(const SignalBlock freq) { return phasorToSaw(_phasor(freq), freq); }
 };
 
 // ----------------------------------------------------------------
@@ -406,17 +406,17 @@ class SawGen
 
 // linear interpolate over signal length to next value.
 
-constexpr float unityRampFn(int i) { return (i + 1) / static_cast<float>(kFloatsPerDSPVector); }
+constexpr float unityRampFn(int i) { return (i + 1) / static_cast<float>(kFramesPerBlock); }
 ConstDSPVector kUnityRampVec{unityRampFn};
 
 struct Interpolator1
 {
   float currentValue{0};
 
-  DSPVector operator()(float f)
+  SignalBlock operator()(float f)
   {
     float dydt = f - currentValue;
-    DSPVector outputVec = DSPVector(currentValue) + kUnityRampVec * dydt;
+    SignalBlock outputVec = SignalBlock(currentValue) + kUnityRampVec * dydt;
     currentValue = f;
     return outputVec;
   }
@@ -427,13 +427,13 @@ struct Interpolator1
 // ----------------------------------------------------------------
 // LinearGlide
 
-// convert a scalar float input into a DSPVector with linear slew.
-// to allow optimization, glide time is quantized to DSPVectors.
+// convert a scalar float input into a SignalBlock with linear slew.
+// to allow optimization, glide time is quantized to SignalBlocks.
 
 class LinearGlide
 {
-  DSPVector mCurrVec{0.f};
-  DSPVector mStepVec{0.f};
+  SignalBlock mCurrVec{0.f};
+  SignalBlock mStepVec{0.f};
   float mTargetValue{0};
   float mDyPerVector{1.f / 32};
   int mVectorsPerGlide{32};
@@ -442,7 +442,7 @@ class LinearGlide
  public:
   void setGlideTimeInSamples(float t)
   {
-    mVectorsPerGlide = static_cast<int>(t / kFloatsPerDSPVector);
+    mVectorsPerGlide = static_cast<int>(t / kFramesPerBlock);
     if (mVectorsPerGlide < 1) mVectorsPerGlide = 1;
     mDyPerVector = 1.0f / (mVectorsPerGlide + 0.f);
   }
@@ -454,10 +454,10 @@ class LinearGlide
     mVectorsRemaining = 0;
   }
 
-  DSPVector operator()(float f)
+  SignalBlock operator()(float f)
   {
     // set target value if different from current value.
-    // const float currentValue = mCurrVec[kFloatsPerDSPVector - 1];
+    // const float currentValue = mCurrVec[kFramesPerBlock - 1];
     if (f != mTargetValue)
     {
       mTargetValue = f;
@@ -474,21 +474,21 @@ class LinearGlide
     else if (mVectorsRemaining == 0)
     {
       // end glide: write target value to output vector
-      mCurrVec = DSPVector(mTargetValue);
-      mStepVec = DSPVector(0.f);
+      mCurrVec = SignalBlock(mTargetValue);
+      mStepVec = SignalBlock(0.f);
       mVectorsRemaining--;
     }
     else if (mVectorsRemaining == mVectorsPerGlide)
     {
       // start glide: get change in output value per vector
-      float currentValue = mCurrVec[kFloatsPerDSPVector - 1];
+      float currentValue = mCurrVec[kFramesPerBlock - 1];
       float dydv = (mTargetValue - currentValue) * mDyPerVector;
 
       // get constant step vector
-      mStepVec = DSPVector(dydv);
+      mStepVec = SignalBlock(dydv);
 
       // setup current vector with first interpolation ramp.
-      mCurrVec = DSPVector(currentValue) + kUnityRampVec * mStepVec;
+      mCurrVec = SignalBlock(currentValue) + kUnityRampVec * mStepVec;
 
       mVectorsRemaining--;
     }
@@ -541,7 +541,7 @@ class SampleAccurateLinearGlide
   float nextSample(float f)
   {
     // set target value if different from current value.
-    // const float currentValue = mCurrVec[kFloatsPerDSPVector - 1];
+    // const float currentValue = mCurrVec[kFramesPerBlock - 1];
     if (f != mTargetValue)
     {
       mTargetValue = f;

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
-// DSP filters: functor objects implementing an operator()(DSPVector input, ...).
+// DSP filters: functor objects implementing an operator()(SignalBlock input, ...).
 // All these filters have some state, otherwise they would be DSPOps.
 //
 // These objects are for building fixed DSP graphs in a functional style. The
@@ -30,12 +30,12 @@ namespace ml
 inline float dBToGain(float dB) { return powf(10.f, dB / 40.f); }
 
 // from a coefficients start array and a coefficients end array, make a
-// DSPVectorArray with each coefficient interpolated over time.
+// SignalBlockArray with each coefficient interpolated over time.
 template <size_t COEFFS_SIZE>
-DSPVectorArray<COEFFS_SIZE> interpolateCoeffsLinear(const std::array<float, COEFFS_SIZE> c0,
+SignalBlockArray<COEFFS_SIZE> interpolateCoeffsLinear(const std::array<float, COEFFS_SIZE> c0,
                                                     const std::array<float, COEFFS_SIZE> c1)
 {
-  DSPVectorArray<COEFFS_SIZE> vy;
+  SignalBlockArray<COEFFS_SIZE> vy;
   for (int i = 0; i < COEFFS_SIZE; ++i)
   {
     vy.row(i) = interpolateDSPVectorLinear(c0[i], c1[i]);
@@ -55,7 +55,7 @@ struct Lopass
   enum stateNames {ic1eq, ic2eq, nStateVars};
   
   typedef std::array<float, nCoeffs> Coeffs;
-  typedef DSPVectorArray<nCoeffs> CoeffsVec;
+  typedef SignalBlockArray<nCoeffs> CoeffsVec;
   typedef std::array<float, nParams> Params;
   typedef std::array<float, nStateVars> State;
   
@@ -84,15 +84,15 @@ struct Lopass
     return {g0, g1, g2};
   }
 
-  // TODO const DSPVectorArray< nParams > params
-  static CoeffsVec makeCoeffsVec(DSPVector omega, DSPVector k)
+  // TODO const SignalBlockArray< nParams > params
+  static CoeffsVec makeCoeffsVec(SignalBlock omega, SignalBlock k)
   {
     CoeffsVec vy;
     // TODO SIMD
-    omega = min(omega, DSPVector(0.5f));
-    k = max(k, DSPVector(0.01f));
+    omega = min(omega, SignalBlock(0.5f));
+    k = max(k, SignalBlock(0.01f));
 
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float piOmega = kPi * omega[n];
       float s1 = sinf(piOmega);
@@ -106,10 +106,10 @@ struct Lopass
   }
 
   // filter the input vector vx with the stored coefficients.
-  DSPVector operator()(const DSPVector vx)
+  SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float t0 = v0 - state[ic2eq];
@@ -124,12 +124,12 @@ struct Lopass
   }
 
   // filter the input vector vx with the coefficients generated from parameters omega and k.
-  // TODO const DSPVectorArray< nCoeffs >
-  DSPVector operator()(const DSPVector vx, const DSPVector omega, const DSPVector k)
+  // TODO const SignalBlockArray< nCoeffs >
+  SignalBlock operator()(const SignalBlock vx, const SignalBlock omega, const SignalBlock k)
   {
-    DSPVector vy;
+    SignalBlock vy;
     auto vc = makeCoeffsVec(omega, k);
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float t0 = v0 - state[ic2eq];
@@ -169,10 +169,10 @@ class Hipass
     return {g0, g1, g2, k};
   }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float t0 = v0 - ic2eq;
@@ -213,10 +213,10 @@ class Bandpass
     return {g0, g1, g2};
   }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float t0 = v0 - ic2eq;
@@ -243,7 +243,7 @@ class LoShelf
     nCoeffs
   };
   typedef std::array<float, nCoeffs> Coeffs;
-  typedef DSPVectorArray<nCoeffs> VCoeffs;
+  typedef SignalBlockArray<nCoeffs> VCoeffs;
 
   float ic1eq{0};
   float ic2eq{0};
@@ -277,10 +277,10 @@ class LoShelf
     return interpolateCoeffsLinear(makeCoeffs(p0), makeCoeffs(p1));
   }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float v3 = v0 - ic2eq;
@@ -293,10 +293,10 @@ class LoShelf
     return vy;
   }
 
-  inline DSPVector operator()(const DSPVector vx, const VCoeffs vc)
+  inline SignalBlock operator()(const SignalBlock vx, const VCoeffs vc)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float v3 = v0 - ic2eq;
@@ -323,7 +323,7 @@ class HiShelf
     nCoeffs
   };
   typedef std::array<float, nCoeffs> Coeffs;
-  typedef DSPVectorArray<nCoeffs> VCoeffs;
+  typedef SignalBlockArray<nCoeffs> VCoeffs;
 
   float ic1eq{0};
   float ic2eq{0};
@@ -358,10 +358,10 @@ class HiShelf
     return interpolateCoeffsLinear(makeCoeffs(p0), makeCoeffs(p1));
   }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float v3 = v0 - ic2eq;
@@ -374,10 +374,10 @@ class HiShelf
     return vy;
   }
 
-  inline DSPVector operator()(const DSPVector vx, const VCoeffs vc)
+  inline SignalBlock operator()(const SignalBlock vx, const VCoeffs vc)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float v3 = v0 - ic2eq;
@@ -416,10 +416,10 @@ class Bell
     return {a1, a2, a3, m1};
   }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       float v0 = vx[n];
       float v3 = v0 - ic2eq;
@@ -455,10 +455,10 @@ struct OnePole
 
   static Coeffs passthru() { return {1.f, 0.f}; }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       y1 = coeffs.a0 * vx[n] + coeffs.b1 * y1;
       vy[n] = y1;
@@ -489,10 +489,10 @@ class DCBlocker
 
   static Coeffs makeCoeffs(float omega) { return cosf(omega); }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       const float x0 = vx[n];
       const float y0 = x0 - x1 + coeffs * y1;
@@ -511,17 +511,17 @@ class Differentiator
   float _x1{0};
 
  public:
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
+    SignalBlock vy;
     vy[0] = vx[0] - _x1;
 
     // TODO SIMD
-    for (int n = 1; n < kFloatsPerDSPVector; ++n)
+    for (int n = 1; n < kFramesPerBlock; ++n)
     {
       vy[n] = vx[n] - vx[n - 1];
     }
-    _x1 = vx[kFloatsPerDSPVector - 1];
+    _x1 = vx[kFramesPerBlock - 1];
     return vy;
   }
 };
@@ -536,10 +536,10 @@ class Integrator
   // set leak to a value such as 0.001 for stability
   float mLeak{0};
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       y1 -= y1 * mLeak;
       y1 += vx[n];
@@ -573,11 +573,11 @@ class Peak
 
   static Coeffs passthru() { return {1.f, 0.f}; }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    DSPVector vxSquared = vx * vx;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    SignalBlock vxSquared = vx * vx;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       if (vxSquared[n] > y1)
       {
@@ -598,11 +598,11 @@ class Peak
 
     if (peakHoldCounter > 0)
     {
-      peakHoldCounter -= kFloatsPerDSPVector;
+      peakHoldCounter -= kFramesPerBlock;
     }
 
     // use sqrt approximation. Return 0 for inputs near 0.
-    return select(sqrtApprox(vy), DSPVector{0.f}, greaterThan(vy, DSPVector{float(1e-20)}));
+    return select(sqrtApprox(vy), SignalBlock{0.f}, greaterThan(vy, SignalBlock{float(1e-20)}));
   }
 };
 
@@ -628,19 +628,19 @@ class RMS
 
   static Coeffs passthru() { return {1.f, 0.f}; }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    DSPVector vxSquared = vx * vx;
+    SignalBlock vy;
+    SignalBlock vxSquared = vx * vx;
 
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       y1 = coeffs.a0 * vxSquared[n] + coeffs.b1 * y1;
       vy[n] = y1;
     }
 
     // use sqrt approximation. Return 0 for inputs near 0.
-    return select(sqrtApprox(vy), DSPVector{0.f}, greaterThan(vy, DSPVector{float(1e-20)}));
+    return select(sqrtApprox(vy), SignalBlock{0.f}, greaterThan(vy, SignalBlock{float(1e-20)}));
   }
 };
 
@@ -777,10 +777,10 @@ struct ADSR
     return y * amp;
   }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector r;
-    for (int i = 0; i < kFloatsPerDSPVector; ++i)
+    SignalBlock r;
+    for (int i = 0; i < kFramesPerBlock; ++i)
     {
       r[i] = processSample(vx[i]);
     }
@@ -814,7 +814,7 @@ class IntegerDelay
   void setMaxDelayInSamples(float d)
   {
     int dMax = static_cast<int>(floorf(d));
-    int newSize = 1 << bitsToContain(dMax + kFloatsPerDSPVector);
+    int newSize = 1 << bitsToContain(dMax + kFramesPerBlock);
     mBuffer.resize(newSize);
     mLengthMask = newSize - 1;
     mWriteIndex = 0;
@@ -823,29 +823,29 @@ class IntegerDelay
 
   inline void clear() { std::fill(mBuffer.begin(), mBuffer.end(), 0.f); }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
     // write
-    uintptr_t writeEnd = mWriteIndex + kFloatsPerDSPVector;
+    uintptr_t writeEnd = mWriteIndex + kFramesPerBlock;
     if (writeEnd <= mLengthMask + 1)
     {
       const float* srcStart = vx.getConstBuffer();
-      std::copy(srcStart, srcStart + kFloatsPerDSPVector, mBuffer.data() + mWriteIndex);
+      std::copy(srcStart, srcStart + kFramesPerBlock, mBuffer.data() + mWriteIndex);
     }
     else
     {
       uintptr_t excess = writeEnd - mLengthMask - 1;
       const float* srcStart = vx.getConstBuffer();
-      const float* srcSplice = srcStart + kFloatsPerDSPVector - excess;
-      const float* srcEnd = srcStart + kFloatsPerDSPVector;
+      const float* srcSplice = srcStart + kFramesPerBlock - excess;
+      const float* srcEnd = srcStart + kFramesPerBlock;
       std::copy(srcStart, srcSplice, mBuffer.data() + mWriteIndex);
       std::copy(srcSplice, srcEnd, mBuffer.data());
     }
 
     // read
-    DSPVector vy;
+    SignalBlock vy;
     uintptr_t readStart = (mWriteIndex - mIntDelayInSamples) & mLengthMask;
-    uintptr_t readEnd = readStart + kFloatsPerDSPVector;
+    uintptr_t readEnd = readStart + kFramesPerBlock;
     float* srcBuf = mBuffer.data();
     if (readEnd <= mLengthMask + 1)
     {
@@ -854,23 +854,23 @@ class IntegerDelay
     else
     {
       uintptr_t excess = readEnd - mLengthMask - 1;
-      uintptr_t readSplice = readStart + kFloatsPerDSPVector - excess;
+      uintptr_t readSplice = readStart + kFramesPerBlock - excess;
       float* pDest = vy.getBuffer();
       std::copy(srcBuf + readStart, srcBuf + readSplice, pDest);
-      std::copy(srcBuf, srcBuf + excess, pDest + (kFloatsPerDSPVector - excess));
+      std::copy(srcBuf, srcBuf + excess, pDest + (kFramesPerBlock - excess));
     }
 
     // update index
-    mWriteIndex += kFloatsPerDSPVector;
+    mWriteIndex += kFramesPerBlock;
     mWriteIndex &= mLengthMask;
     return vy;
   }
 
-  inline DSPVector operator()(const DSPVector x, const DSPVector delay)
+  inline SignalBlock operator()(const SignalBlock x, const SignalBlock delay)
   {
-    DSPVector y;
+    SignalBlock y;
 
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       // write
       mBuffer[mWriteIndex] = x[n];
@@ -944,10 +944,10 @@ class Allpass1
     return y;
   }
 
-  inline DSPVector operator()(const DSPVector vx)
+  inline SignalBlock operator()(const SignalBlock vx)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       vy[n] = processSample(vx[n]);
     }
@@ -1002,13 +1002,13 @@ class FractionalDelay
 
   // return the input signal, delayed by the constant delay time
   // mDelayInSamples.
-  inline DSPVector operator()(const DSPVector vx) { return mAllpassSection(mIntegerDelay(vx)); }
+  inline SignalBlock operator()(const SignalBlock vx) { return mAllpassSection(mIntegerDelay(vx)); }
 
   // return the input signal, delayed by the varying delay time vDelayInSamples.
-  inline DSPVector operator()(const DSPVector vx, const DSPVector vDelayInSamples)
+  inline SignalBlock operator()(const SignalBlock vx, const SignalBlock vDelayInSamples)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       setDelayInSamples(vDelayInSamples[n]);
       vy[n] = mAllpassSection.processSample(mIntegerDelay.processSample(vx[n]));
@@ -1018,11 +1018,11 @@ class FractionalDelay
 
   // return the input signal, delayed by the varying delay time vDelayInSamples,
   // but only allow changes to the delay time when vChangeTicks is nonzero.
-  inline DSPVector operator()(const DSPVector vx, const DSPVector vDelayInSamples,
+  inline SignalBlock operator()(const SignalBlock vx, const SignalBlock vDelayInSamples,
                               const DSPVectorInt vChangeTicks)
   {
-    DSPVector vy;
-    for (int n = 0; n < kFloatsPerDSPVector; ++n)
+    SignalBlock vy;
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       if (vChangeTicks[n] != 0)
       {
@@ -1042,7 +1042,7 @@ class FractionalDelay
 namespace PitchbendableDelayConsts
 {
 // period in samples of allpass fade cycle. must be a power of 2 less than or
-// equal to kFloatsPerDSPVector. 32 sounds good.
+// equal to kFramesPerBlock. 32 sounds good.
 constexpr int kFadePeriod{32};
 constexpr int fadeRamp(int n) { return n % kFadePeriod; }
 constexpr int ticks1(int n) { return fadeRamp(n) == kFadePeriod / 2; }
@@ -1065,7 +1065,7 @@ constexpr float fadeFn(int n)
 constexpr DSPVectorInt test1(fadeRamp);
 constexpr DSPVectorInt kvDelay1Changes(ticks1);
 constexpr DSPVectorInt kvDelay2Changes(ticks2);
-constexpr DSPVector kvFade(fadeFn);
+constexpr SignalBlock kvFade(fadeFn);
 };  // namespace PitchbendableDelayConsts
 
 class PitchbendableDelay
@@ -1087,7 +1087,7 @@ class PitchbendableDelay
     mDelay2.clear();
   }
 
-  inline DSPVector operator()(const DSPVector vInput, const DSPVector vDelayInSamples)
+  inline SignalBlock operator()(const SignalBlock vInput, const SignalBlock vDelayInSamples)
   {
     using namespace PitchbendableDelayConsts;
 
@@ -1098,50 +1098,50 @@ class PitchbendableDelay
 };
 
 // General purpose allpass filter with arbitrary delay length.
-// For efficiency, the minimum delay time is one DSPVector.
+// For efficiency, the minimum delay time is one SignalBlock.
 
 template <typename DELAY_TYPE>
 class Allpass
 {
   DELAY_TYPE mDelay;
-  DSPVector vy1{};
+  SignalBlock vy1{};
 
  public:
   float mGain{0.f};
 
   // use setDelayInSamples to set a constant delay time with DELAY_TYPE of
   // IntegerDelay or FractionalDelay.
-  inline void setDelayInSamples(float d) { mDelay.setDelayInSamples(d - kFloatsPerDSPVector); }
+  inline void setDelayInSamples(float d) { mDelay.setDelayInSamples(d - kFramesPerBlock); }
 
   inline void setMaxDelayInSamples(float d)
   {
-    mDelay.setMaxDelayInSamples(d - kFloatsPerDSPVector);
+    mDelay.setMaxDelayInSamples(d - kFramesPerBlock);
   }
 
   inline void clear()
   {
     mDelay.clear();
-    vy1 = DSPVector();
+    vy1 = SignalBlock();
   }
 
   // use with constant delay time.
-  inline DSPVector operator()(const DSPVector vInput)
+  inline SignalBlock operator()(const SignalBlock vInput)
   {
-    DSPVector vGain(-mGain);
-    DSPVector vDelayInput = vInput - vy1 * vGain;
-    DSPVector y = vDelayInput * vGain + vy1;
+    SignalBlock vGain(-mGain);
+    SignalBlock vDelayInput = vInput - vy1 * vGain;
+    SignalBlock y = vDelayInput * vGain + vy1;
     vy1 = mDelay(vDelayInput);
     return y;
   }
 
   // use vDelayInSamples parameter to set a varying delay time with DELAY_TYPE =
   // PitchbendableDelay.
-  inline DSPVector operator()(const DSPVector vInput, const DSPVector vDelayInSamples)
+  inline SignalBlock operator()(const SignalBlock vInput, const SignalBlock vDelayInSamples)
   {
-    DSPVector vGain(-mGain);
-    DSPVector vDelayInput = vInput - vy1 * vGain;
-    DSPVector y = vDelayInput * vGain + vy1;
-    vy1 = mDelay(vDelayInput, vDelayInSamples - DSPVector(kFloatsPerDSPVector));
+    SignalBlock vGain(-mGain);
+    SignalBlock vDelayInput = vInput - vy1 * vGain;
+    SignalBlock y = vDelayInput * vGain + vy1;
+    vy1 = mDelay(vDelayInput, vDelayInSamples - SignalBlock(kFramesPerBlock));
     return y;
   }
 };
@@ -1156,7 +1156,7 @@ class FDN
 {
   std::array<IntegerDelay, SIZE> mDelays;
   std::array<OnePole, SIZE> mFilters;
-  std::array<DSPVector, SIZE> mDelayInputVectors{{{DSPVector(0.f)}}};
+  std::array<SignalBlock, SIZE> mDelayInputVectors{{{SignalBlock(0.f)}}};
 
  public:
   // feedback gains array is public—just copy values to set.
@@ -1166,9 +1166,9 @@ class FDN
   {
     for (int n = 0; n < SIZE; ++n)
     {
-      // we have one DSPVector feedback latency, so compensate delay times for
+      // we have one SignalBlock feedback latency, so compensate delay times for
       // that.
-      int len = times[n] - kFloatsPerDSPVector;
+      int len = times[n] - kFramesPerBlock;
       len = max(1, len);
       mDelays[n].setDelayInSamples(len);
     }
@@ -1184,16 +1184,16 @@ class FDN
 
   // stereo output function
   // TODO generalize n-channel output function somehow
-  DSPVectorArray<2> operator()(const DSPVector x)
+  SignalBlockArray<2> operator()(const SignalBlock x)
   {
-    // run delays, getting DSPVector for each delay
+    // run delays, getting SignalBlock for each delay
     for (int n = 0; n < SIZE; ++n)
     {
       mDelayInputVectors[n] = mDelays[n](mDelayInputVectors[n]);
     }
 
     // get output sum
-    DSPVector sumR, sumL;
+    SignalBlock sumR, sumL;
     for (int n = 0; n < (SIZE & (~1)); ++n)
     {
       if (n & 1)
@@ -1212,17 +1212,17 @@ class FDN
     // multiplying this can be simplified so much, you just see a few operations
     // here, not a general matrix multiply.
 
-    DSPVector sumOfDelays;
+    SignalBlock sumOfDelays;
     for (int n = 0; n < SIZE; ++n)
     {
       sumOfDelays += mDelayInputVectors[n];
     }
-    sumOfDelays *= DSPVector(2.0f / SIZE);
+    sumOfDelays *= SignalBlock(2.0f / SIZE);
 
     for (int n = 0; n < SIZE; ++n)
     {
       mDelayInputVectors[n] -= (sumOfDelays);
-      mDelayInputVectors[n] = mFilters[n](mDelayInputVectors[n]) * DSPVector(mFeedbackGains[n]);
+      mDelayInputVectors[n] = mFilters[n](mDelayInputVectors[n]) * SignalBlock(mFeedbackGains[n]);
       mDelayInputVectors[n] += x;
     }
 
@@ -1237,11 +1237,11 @@ class FDN
 class HalfBandFilter
 {
  public:
-  inline DSPVector upsampleFirstHalf(const DSPVector vx)
+  inline SignalBlock upsampleFirstHalf(const SignalBlock vx)
   {
-    DSPVector vy;
+    SignalBlock vy;
     int i2 = 0;
-    for (int i = 0; i < kFloatsPerDSPVector / 2; ++i)
+    for (int i = 0; i < kFramesPerBlock / 2; ++i)
     {
       vy[i2++] = apa1.processSample(apa0.processSample(vx[i]));
       vy[i2++] = apb1.processSample(apb0.processSample(vx[i]));
@@ -1249,11 +1249,11 @@ class HalfBandFilter
     return vy;
   }
 
-  inline DSPVector upsampleSecondHalf(const DSPVector vx)
+  inline SignalBlock upsampleSecondHalf(const SignalBlock vx)
   {
-    DSPVector vy;
+    SignalBlock vy;
     int i2 = 0;
-    for (int i = kFloatsPerDSPVector / 2; i < kFloatsPerDSPVector; ++i)
+    for (int i = kFramesPerBlock / 2; i < kFramesPerBlock; ++i)
     {
       vy[i2++] = apa1.processSample(apa0.processSample(vx[i]));
       vy[i2++] = apb1.processSample(apb0.processSample(vx[i]));
@@ -1261,11 +1261,11 @@ class HalfBandFilter
     return vy;
   }
 
-  inline DSPVector downsample(const DSPVector vx1, const DSPVector vx2)
+  inline SignalBlock downsample(const SignalBlock vx1, const SignalBlock vx2)
   {
-    DSPVector vy;
+    SignalBlock vy;
     int i2 = 0;
-    for (int i = 0; i < kFloatsPerDSPVector / 2; ++i)
+    for (int i = 0; i < kFramesPerBlock / 2; ++i)
     {
       float a0 = apa1.processSample(apa0.processSample(vx1[i2]));
       float b0 = apb1.processSample(apb0.processSample(vx1[i2 + 1]));
@@ -1274,7 +1274,7 @@ class HalfBandFilter
       i2 += 2;
     }
     i2 = 0;
-    for (int i = kFloatsPerDSPVector / 2; i < kFloatsPerDSPVector; ++i)
+    for (int i = kFramesPerBlock / 2; i < kFramesPerBlock; ++i)
     {
       float a0 = apa1.processSample(apa0.processSample(vx2[i2]));
       float b0 = apb1.processSample(apb0.processSample(vx2[i2 + 1]));
@@ -1313,7 +1313,7 @@ class Downsampler
   int _numBuffers;
   uint32_t _counter{0};
 
-  float* bufferPtr(int idx) { return _buffers.data() + idx * kFloatsPerDSPVector; }
+  float* bufferPtr(int idx) { return _buffers.data() + idx * kFramesPerBlock; }
 
  public:
   Downsampler(int octavesDown) : _octaves(octavesDown)
@@ -1327,7 +1327,7 @@ class Downsampler
       _filters.resize(_octaves);
 
       // get all buffers as a single contiguous array of floats.
-      _buffers.resize(kFloatsPerDSPVector * _numBuffers);
+      _buffers.resize(kFramesPerBlock * _numBuffers);
 
       clear();
     }
@@ -1336,14 +1336,14 @@ class Downsampler
 
   // write a vector of samples to the filter chain, run filters, and return
   // true if there is a new vector of output to read (every 2^octaves writes)
-  bool write(DSPVector v)
+  bool write(SignalBlock v)
   {
     if (_octaves)
     {
       // write input to one of first two buffers
       const float* pSrc = v.getConstBuffer();
       float* pDest = bufferPtr(_counter & 1);
-      std::copy(pSrc, pSrc + kFloatsPerDSPVector, pDest);
+      std::copy(pSrc, pSrc + kFramesPerBlock, pDest);
 
       // look at the bits of the counter from lowest to highest.
       // there is one bit for each octave of downsampling.
@@ -1358,9 +1358,9 @@ class Downsampler
 
         // run filter
         HalfBandFilter* f = &(_filters[h]);
-        DSPVector vSrc1(bufferPtr(h * 2));
-        DSPVector vSrc2(bufferPtr(h * 2 + 1));
-        DSPVector vDest = f->downsample(vSrc1, vSrc2);
+        SignalBlock vSrc1(bufferPtr(h * 2));
+        SignalBlock vSrc2(bufferPtr(h * 2 + 1));
+        SignalBlock vDest = f->downsample(vSrc1, vSrc2);
         store(vDest, bufferPtr(h * 2 + 2 + b1));
       }
 
@@ -1374,12 +1374,12 @@ class Downsampler
       // write input to final buffer
       const float* pSrc = v.getConstBuffer();
       float* pDest = bufferPtr(_numBuffers - 1);
-      std::copy(pSrc, pSrc + kFloatsPerDSPVector, pDest);
+      std::copy(pSrc, pSrc + kFramesPerBlock, pDest);
       return true;
     }
   }
 
-  DSPVector read() { return DSPVector(bufferPtr(_numBuffers - 1)); }
+  SignalBlock read() { return SignalBlock(bufferPtr(_numBuffers - 1)); }
 
   void clear()
   {
@@ -1400,7 +1400,7 @@ struct Upsampler
   int _numBuffers;
   int readIdx_{0};
 
-  float* bufferPtr(int idx) { return _buffers.data() + idx * kFloatsPerDSPVector; }
+  float* bufferPtr(int idx) { return _buffers.data() + idx * kFramesPerBlock; }
 
   Upsampler(int octavesUp) : _octaves(octavesUp)
   {
@@ -1411,14 +1411,14 @@ struct Upsampler
       _filters.resize(numFilters);
 
       // get all buffers as a single contiguous array of floats.
-      _buffers.resize(kFloatsPerDSPVector * _numBuffers);
+      _buffers.resize(kFramesPerBlock * _numBuffers);
 
       clear();
     }
   }
   ~Upsampler() = default;
 
-  void write(DSPVector x)
+  void write(SignalBlock x)
   {
     // write to last vector in buffer
     store(x, bufferPtr(_numBuffers - 1));
@@ -1434,7 +1434,7 @@ struct Upsampler
 
       for (int i = 0; i < sourceBufs; ++i)
       {
-        DSPVector src, dest1, dest2;
+        SignalBlock src, dest1, dest2;
         load(src, bufferPtr(srcStart + i));
         dest1 = _filters[j].upsampleFirstHalf(src);
         dest2 = _filters[j].upsampleSecondHalf(src);
@@ -1446,9 +1446,9 @@ struct Upsampler
   }
 
   // after a write, 1 << octaves reads are available.
-  DSPVector read()
+  SignalBlock read()
   {
-    DSPVector result;
+    SignalBlock result;
     load(result, bufferPtr(readIdx_++));
     return result;
   }
@@ -1481,9 +1481,9 @@ class TempoLock
   // x: the input phasor to follow
   // dydx: the ratio to the input at which to lock the output phasor
   // isr: inverse of sample rate
-  DSPVector operator()(DSPVector x, float dydx, float isr)
+  SignalBlock operator()(SignalBlock x, float dydx, float isr)
   {
-    DSPVector y;
+    SignalBlock y;
     float x0 = x[0];
     float dxdt{0.f};
     float dydt{0.f};
@@ -1494,7 +1494,7 @@ class TempoLock
     if (x0 == -1.0f)
     {
       clear();
-      y = DSPVector(0.f);
+      y = SignalBlock(0.f);
     }
     else
     {
@@ -1504,7 +1504,7 @@ class TempoLock
         // if we are already running: get average input slope every vector
         float dx = x0 - _x1v;
         if (dx < 0.f) dx += 1.f;
-        dxdt = dx / kFloatsPerDSPVector;
+        dxdt = dx / kFramesPerBlock;
         dydt = dxdt * dydx;
         _x1v = x0;
       }
@@ -1514,7 +1514,7 @@ class TempoLock
         // current phase based on input.
         dxdt = x[1] - x0;
         dydt = dxdt * dydx;
-        _x1v = x0 - dxdt * kFloatsPerDSPVector;
+        _x1v = x0 - dxdt * kFramesPerBlock;
         _omega = fmod(x0 * dydx, 1.0f);
       }
 
@@ -1559,7 +1559,7 @@ class TempoLock
       }
 
       // make output vector with sample-accurate wrap
-      for (int i = 0; i < kFloatsPerDSPVector; ++i)
+      for (int i = 0; i < kFramesPerBlock; ++i)
       {
         y[i] = _omega;
         _omega += dydt;

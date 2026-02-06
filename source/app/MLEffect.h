@@ -14,7 +14,7 @@ namespace ml
 // Effect: Base class for audio effects
 // - Default implementation: multichannel passthrough
 // - Override processVector() for your processing
-// - Infer number of i/o channels from DSPVectorDynamic sizes
+// - Infer number of i/o channels from SignalBlockDynamic sizes
 
 class Effect : public SignalProcessor {
 public:
@@ -22,8 +22,8 @@ public:
   virtual ~Effect() = default;
 
   // Default implementation: multichannel passthrough
-  void processVector(const DSPVectorDynamic& inputs,
-                    DSPVectorDynamic& outputs,
+  void processVector(const SignalBlockDynamic& inputs,
+                    SignalBlockDynamic& outputs,
                     void* stateData) override {
     int numInputs = inputs.size();
     int numOutputs = outputs.size();
@@ -36,7 +36,7 @@ public:
 
     // Zero any extra output channels
     for (int i = channelsToCopy; i < numOutputs; ++i) {
-      outputs[i] = DSPVector{0.f};
+      outputs[i] = SignalBlock{0.f};
     }
   }
 };

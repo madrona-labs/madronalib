@@ -106,7 +106,7 @@ class DSPBuffer
     readIndex_ = writeIndex_ = 0;
 
     int sizeBits = (int)ml::bitsToContain(sizeInSamples);
-    size_ = std::max((1 << sizeBits), (int)kFloatsPerDSPVector);
+    size_ = std::max((1 << sizeBits), (int)kFramesPerBlock);
 
     try
     {
@@ -167,11 +167,11 @@ class DSPBuffer
     }
   }
 
-  // write a single DSPVectorArray to the buffer, advancing the write index.
+  // write a single SignalBlockArray to the buffer, advancing the write index.
   template <size_t VECTORS>
-  void write(const DSPVectorArray<VECTORS> &srcVec)
+  void write(const SignalBlockArray<VECTORS> &srcVec)
   {
-    constexpr int samples = kFloatsPerDSPVector * VECTORS;
+    constexpr int samples = kFramesPerBlock * VECTORS;
 
     bool full = (getWriteAvailable() < samples);
 
@@ -222,11 +222,11 @@ class DSPBuffer
     return samples;
   }
 
-  // read a single DSPVectorArray from the buffer, advancing the read index.
+  // read a single SignalBlockArray from the buffer, advancing the read index.
   template <size_t VECTORS>
-  void read(DSPVectorArray<VECTORS> &destVec)
+  void read(SignalBlockArray<VECTORS> &destVec)
   {
-    constexpr int samples = kFloatsPerDSPVector * VECTORS;
+    constexpr int samples = kFramesPerBlock * VECTORS;
     if (getReadAvailable() < samples) return;
 
     const auto currentReadIndex = readIndex_.load(std::memory_order_acquire);
@@ -248,12 +248,12 @@ class DSPBuffer
     }
   }
 
-  // read a single DSPVector from the buffer, advancing the read index.
-  DSPVector read()
+  // read a single SignalBlock from the buffer, advancing the read index.
+  SignalBlock read()
   {
-    DSPVector destVec;
-    constexpr int samples = kFloatsPerDSPVector;
-    if (getReadAvailable() < samples) return DSPVector{};
+    SignalBlock destVec;
+    constexpr int samples = kFramesPerBlock;
+    if (getReadAvailable() < samples) return SignalBlock{};
 
     const auto currentReadIndex = readIndex_.load(std::memory_order_acquire);
     DataRegions dr = getDataRegions(currentReadIndex, samples);

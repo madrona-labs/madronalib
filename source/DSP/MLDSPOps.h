@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
-// This module contains the DSPVectorArray / DSPVector class and basic
-// operations on it. Any stateless operations on DSPVectors should also be added
+// This module contains the SignalBlockArray / SignalBlock class and basic
+// operations on it. Any stateless operations on SignalBlocks should also be added
 // here.
 
 #pragma once
@@ -38,19 +38,26 @@
 
 // Here is the DSP vector size, an important constant.
 constexpr size_t kFloatsPerDSPVectorBits = 6;
-constexpr size_t kFloatsPerDSPVector = 1 << kFloatsPerDSPVectorBits;
+constexpr size_t kFramesPerBlock = 1 << kFloatsPerDSPVectorBits;
 static_assert((kFloatsPerDSPVectorBits <= 8),
               "We count on kFloatsPerDSPVectorBits to be 8 or less.");
 
-// make_array, used in constructors
 
+constexpr size_t kSIMDAlignBytes{16};
+
+constexpr size_t roundUpToMultiple(size_t value, size_t multiple) {
+  return ((value + multiple - 1) / multiple) * multiple;
+}
+
+
+
+// make_array, used in constructors
 template <class Function, std::size_t... Indices>
 constexpr auto make_array_helper(Function f, std::index_sequence<Indices...>)
 -> std::array<typename std::invoke_result<Function, std::size_t>::type, sizeof...(Indices)>
 {
   return {{f(Indices)...}};
 }
-
 template <int N, class Function>
 constexpr auto make_array(Function f)
 -> std::array<typename std::invoke_result<Function, std::size_t>::type, N>
@@ -58,21 +65,144 @@ constexpr auto make_array(Function f)
   return make_array_helper(f, std::make_index_sequence<N>{});
 }
 
+
+
+
+
 // ----------------------------------------------------------------
-// DSPVectorArray
+// AlignedArray
+
+template<typename T, size_t N>
+struct alignas(kSIMDAlignBytes) AlignedArray
+{
+  std::array<T, N> dataAligned;
+  
+  constexpr AlignedArray<T, N>(std::array<T, N> data) : dataAligned(data) {}
+  constexpr AlignedArray<T, N>(const T* dataPtr) { std::copy(dataPtr, dataPtr + N, dataAligned.data() );}
+  AlignedArray<T, N>(T val) { fill(val); }
+  AlignedArray<T, N>() { fill(T(0.f)); }
+  
+  const T& operator[](size_t i) const { return dataAligned[i]; }
+  T& operator[](size_t i) { return dataAligned[i]; }
+  const T* data() const { return dataAligned.data(); }
+  const T* begin() const { return dataAligned.data(); }
+  const T* end() const { return dataAligned.data() + N; }
+  T* data() { return dataAligned.data(); }
+  
+  void fill(T f) {dataAligned.fill(f);}
+};
+
+
+// ----------------------------------------------------------------
+// AlignedArray2D
+
+
+template<typename T, size_t COLS>
+static constexpr size_t calculatePaddedCols() {
+  constexpr size_t bytes_needed = COLS * sizeof(T);
+  constexpr size_t aligned_bytes = ((bytes_needed + kSIMDAlignBytes - 1) / kSIMDAlignBytes) * kSIMDAlignBytes;
+  return aligned_bytes / sizeof(T);
+}
+
+template<typename T, size_t COLS, size_t ROWS>
+struct AlignedArray2D : public AlignedArray<T, calculatePaddedCols<T, COLS>()*ROWS>
+{
+  static_assert(kSIMDAlignBytes % sizeof(T) == 0, "Type size must evenly divide alignment boundary");
+  static constexpr size_t kRowStride = calculatePaddedCols<T, COLS>();
+  using Base = AlignedArray<T, kRowStride*ROWS>;
+  
+  // Constructors
+  AlignedArray2D() : Base() {}
+  AlignedArray2D(T val) : Base(val) {}
+  
+  // get data ptr
+  T* data() { return Base::data(); }
+  
+  // 2D access - row major order
+  T& operator()(size_t row, size_t col) {
+    assert(row < ROWS && col < COLS);
+    return this->dataAligned[row * kRowStride + col];
+  }
+  
+  const T& operator()(size_t row, size_t col) const {
+    assert(row < ROWS && col < COLS);
+    return this->dataAligned[row * kRowStride + col];
+  }
+  
+  // Get pointer to start of a row (will be 16-byte aligned)
+  T* row(size_t r) {
+    assert(r < ROWS);
+    return &this->dataAligned[r * kRowStride];
+  }
+  
+  const T* row(size_t r) const {
+    assert(r < ROWS);
+    return &this->dataAligned[r * kRowStride];
+  }
+  
+  AlignedArray<T, COLS> getRow(size_t r) const {
+    assert(r < ROWS);
+    AlignedArray<T, COLS> result;
+    std::copy(row(r), row(r) + COLS, result.data());
+    return result;
+  }
+  
+  void setRow(size_t r, const AlignedArray<T, COLS>& src)  {
+    assert(r < ROWS);
+    std::copy(src.begin(), src.end(), this->row(r));
+  }
+  
+
+  AlignedArray<T, ROWS> getColumn(size_t i)
+  {
+    AlignedArray<T, ROWS> r;
+    for(int j=0; j<ROWS; ++j)
+    {
+      r[j] = row(j)[i];
+    }
+    return r;
+  }
+  
+  void setColumn(size_t i, AlignedArray<T, ROWS> x)
+  {
+    for(int j=0; j<ROWS; ++j)
+    {
+      row(j)[i] = x[j];
+    }
+  }
+  
+  // Get actual dimensions
+  constexpr size_t rows() const { return ROWS; }
+  constexpr size_t cols() const { return COLS; }
+  constexpr size_t rowStride() const { return kRowStride; }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ----------------------------------------------------------------
+// SignalBlockArray
 //
-// An array of DSPVectors. Each DSPVector holds kFloatsPerDSPVector float32 samples.
-// A DSPVectorArray< ROWS > holds kFloatsPerDSPVector*ROWS samples.
+// An array of SignalBlocks. Each SignalBlock holds kFramesPerBlock float32 samples.
+// A SignalBlockArray< ROWS > holds kFramesPerBlock*ROWS samples.
 // Knowing the array size at compile time helps efficiency by allowing the compiler to
 // unroll loops.
-//
-// Note that "Vector" is used in the mathematical sense of an n-tuple of real values.
+
 
 namespace ml
 {
 
-
-constexpr size_t kSIMDVectorsPerDSPVector = kFloatsPerDSPVector / 4;
+constexpr size_t kSIMDVectorsPerDSPVector = kFramesPerBlock / 4;
 constexpr size_t kBytesPerSIMDVector = 4 * sizeof(float);
 constexpr size_t kSIMDVectorMask = ~(kBytesPerSIMDVector - 1);
 
@@ -83,16 +213,16 @@ inline bool isSIMDAligned(float* p) {
 
 
 template <size_t ROWS>
-class DSPVectorArray
+class SignalBlockArray
 {
   union Data
   {
     float4 _align[kSIMDVectorsPerDSPVector * ROWS];   // unused except to force alignment
-    std::array<float, kFloatsPerDSPVector * ROWS> arrayData_;  // for constexpr ctor
-    float asFloat[kFloatsPerDSPVector * ROWS];
+    std::array<float, kFramesPerBlock * ROWS> arrayData_;  // for constexpr ctor
+    float asFloat[kFramesPerBlock * ROWS];
     
     Data() {}
-    constexpr Data(std::array<float, kFloatsPerDSPVector * ROWS> a) : arrayData_(a) {}
+    constexpr Data(std::array<float, kFramesPerBlock * ROWS> a) : arrayData_(a) {}
   };
   Data data_;
   
@@ -102,11 +232,11 @@ public:
   inline const float* getConstBuffer() const { return data_.asFloat; }
   
   // constexpr constructor taking a std::array. Use with make_array
-  constexpr DSPVectorArray(std::array<float, kFloatsPerDSPVector * ROWS> a) : data_(a) {}
+  constexpr SignalBlockArray(std::array<float, kFramesPerBlock * ROWS> a) : data_(a) {}
   
   // constexpr constructor taking a function(int -> float)
-  constexpr DSPVectorArray(float (*fn)(int))
-  : DSPVectorArray(make_array<kFloatsPerDSPVector * ROWS>(fn))
+  constexpr SignalBlockArray(float (*fn)(int))
+  : SignalBlockArray(make_array<kFramesPerBlock * ROWS>(fn))
   {
   }
   
@@ -115,25 +245,25 @@ public:
   
   // default constructor: zeroes the data.
   // TODO this seems to be taking a lot of time! investigate
-  constexpr DSPVectorArray() { data_.arrayData_.fill(0.f); }
+  constexpr SignalBlockArray() { data_.arrayData_.fill(0.f); }
   
   // conversion constructor to float.  This keeps the syntax of common DSP code
-  // shorter: "va + DSPVector(1.f)" becomes just "va + 1.f".
-  constexpr DSPVectorArray(float k) { operator=(k); }
+  // shorter: "va + SignalBlock(1.f)" becomes just "va + 1.f".
+  constexpr SignalBlockArray(float k) { operator=(k); }
   
   // unaligned data * ctors
-  explicit DSPVectorArray(float* pData) { load(*this, pData); }
-  explicit DSPVectorArray(const float* pData) { load(*this, pData); }
+  explicit SignalBlockArray(float* pData) { load(*this, pData); }
+  explicit SignalBlockArray(const float* pData) { load(*this, pData); }
   
   // aligned data * ctors
-  explicit DSPVectorArray(DSPVectorArray* pData) { loadAligned(*this, pData); }
-  explicit DSPVectorArray(const DSPVectorArray* pData) { loadAligned(*this, pData); }
+  explicit SignalBlockArray(SignalBlockArray* pData) { loadAligned(*this, pData); }
+  explicit SignalBlockArray(const SignalBlockArray* pData) { loadAligned(*this, pData); }
   
   inline float& operator[](size_t i) { return getBuffer()[i]; }
   inline const float operator[](size_t i) const { return getConstBuffer()[i]; }
   
-  // = float: set each element of the DSPVectorArray to the float value k.
-  inline DSPVectorArray operator=(float k)
+  // = float: set each element of the SignalBlockArray to the float value k.
+  inline SignalBlockArray operator=(float k)
   {
     const float4 vk(k);
     float* py1 = getBuffer();
@@ -148,16 +278,16 @@ public:
   
   // default copy and = constructors.
   
-  DSPVectorArray(const DSPVectorArray& x1) noexcept = default;
-  DSPVectorArray& operator=(const DSPVectorArray& x1) noexcept = default;
+  SignalBlockArray(const SignalBlockArray& x1) noexcept = default;
+  SignalBlockArray& operator=(const SignalBlockArray& x1) noexcept = default;
   
   // equality by value
-  bool operator==(const DSPVectorArray& x1) const
+  bool operator==(const SignalBlockArray& x1) const
   {
     const float* px1 = x1.getConstBuffer();
     const float* py1 = getConstBuffer();
     
-    for (int n = 0; n < kFloatsPerDSPVector * ROWS; ++n)
+    for (int n = 0; n < kFramesPerBlock * ROWS; ++n)
     {
       if (py1[n] != px1[n]) return false;
     }
@@ -167,27 +297,27 @@ public:
   // TODO compare the performance of getting rid of everything between here and row(), and
   // just using row() and constRow() for reading and writing
   
-  // return row J from this DSPVectorArray, when J is known at compile time.
+  // return row J from this SignalBlockArray, when J is known at compile time.
   template <int J>
-  inline DSPVectorArray<1> getRowVector() const
+  inline SignalBlockArray<1> getRowVector() const
   {
     static_assert((J >= 0) && (J < ROWS), "getRowVector index out of bounds");
     return getRowVectorUnchecked(J);
   }
   
-  // set row J of this DSPVectorArray to x1, when J is known at compile time.
+  // set row J of this SignalBlockArray to x1, when J is known at compile time.
   template <int J>
-  inline void setRowVector(const DSPVectorArray<1> x1)
+  inline void setRowVector(const SignalBlockArray<1> x1)
   {
     static_assert((J >= 0) && (J < ROWS), "setRowVector index out of bounds");
     setRowVectorUnchecked(J, x1);
   }
   
   // get a row vector j when j is not known at compile time.
-  inline DSPVectorArray<1> getRowVectorUnchecked(size_t j) const
+  inline SignalBlockArray<1> getRowVectorUnchecked(size_t j) const
   {
-    DSPVectorArray<1> vy;
-    const float* px1 = getConstBuffer() + kFloatsPerDSPVector * j;
+    SignalBlockArray<1> vy;
+    const float* px1 = getConstBuffer() + kFramesPerBlock * j;
     float* py1 = vy.getBuffer();
     
     for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
@@ -200,10 +330,10 @@ public:
   }
   
   // set a row vector j when j is not known at compile time.
-  inline void setRowVectorUnchecked(size_t j, const DSPVectorArray<1> x1)
+  inline void setRowVectorUnchecked(size_t j, const SignalBlockArray<1> x1)
   {
     const float* px1 = x1.getConstBuffer();
-    float* py1 = getBuffer() + kFloatsPerDSPVector * j;
+    float* py1 = getBuffer() + kFramesPerBlock * j;
     
     for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
     {
@@ -214,52 +344,52 @@ public:
   }
   
   // return a const pointer to the first element in row J of this
-  // DSPVectorArray.
+  // SignalBlockArray.
   inline const float* getRowDataConst(int j) const
   {
-    const float* py1 = getConstBuffer() + kFloatsPerDSPVector * j;
+    const float* py1 = getConstBuffer() + kFramesPerBlock * j;
     return py1;
   }
   
-  // return a pointer to the first element in row J of this DSPVectorArray.
+  // return a pointer to the first element in row J of this SignalBlockArray.
   inline float* getRowData(int j)
   {
-    float* py1 = getBuffer() + kFloatsPerDSPVector * j;
+    float* py1 = getBuffer() + kFramesPerBlock * j;
     return py1;
   }
   
-  // return a reference to a row of this DSPVectorArray.
-  inline DSPVectorArray<1>& row(int j)
+  // return a reference to a row of this SignalBlockArray.
+  inline SignalBlockArray<1>& row(int j)
   {
-    float* py1 = getBuffer() + kFloatsPerDSPVector * j;
-    DSPVectorArray<1>* pRow = reinterpret_cast<DSPVectorArray<1>*>(py1);
+    float* py1 = getBuffer() + kFramesPerBlock * j;
+    SignalBlockArray<1>* pRow = reinterpret_cast<SignalBlockArray<1>*>(py1);
     return *pRow;
   }
   
-  // return a const reference to a row of this DSPVectorArray.
-  inline const DSPVectorArray<1>& constRow(int j) const
+  // return a const reference to a row of this SignalBlockArray.
+  inline const SignalBlockArray<1>& constRow(int j) const
   {
-    const float* py1 = getConstBuffer() + kFloatsPerDSPVector * j;
-    const DSPVectorArray<1>* pRow = reinterpret_cast<const DSPVectorArray<1>*>(py1);
+    const float* py1 = getConstBuffer() + kFramesPerBlock * j;
+    const SignalBlockArray<1>* pRow = reinterpret_cast<const SignalBlockArray<1>*>(py1);
     return *pRow;
   }
   
-  inline DSPVectorArray& operator+=(const DSPVectorArray& x1)
+  inline SignalBlockArray& operator+=(const SignalBlockArray& x1)
   {
     *this = add(*this, x1);
     return *this;
   }
-  inline DSPVectorArray& operator-=(const DSPVectorArray& x1)
+  inline SignalBlockArray& operator-=(const SignalBlockArray& x1)
   {
     *this = subtract(*this, x1);
     return *this;
   }
-  inline DSPVectorArray& operator*=(const DSPVectorArray& x1)
+  inline SignalBlockArray& operator*=(const SignalBlockArray& x1)
   {
     *this = multiply(*this, x1);
     return *this;
   }
-  inline DSPVectorArray& operator/=(const DSPVectorArray& x1)
+  inline SignalBlockArray& operator/=(const SignalBlockArray& x1)
   {
     *this = divide(*this, x1);
     return *this;
@@ -269,45 +399,45 @@ public:
   // functions enables the compiler to call implicit conversions on either
   // argument.
   
-  friend inline DSPVectorArray operator+(const DSPVectorArray& x1, const DSPVectorArray& x2)
+  friend inline SignalBlockArray operator+(const SignalBlockArray& x1, const SignalBlockArray& x2)
   {
     return add(x1, x2);
   }
-  friend inline DSPVectorArray operator-(const DSPVectorArray& x1)
+  friend inline SignalBlockArray operator-(const SignalBlockArray& x1)
   {
     // TODO should be able to declare this constexpr!
-    DSPVectorArray zero(0.f);
+    SignalBlockArray zero(0.f);
     
     return subtract(zero, x1);
   }
-  friend inline DSPVectorArray operator-(const DSPVectorArray& x1, const DSPVectorArray& x2)
+  friend inline SignalBlockArray operator-(const SignalBlockArray& x1, const SignalBlockArray& x2)
   {
     return subtract(x1, x2);
   }
-  friend inline DSPVectorArray operator*(const DSPVectorArray& x1, const DSPVectorArray& x2)
+  friend inline SignalBlockArray operator*(const SignalBlockArray& x1, const SignalBlockArray& x2)
   {
     return multiply(x1, x2);
   }
-  friend inline DSPVectorArray operator/(const DSPVectorArray& x1, const DSPVectorArray& x2)
+  friend inline SignalBlockArray operator/(const SignalBlockArray& x1, const SignalBlockArray& x2)
   {
     return divide(x1, x2);
   }
-};  // class DSPVectorArray
+};  // class SignalBlockArray
 
 // ----------------------------------------------------------------
-// DSPVector
+// SignalBlock
 //
-// Special case of the DSPVectorArray with one row.
+// Special case of the SignalBlockArray with one row.
 // The most common data type in a typical DSP function.
 
-typedef DSPVectorArray<1> DSPVector;
+typedef SignalBlockArray<1> SignalBlock;
 
 // ----------------------------------------------------------------
 // DSPVectorArrayInt
 //
 // DSP Vector holding int32 values.
 
-constexpr size_t kIntsPerDSPVector = kFloatsPerDSPVector;
+constexpr size_t kIntsPerDSPVector = kFramesPerBlock;
 
 template <size_t ROWS>
 class DSPVectorArrayInt
@@ -317,7 +447,7 @@ class DSPVectorArrayInt
     int4 _align[kSIMDVectorsPerDSPVector * ROWS];     // unused except to force alignment
     std::array<int32_t, kIntsPerDSPVector * ROWS> arrayData_;  // for constexpr ctor
     int32_t asInt[kIntsPerDSPVector * ROWS];
-    float asFloat[kFloatsPerDSPVector * ROWS];
+    float asFloat[kFramesPerBlock * ROWS];
     
     Data() {}
     constexpr Data(std::array<int32_t, kIntsPerDSPVector * ROWS> a) : arrayData_(a) {}
@@ -338,7 +468,7 @@ public:
   inline int32_t& operator[](int i) { return getBufferInt()[i]; }
   inline const int32_t operator[](int i) const { return getConstBufferInt()[i]; }
   
-  // set each element of the DSPVectorArray to the int32_t value k.
+  // set each element of the SignalBlockArray to the int32_t value k.
   inline DSPVectorArrayInt operator=(int32_t k)
   {
     int4 i4 = set1Int(k);
@@ -354,11 +484,11 @@ public:
   }
   
   // constexpr constructor taking a std::array. Use with make_array
-  constexpr DSPVectorArrayInt(std::array<int32_t, kFloatsPerDSPVector * ROWS> a) : data_(a) {}
+  constexpr DSPVectorArrayInt(std::array<int32_t, kFramesPerBlock * ROWS> a) : data_(a) {}
   
   // constexpr constructor taking a function(int -> int)
   constexpr DSPVectorArrayInt(int (*fn)(int))
-  : DSPVectorArrayInt(make_array<kFloatsPerDSPVector * ROWS>(fn))
+  : DSPVectorArrayInt(make_array<kFramesPerBlock * ROWS>(fn))
   {
   }
   
@@ -417,22 +547,22 @@ public:
 typedef DSPVectorArrayInt<1> DSPVectorInt;
 
 // ----------------------------------------------------------------
-// DSPVectorDynamic: for holding a number of DSPVectors only known at runtime.
+// SignalBlockDynamic: for holding a number of SignalBlocks only known at runtime.
 
-class DSPVectorDynamic final
+class SignalBlockDynamic final
 {
 public:
-  DSPVectorDynamic() = default;
-  ~DSPVectorDynamic() = default;
+  SignalBlockDynamic() = default;
+  ~SignalBlockDynamic() = default;
   
-  explicit DSPVectorDynamic(size_t rows) { data_.resize(rows); }
+  explicit SignalBlockDynamic(size_t rows) { data_.resize(rows); }
   void resize(size_t rows) { data_.resize(rows); }
   size_t size() const { return data_.size(); }
-  DSPVector& operator[](int j) { return data_[j]; }
-  const DSPVector& operator[](int j) const { return data_[j]; }
+  SignalBlock& operator[](int j) { return data_[j]; }
+  const SignalBlock& operator[](int j) const { return data_[j]; }
   
 private:
-  std::vector<DSPVector> data_;
+  std::vector<SignalBlock> data_;
 };
 
 // ----------------------------------------------------------------
@@ -440,20 +570,20 @@ private:
 
 // some loads and stores may be unaligned, let std::copy handle this
 template <size_t ROWS>
-inline void load(DSPVectorArray<ROWS>& vecDest, const float* pSrc)
+inline void load(SignalBlockArray<ROWS>& vecDest, const float* pSrc)
 {
-  std::copy(pSrc, pSrc + kFloatsPerDSPVector * ROWS, vecDest.getBuffer());
+  std::copy(pSrc, pSrc + kFramesPerBlock * ROWS, vecDest.getBuffer());
 }
 
 template <size_t ROWS>
-inline void store(const DSPVectorArray<ROWS>& vecSrc, float* pDest)
+inline void store(const SignalBlockArray<ROWS>& vecSrc, float* pDest)
 {
-  std::copy(vecSrc.getConstBuffer(), vecSrc.getConstBuffer() + kFloatsPerDSPVector * ROWS, pDest);
+  std::copy(vecSrc.getConstBuffer(), vecSrc.getConstBuffer() + kFramesPerBlock * ROWS, pDest);
 }
 
 // if the pointers are known to be aligned, copy as SIMD vectors
 template <size_t ROWS>
-inline void loadAligned(DSPVectorArray<ROWS>& vecDest, const float* pSrc)
+inline void loadAligned(SignalBlockArray<ROWS>& vecDest, const float* pSrc)
 {
   const float* px1 = pSrc;
   float* py1 = vecDest.getBuffer();
@@ -467,7 +597,7 @@ inline void loadAligned(DSPVectorArray<ROWS>& vecDest, const float* pSrc)
 }
 
 template <size_t ROWS>
-inline void storeAligned(const DSPVectorArray<ROWS>& vecSrc, float* pDest)
+inline void storeAligned(const SignalBlockArray<ROWS>& vecSrc, float* pDest)
 {
   const float* px1 = vecSrc.getConstBuffer();
   float* py1 = pDest;
@@ -485,9 +615,9 @@ inline void storeAligned(const DSPVectorArray<ROWS>& vecSrc, float* pDest)
 
 #define DEFINE_OP1(opName, opComputation)                              \
 template <size_t ROWS>                                               \
-inline DSPVectorArray<ROWS>(opName)(const DSPVectorArray<ROWS>& vx1) \
+inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1) \
 {                                                                    \
-DSPVectorArray<ROWS> vy;                                           \
+SignalBlockArray<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                           \
 float* py1 = vy.getBuffer();                                       \
 for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
@@ -542,10 +672,10 @@ DEFINE_OP1(tanhApprox, (vecTanhApprox(x)));
 
 #define DEFINE_OP2(opName, opComputation)                              \
 template <size_t ROWS>                                               \
-inline DSPVectorArray<ROWS>(opName)(const DSPVectorArray<ROWS>& vx1, \
-const DSPVectorArray<ROWS>& vx2) \
+inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
+const SignalBlockArray<ROWS>& vx2) \
 {                                                                    \
-DSPVectorArray<ROWS> vy;                                           \
+SignalBlockArray<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                           \
 const float* px2 = vx2.getConstBuffer();                           \
 float* py1 = vy.getBuffer();                                       \
@@ -579,10 +709,10 @@ DEFINE_OP2(max, (max(x1, x2)));
 
 #define DEFINE_OP2_MS(opName, opComputation)                           \
 template <size_t ROWS>                                               \
-inline DSPVectorArray<ROWS>(opName)(const DSPVectorArray<ROWS>& vx1, \
-const DSPVectorArray<1>& vx2)    \
+inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
+const SignalBlockArray<1>& vx2)    \
 {                                                                    \
-DSPVectorArray<ROWS> vy;                                           \
+SignalBlockArray<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                           \
 const float* px2 = vx2.getConstBuffer();                           \
 float* py1 = vy.getBuffer();                                       \
@@ -595,7 +725,7 @@ auto y = (opComputation); \
 storeFloat4(py1, y);                                  \
 px1 += 4;                                     \
 px2Offset += 4;                               \
-px2Offset &= kFloatsPerDSPVector - 1;                            \
+px2Offset &= kFramesPerBlock - 1;                            \
 py1 += 4;                                     \
 }                                                                  \
 return vy;                                                         \
@@ -646,11 +776,11 @@ DEFINE_OP2_INT32(addInt32, (x1 + x2));
 
 #define DEFINE_OP3(opName, opComputation)                              \
 template <size_t ROWS>                                               \
-inline DSPVectorArray<ROWS>(opName)(const DSPVectorArray<ROWS>& vx1, \
-const DSPVectorArray<ROWS>& vx2, \
-const DSPVectorArray<ROWS>& vx3) \
+inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
+const SignalBlockArray<ROWS>& vx2, \
+const SignalBlockArray<ROWS>& vx3) \
 {                                                                    \
-DSPVectorArray<ROWS> vy;                                           \
+SignalBlockArray<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                           \
 const float* px2 = vx2.getConstBuffer();                           \
 const float* px3 = vx3.getConstBuffer();                           \
@@ -681,13 +811,13 @@ DEFINE_OP3(within, (andBits(compareGreaterThanOrEqual(x1, x2), compareLessThan(x
 // lerp two vectors with scalar float mixture (constant over each vector)
 
 template <size_t ROWS>
-inline DSPVectorArray<ROWS> lerp(const DSPVectorArray<ROWS>& vx1, const DSPVectorArray<ROWS>& vx2,
+inline SignalBlockArray<ROWS> lerp(const SignalBlockArray<ROWS>& vx1, const SignalBlockArray<ROWS>& vx2,
                                  float m)
 {
-  DSPVectorArray<ROWS> vy;
+  SignalBlockArray<ROWS> vy;
   const float* px1 = vx1.getConstBuffer();
   const float* px2 = vx2.getConstBuffer();
-  DSPVector vmix(m);
+  SignalBlock vmix(m);
   float* py1 = vy.getBuffer();
   const float4 vConstMix = set1Float(m);
   
@@ -710,7 +840,7 @@ inline DSPVectorArray<ROWS> lerp(const DSPVectorArray<ROWS>& vx1, const DSPVecto
 
 #define DEFINE_OP1_F2I(opName, opComputation)                             \
 template <size_t ROWS>                                                  \
-inline DSPVectorArrayInt<ROWS>(opName)(const DSPVectorArray<ROWS>& vx1) \
+inline DSPVectorArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1) \
 {                                                                       \
 DSPVectorArrayInt<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                              \
@@ -734,9 +864,9 @@ DEFINE_OP1_F2I(truncateFloatToInt, (castIntToFloat(floatToIntTruncate(x))));
 
 #define DEFINE_OP1_I2F(opName, opComputation)                             \
 template <size_t ROWS>                                                  \
-inline DSPVectorArray<ROWS>(opName)(const DSPVectorArrayInt<ROWS>& vx1) \
+inline SignalBlockArray<ROWS>(opName)(const DSPVectorArrayInt<ROWS>& vx1) \
 {                                                                       \
-DSPVectorArray<ROWS> vy;                                              \
+SignalBlockArray<ROWS> vy;                                              \
 const float* px1 = vx1.getConstBuffer();                              \
 float* py1 = vy.getBuffer();                                          \
 for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
@@ -763,8 +893,8 @@ DEFINE_OP1(fractionalPart, (x - intToFloat(floatToIntTruncate(x))));
 
 #define DEFINE_OP2_FF2I(opName, opComputation)                            \
 template <size_t ROWS>                                                  \
-inline DSPVectorArrayInt<ROWS>(opName)(const DSPVectorArray<ROWS>& vx1, \
-const DSPVectorArray<ROWS>& vx2) \
+inline DSPVectorArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
+const SignalBlockArray<ROWS>& vx2) \
 {                                                                       \
 DSPVectorArrayInt<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                              \
@@ -795,11 +925,11 @@ DEFINE_OP2_FF2I(lessThanOrEqual, (compareLessThanOrEqual(x1, x2)));
 
 #define DEFINE_OP3_FFI2F(opName, opComputation)                           \
 template <size_t ROWS>                                                  \
-inline DSPVectorArray<ROWS>(opName)(const DSPVectorArray<ROWS>& vx1,    \
-const DSPVectorArray<ROWS>& vx2,    \
+inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1,    \
+const SignalBlockArray<ROWS>& vx2,    \
 const DSPVectorArrayInt<ROWS>& vx3) \
 {                                                                       \
-DSPVectorArray<ROWS> vy;                                              \
+SignalBlockArray<ROWS> vy;                                              \
 const float* px1 = vx1.getConstBuffer();                              \
 const float* px2 = vx2.getConstBuffer();                              \
 const float* px3 = vx3.getConstBuffer();                              \
@@ -860,13 +990,13 @@ DEFINE_OP3_III2I(select, (vecSelectIII(x1, x2, x3)));  // bitwise select(resultI
 // add (a, b, c, ...)
 
 template <size_t ROWS>
-DSPVectorArray<ROWS> add(DSPVectorArray<ROWS> a)
+SignalBlockArray<ROWS> add(SignalBlockArray<ROWS> a)
 {
   return a;
 }
 
 template <size_t ROWS, typename... Args>
-DSPVectorArray<ROWS> add(DSPVectorArray<ROWS> first, Args... args)
+SignalBlockArray<ROWS> add(SignalBlockArray<ROWS> first, Args... args)
 {
   // the + here is the operator defined using vecAdd() above
   return first + add(args...);
@@ -875,8 +1005,8 @@ DSPVectorArray<ROWS> add(DSPVectorArray<ROWS> first, Args... args)
 // ----------------------------------------------------------------
 // constexpr definitions
 
-#define ConstDSPVector constexpr DSPVector
-#define ConstDSPVectorArray constexpr DSPVectorArray
+#define ConstDSPVector constexpr SignalBlock
+#define ConstDSPVectorArray constexpr SignalBlockArray
 #define ConstDSPVectorInt constexpr DSPVectorInt
 #define ConstDSPVectorArrayInt constexpr DSPVectorArrayInt
 
@@ -886,37 +1016,37 @@ DSPVectorArray<ROWS> add(DSPVectorArray<ROWS> first, Args... args)
 constexpr float intToFloatCastFn(int i) { return (float)i; }
 constexpr int indexFn(int i) { return i; }
 
-inline ConstDSPVector columnIndex() { return (make_array<kFloatsPerDSPVector>(intToFloatCastFn)); }
+inline ConstDSPVector columnIndex() { return (make_array<kFramesPerBlock>(intToFloatCastFn)); }
 inline ConstDSPVectorInt columnIndexInt() { return (make_array<kIntsPerDSPVector>(indexFn)); }
 
 // return a linear sequence from start to end, where end will fall on the first
 // index of the next vector.
-inline DSPVector rangeOpen(float start, float end)
+inline SignalBlock rangeOpen(float start, float end)
 {
-  float interval = (end - start) / (kFloatsPerDSPVector);
-  return columnIndex() * DSPVector(interval) + DSPVector(start);
+  float interval = (end - start) / (kFramesPerBlock);
+  return columnIndex() * SignalBlock(interval) + SignalBlock(start);
 }
 
 // return a linear sequence from start to end, where end falls on the last index
 // of this vector.
-inline DSPVector rangeClosed(float start, float end)
+inline SignalBlock rangeClosed(float start, float end)
 {
-  float interval = (end - start) / (kFloatsPerDSPVector - 1.f);
-  return columnIndex() * DSPVector(interval) + DSPVector(start);
+  float interval = (end - start) / (kFramesPerBlock - 1.f);
+  return columnIndex() * SignalBlock(interval) + SignalBlock(start);
 }
 
 // return a linear sequence from start to end, where start falls one sample
 // "before" this vector and end falls on the last index of this vector.
-inline DSPVector interpolateDSPVectorLinear(float start, float end)
+inline SignalBlock interpolateDSPVectorLinear(float start, float end)
 {
-  float interval = (end - start) / (kFloatsPerDSPVector);
-  return columnIndex() * DSPVector(interval) + DSPVector(start + interval);
+  float interval = (end - start) / (kFramesPerBlock);
+  return columnIndex() * SignalBlock(interval) + SignalBlock(start + interval);
 }
 
 // ----------------------------------------------------------------
 // single-vector horizontal operators returning float
 
-inline float sum(const DSPVector& x)
+inline float sum(const SignalBlock& x)
 {
   const float* px1 = x.getConstBuffer();
   float sum = 0;
@@ -928,13 +1058,13 @@ inline float sum(const DSPVector& x)
   return sum;
 }
 
-inline float mean(const DSPVector& x)
+inline float mean(const SignalBlock& x)
 {
-  constexpr float kGain = 1.0f / kFloatsPerDSPVector;
+  constexpr float kGain = 1.0f / kFramesPerBlock;
   return sum(x) * kGain;
 }
 
-inline float max(const DSPVector& x)
+inline float max(const SignalBlock& x)
 {
   const float* px1 = x.getConstBuffer();
   float fmax = FLT_MIN;
@@ -946,7 +1076,7 @@ inline float max(const DSPVector& x)
   return fmax;
 }
 
-inline float min(const DSPVector& x)
+inline float min(const SignalBlock& x)
 {
   const float* px1 = x.getConstBuffer();
   float fmin = FLT_MAX;
@@ -962,9 +1092,9 @@ inline float min(const DSPVector& x)
 // normalize
 
 template <size_t ROWS>
-inline DSPVectorArray<ROWS> normalize(const DSPVectorArray<ROWS>& x1)
+inline SignalBlockArray<ROWS> normalize(const SignalBlockArray<ROWS>& x1)
 {
-  DSPVectorArray<ROWS> vy;
+  SignalBlockArray<ROWS> vy;
   for (int j = 0; j < ROWS; ++j)
   {
     auto inputRow = x1.getRowVectorUnchecked(j);
@@ -976,12 +1106,12 @@ inline DSPVectorArray<ROWS> normalize(const DSPVectorArray<ROWS>& x1)
 // ----------------------------------------------------------------
 // row-wise operations and conversions
 
-// for the given output ROWS and given an input DSPVectorArray with N rows,
-// repeat all the input rows enough times to fill the output DSPVectorArray.
+// for the given output ROWS and given an input SignalBlockArray with N rows,
+// repeat all the input rows enough times to fill the output SignalBlockArray.
 template <size_t ROWS, size_t N>
-inline DSPVectorArray<ROWS * N> repeatRows(const DSPVectorArray<N>& x1)
+inline SignalBlockArray<ROWS * N> repeatRows(const SignalBlockArray<N>& x1)
 {
-  DSPVectorArray<ROWS * N> vy;
+  SignalBlockArray<ROWS * N> vy;
   for (int j = 0, k = 0; j < ROWS * N; ++j)
   {
     vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(k));
@@ -990,13 +1120,13 @@ inline DSPVectorArray<ROWS * N> repeatRows(const DSPVectorArray<N>& x1)
   return vy;
 }
 
-// for the given ROWS and given an input DSPVectorArray x with N rows,
-// stretch x by repeating rows as necessary to make an output DSPVectorArray
+// for the given ROWS and given an input SignalBlockArray x with N rows,
+// stretch x by repeating rows as necessary to make an output SignalBlockArray
 // with ROWS rows.
 template <size_t ROWS, size_t N>
-inline DSPVectorArray<ROWS> stretchRows(const DSPVectorArray<N>& x)
+inline SignalBlockArray<ROWS> stretchRows(const SignalBlockArray<N>& x)
 {
-  DSPVectorArray<ROWS> vy;
+  SignalBlockArray<ROWS> vy;
   for (int j = 0; j < ROWS; ++j)
   {
     int k = roundf((j * (N - 1.f)) / (ROWS - 1.f));
@@ -1005,14 +1135,14 @@ inline DSPVectorArray<ROWS> stretchRows(const DSPVectorArray<N>& x)
   return vy;
 }
 
-// for the given ROWS and given an input DSPVectorArray x with N rows,
+// for the given ROWS and given an input SignalBlockArray x with N rows,
 // fill an output array by copying rows of the input, then adding rows of zeros as
 // necessary.
 template <size_t ROWS, size_t N>
-inline DSPVectorArray<ROWS> zeroPadRows(const DSPVectorArray<N>& x)
+inline SignalBlockArray<ROWS> zeroPadRows(const SignalBlockArray<N>& x)
 {
   // default constructor currently zero-fills
-  DSPVectorArray<ROWS> vy;
+  SignalBlockArray<ROWS> vy;
   constexpr size_t rowsToCopy = min(ROWS, N);
   for (int j = 0; j < rowsToCopy; ++j)
   {
@@ -1025,9 +1155,9 @@ inline DSPVectorArray<ROWS> zeroPadRows(const DSPVectorArray<N>& x)
 // Any rows shifted in from outside the range [0, ROWS) are zeroed. Negative
 // shifts are OK.
 template <size_t ROWS>
-inline DSPVectorArray<ROWS> shiftRows(const DSPVectorArray<ROWS>& x, int rowsToShift)
+inline SignalBlockArray<ROWS> shiftRows(const SignalBlockArray<ROWS>& x, int rowsToShift)
 {
-  DSPVectorArray<ROWS> vy;
+  SignalBlockArray<ROWS> vy;
   int k = -rowsToShift;
   for (int j = 0; j < ROWS; ++j)
   {
@@ -1048,9 +1178,9 @@ inline DSPVectorArray<ROWS> shiftRows(const DSPVectorArray<ROWS>& x, int rowsToS
 // Any rows rotated in from outside the range [0, ROWS) are wrapped. Negative
 // rotations are OK.
 template <size_t ROWS>
-inline DSPVectorArray<ROWS> rotateRows(const DSPVectorArray<ROWS>& x, int rowsToRotate)
+inline SignalBlockArray<ROWS> rotateRows(const SignalBlockArray<ROWS>& x, int rowsToRotate)
 {
-  DSPVectorArray<ROWS> vy;
+  SignalBlockArray<ROWS> vy;
   
   // get start index k to which row 0 is mapped
   int k = modulo(-rowsToRotate, ROWS);
@@ -1065,12 +1195,12 @@ inline DSPVectorArray<ROWS> rotateRows(const DSPVectorArray<ROWS>& x, int rowsTo
 // ----------------------------------------------------------------
 // row-wise combining
 
-// concatRows with two arguments: append one DSPVectorArray after another.
+// concatRows with two arguments: append one SignalBlockArray after another.
 template <size_t ROWSA, size_t ROWSB>
-inline DSPVectorArray<ROWSA + ROWSB> concatRows(const DSPVectorArray<ROWSA>& x1,
-                                                const DSPVectorArray<ROWSB>& x2)
+inline SignalBlockArray<ROWSA + ROWSB> concatRows(const SignalBlockArray<ROWSA>& x1,
+                                                const SignalBlockArray<ROWSB>& x2)
 {
-  DSPVectorArray<ROWSA + ROWSB> vy;
+  SignalBlockArray<ROWSA + ROWSB> vy;
   for (int j = 0; j < ROWSA; ++j)
   {
     vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j));
@@ -1084,11 +1214,11 @@ inline DSPVectorArray<ROWSA + ROWSB> concatRows(const DSPVectorArray<ROWSA>& x1,
 
 // concatRows with three arguments.
 template <size_t ROWSA, size_t ROWSB, size_t ROWSC>
-inline DSPVectorArray<ROWSA + ROWSB + ROWSC> concatRows(const DSPVectorArray<ROWSA>& x1,
-                                                        const DSPVectorArray<ROWSB>& x2,
-                                                        const DSPVectorArray<ROWSC>& x3)
+inline SignalBlockArray<ROWSA + ROWSB + ROWSC> concatRows(const SignalBlockArray<ROWSA>& x1,
+                                                        const SignalBlockArray<ROWSB>& x2,
+                                                        const SignalBlockArray<ROWSC>& x3)
 {
-  DSPVectorArray<ROWSA + ROWSB + ROWSC> vy;
+  SignalBlockArray<ROWSA + ROWSB + ROWSC> vy;
   for (int j = 0; j < ROWSA; ++j)
   {
     vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j));
@@ -1113,12 +1243,12 @@ inline DSPVectorArray<ROWSA + ROWSB + ROWSC> concatRows(const DSPVectorArray<ROW
 
 // concatRows with four arguments.
 template <size_t ROWSA, size_t ROWSB, size_t ROWSC, size_t ROWSD>
-inline DSPVectorArray<ROWSA + ROWSB + ROWSC + ROWSD> concatRows(const DSPVectorArray<ROWSA>& x1,
-                                                                const DSPVectorArray<ROWSB>& x2,
-                                                                const DSPVectorArray<ROWSC>& x3,
-                                                                const DSPVectorArray<ROWSD>& x4)
+inline SignalBlockArray<ROWSA + ROWSB + ROWSC + ROWSD> concatRows(const SignalBlockArray<ROWSA>& x1,
+                                                                const SignalBlockArray<ROWSB>& x2,
+                                                                const SignalBlockArray<ROWSC>& x3,
+                                                                const SignalBlockArray<ROWSD>& x4)
 {
-  DSPVectorArray<ROWSA + ROWSB + ROWSC + ROWSD> vy;
+  SignalBlockArray<ROWSA + ROWSB + ROWSC + ROWSD> vy;
   for (int j = 0; j < ROWSA; ++j)
   {
     vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j));
@@ -1137,18 +1267,18 @@ inline DSPVectorArray<ROWSA + ROWSB + ROWSC + ROWSD> concatRows(const DSPVectorA
   }
   return vy;
 }
-// Rotate the elements of each row of a DSPVectorArray by one element left.
+// Rotate the elements of each row of a SignalBlockArray by one element left.
 // The first element of each row is moved to the end
 template <size_t ROWS>
-inline ml::DSPVectorArray<ROWS> rotateLeft(const ml::DSPVectorArray<ROWS>& x)
+inline ml::SignalBlockArray<ROWS> rotateLeft(const ml::SignalBlockArray<ROWS>& x)
 {
-  ml::DSPVectorArray<ROWS> vy;
+  ml::SignalBlockArray<ROWS> vy;
   
   for (size_t row = 0; row < ROWS; row++)
   {
-    const float* px1 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
+    const float* px1 = x.getConstBuffer() + (row * kFramesPerBlock);
     const float* px2 = px1 + 4;
-    float* py1 = vy.getBuffer() + (row * kFloatsPerDSPVector);
+    float* py1 = vy.getBuffer() + (row * kFramesPerBlock);
     
     for (int n = 0; n < kSIMDVectorsPerDSPVector - 1; ++n)
     {
@@ -1160,7 +1290,7 @@ inline ml::DSPVectorArray<ROWS> rotateLeft(const ml::DSPVectorArray<ROWS>& x)
       py1 += 4;
     }
     
-    px2 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
+    px2 = x.getConstBuffer() + (row * kFramesPerBlock);
     
     auto y = vecShuffleLeft(loadFloat4(px1), loadFloat4(px2));
     storeFloat4(py1, y);
@@ -1169,18 +1299,18 @@ inline ml::DSPVectorArray<ROWS> rotateLeft(const ml::DSPVectorArray<ROWS>& x)
   return vy;
 }
 
-// Rotate the elements of each row of a DSPVectorArray by one element right.
+// Rotate the elements of each row of a SignalBlockArray by one element right.
 // The last element of each row is moved to the start
 template <size_t ROWS>
-inline ml::DSPVectorArray<ROWS> rotateRight(const ml::DSPVectorArray<ROWS>& x)
+inline ml::SignalBlockArray<ROWS> rotateRight(const ml::SignalBlockArray<ROWS>& x)
 {
-  ml::DSPVectorArray<ROWS> vy;
+  ml::SignalBlockArray<ROWS> vy;
   
   for (size_t row = 0; row < ROWS; row++)
   {
-    const float* px1 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
+    const float* px1 = x.getConstBuffer() + (row * kFramesPerBlock);
     const float* px2 = px1 + 4;
-    float* py1 = vy.getBuffer() + (row * kFloatsPerDSPVector) + 4;
+    float* py1 = vy.getBuffer() + (row * kFramesPerBlock) + 4;
     
     for (int n = 0; n < kSIMDVectorsPerDSPVector - 1; ++n)
     {
@@ -1192,8 +1322,8 @@ inline ml::DSPVectorArray<ROWS> rotateRight(const ml::DSPVectorArray<ROWS>& x)
       py1 += 4;
     }
     
-    px2 = x.getConstBuffer() + (row * kFloatsPerDSPVector);
-    py1 = vy.getBuffer() + (row * kFloatsPerDSPVector);
+    px2 = x.getConstBuffer() + (row * kFramesPerBlock);
+    py1 = vy.getBuffer() + (row * kFramesPerBlock);
     
     auto y = vecShuffleRight(loadFloat4(px1), loadFloat4(px2));
     storeFloat4(py1, y);
@@ -1205,10 +1335,10 @@ inline ml::DSPVectorArray<ROWS> rotateRight(const ml::DSPVectorArray<ROWS>& x)
 // odd rows. if the sources are different sizes, the excess rows are all
 // appended to the destination after shuffling is done.
 template <size_t ROWSA, size_t ROWSB>
-inline DSPVectorArray<ROWSA + ROWSB> shuffleRows(const DSPVectorArray<ROWSA> x1,
-                                                 const DSPVectorArray<ROWSB> x2)
+inline SignalBlockArray<ROWSA + ROWSB> shuffleRows(const SignalBlockArray<ROWSA> x1,
+                                                 const SignalBlockArray<ROWSB> x2)
 {
-  DSPVectorArray<ROWSA + ROWSB> vy;
+  SignalBlockArray<ROWSA + ROWSB> vy;
   int ja = 0;
   int jb = 0;
   int jy = 0;
@@ -1234,9 +1364,9 @@ inline DSPVectorArray<ROWSA + ROWSB> shuffleRows(const DSPVectorArray<ROWSA> x1,
 // separating rows
 
 template <size_t ROWS>
-inline DSPVectorArray<(ROWS + 1) / 2> evenRows(const DSPVectorArray<ROWS>& x1)
+inline SignalBlockArray<(ROWS + 1) / 2> evenRows(const SignalBlockArray<ROWS>& x1)
 {
-  DSPVectorArray<(ROWS + 1) / 2> vy;
+  SignalBlockArray<(ROWS + 1) / 2> vy;
   for (int j = 0; j < (ROWS + 1) / 2; ++j)
   {
     vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j * 2));
@@ -1245,9 +1375,9 @@ inline DSPVectorArray<(ROWS + 1) / 2> evenRows(const DSPVectorArray<ROWS>& x1)
 }
 
 template <size_t ROWS>
-inline DSPVectorArray<ROWS / 2> oddRows(const DSPVectorArray<ROWS>& x1)
+inline SignalBlockArray<ROWS / 2> oddRows(const SignalBlockArray<ROWS>& x1)
 {
-  DSPVectorArray<ROWS / 2> vy;
+  SignalBlockArray<ROWS / 2> vy;
   for (int j = 0; j < ROWS / 2; ++j)
   {
     vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j * 2 + 1));
@@ -1255,13 +1385,13 @@ inline DSPVectorArray<ROWS / 2> oddRows(const DSPVectorArray<ROWS>& x1)
   return vy;
 }
 
-// return the DSPVectorArray consisting of rows [A-B) of the input.
+// return the SignalBlockArray consisting of rows [A-B) of the input.
 template <size_t A, size_t B, size_t ROWS>
-inline DSPVectorArray<B - A> separateRows(const DSPVectorArray<ROWS>& x)
+inline SignalBlockArray<B - A> separateRows(const SignalBlockArray<ROWS>& x)
 {
   static_assert(B <= ROWS, "separateRows: range out of bounds!");
   static_assert(A < ROWS, "separateRows: range out of bounds!");
-  DSPVectorArray<B - A> vy;
+  SignalBlockArray<B - A> vy;
   for (int j = A; j < B; ++j)
   {
     vy.setRowVectorUnchecked(j - A, x.getRowVectorUnchecked(j));
@@ -1273,9 +1403,9 @@ inline DSPVectorArray<B - A> separateRows(const DSPVectorArray<ROWS>& x)
 // add rows to get row-wise sum
 
 template <size_t ROWS>
-inline DSPVector addRows(const DSPVectorArray<ROWS>& x)
+inline SignalBlock addRows(const SignalBlockArray<ROWS>& x)
 {
-  DSPVector vy{0.f};
+  SignalBlock vy{0.f};
   
   for (int j = 0; j < ROWS; ++j)
   {
@@ -1285,16 +1415,16 @@ inline DSPVector addRows(const DSPVectorArray<ROWS>& x)
 }
 
 // ----------------------------------------------------------------
-// rowIndex - returns a DSPVector of j rows, each row filled
+// rowIndex - returns a SignalBlock of j rows, each row filled
 // with the index of its row
 
 template <size_t ROWS>
-inline DSPVectorArray<ROWS> rowIndex()
+inline SignalBlockArray<ROWS> rowIndex()
 {
-  DSPVectorArray<ROWS> y;
+  SignalBlockArray<ROWS> y;
   for (int j = 0; j < ROWS; ++j)
   {
-    y.setRowVectorUnchecked(j, DSPVector(j));
+    y.setRowVectorUnchecked(j, SignalBlock(j));
   }
   return y;
 }
@@ -1303,9 +1433,9 @@ inline DSPVectorArray<ROWS> rowIndex()
 // columnIndex<n> - shorthand for repeatRows<n>(columnIndex())
 
 template <size_t ROWS>
-inline DSPVectorArray<ROWS> columnIndex()
+inline SignalBlockArray<ROWS> columnIndex()
 {
-  return repeatRows<ROWS>(DSPVector(make_array<kFloatsPerDSPVector>(intToFloatCastFn)));
+  return repeatRows<ROWS>(SignalBlock(make_array<kFramesPerBlock>(intToFloatCastFn)));
 }
 
 // TODO variadic splitRows(bundleSIg, outputRow1, outputRow2, ... )
@@ -1314,7 +1444,7 @@ inline DSPVectorArray<ROWS> columnIndex()
 // for testing
 
 template <size_t ROWS>
-inline std::ostream& operator<<(std::ostream& out, const DSPVectorArray<ROWS>& vecArray)
+inline std::ostream& operator<<(std::ostream& out, const SignalBlockArray<ROWS>& vecArray)
 {
   //    if(ROWS > 1) out << "[   ";
   for (int v = 0; v < ROWS; ++v)
@@ -1322,9 +1452,9 @@ inline std::ostream& operator<<(std::ostream& out, const DSPVectorArray<ROWS>& v
     //  if(ROWS > 1) if(v > 0) out << "\n    ";
     if (ROWS > 1) out << "\n    v" << v << ": ";
     out << "[";
-    for (int i = 0; i < kFloatsPerDSPVector; ++i)
+    for (int i = 0; i < kFramesPerBlock; ++i)
     {
-      out << vecArray[v * kFloatsPerDSPVector + i] << " ";
+      out << vecArray[v * kFramesPerBlock + i] << " ";
     }
     out << "] ";
   }
@@ -1353,10 +1483,10 @@ inline std::ostream& operator<<(std::ostream& out, const DSPVectorArrayInt<ROWS>
   return out;
 }
 
-inline bool validate(const DSPVector& x)
+inline bool validate(const SignalBlock& x)
 {
   bool r = true;
-  for (int n = 0; n < kFloatsPerDSPVector; ++n)
+  for (int n = 0; n < kFramesPerBlock; ++n)
   {
     const float maxUsefulValue = 1e8;
     if (ml::isNaN(x[n]) || (fabs(x[n]) > maxUsefulValue))

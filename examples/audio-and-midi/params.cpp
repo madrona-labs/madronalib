@@ -61,7 +61,7 @@ void processParamsExample(AudioContext* ctx, void *untypedProcState)
   float f2 = proc->getParameterTree().getRealFloatValue("freq2");
   float gain = proc->getParameterTree().getRealFloatValue("gain");
 
-  // Running the sine generators makes DSPVectors as output.
+  // Running the sine generators makes SignalBlocks as output.
   // The input parameter is omega: the frequency in Hz divided by the sample rate.
   // The output sines are multiplied by the gain.
   ctx->outputs[0] = proc->s1(f1/kSampleRate)*gain;
@@ -69,7 +69,7 @@ void processParamsExample(AudioContext* ctx, void *untypedProcState)
   
   // print debug stuff every second
   static int testCtr{0};
-  testCtr += kFloatsPerDSPVector;
+  testCtr += kFramesPerBlock;
   if(testCtr > ctx->getSampleRate())
   {
     testCtr = 0;

@@ -14,29 +14,29 @@ TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
 {
   PhasorGen p1;
   p1.clear();
-  auto v0 = p1(1.f/kFloatsPerDSPVector);
+  auto v0 = p1(1.f/kFramesPerBlock);
   
   
 //  std::cout << "phasor: " << v0 << "\n";
   
   SineGen s1;
   s1.clear();
-  auto v1 = s1(1.f/kFloatsPerDSPVector);
+  auto v1 = s1(1.f/kFramesPerBlock);
   
   
 //  std::cout << "sine: " << v1 << "\n";
   
   // one cycle of sine wave should end at 0
   float epsilon = dBToAmp(-120.f);
-  REQUIRE(fabs(v1[kFloatsPerDSPVector - 1]) < epsilon);
+  REQUIRE(fabs(v1[kFramesPerBlock - 1]) < epsilon);
   
   // one shot
   OneShotGen g1;
-  auto vg0 = g1(1.f/kFloatsPerDSPVector);
+  auto vg0 = g1(1.f/kFramesPerBlock);
   
   g1.trigger();
-  auto vg1 = g1(1.f/kFloatsPerDSPVector);
-  auto vg2 = g1(1.f/kFloatsPerDSPVector);
+  auto vg1 = g1(1.f/kFramesPerBlock);
+  auto vg2 = g1(1.f/kFramesPerBlock);
 
   
 //  std::cout << "0: " << vg0 << "\n";
