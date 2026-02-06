@@ -21,7 +21,7 @@ struct ExampleState {
   std::vector< SineGen > sineGens;
 };
 
-// processAudio() does all of the audio processing, in DSPVector-sized chunks.
+// processAudio() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
 void processAudio(AudioContext* ctx, void *untypedState)
 {
@@ -29,7 +29,7 @@ void processAudio(AudioContext* ctx, void *untypedState)
 
   // now do fun example stuff
   float sr = ctx->getSampleRate() ;
-  DSPVector accum;
+  SignalBlock accum;
   auto ctrlToFreq = projections::unityToLogParam({110.f, 440.f});
 
   // accumulate sine oscillators
@@ -37,14 +37,14 @@ void processAudio(AudioContext* ctx, void *untypedState)
   for (int i = 0; i < nSines; ++i)
   {
     int ctrlNum = state->sineControllers[i];
-    DSPVector ctrlSig = ctx->getInputController(ctrlNum);
+    SignalBlock ctrlSig = ctx->getInputController(ctrlNum);
     float freqInHz = ctrlToFreq(ctrlSig[0]);
-    DSPVector sineSig = state->sineGens[i](freqInHz/sr);
+    SignalBlock sineSig = state->sineGens[i](freqInHz/sr);
     accum += sineSig;
   }
 
   // scale total volume and write context output
-  DSPVector volumeSig = ctx->getInputController(state->volumeControl);
+  SignalBlock volumeSig = ctx->getInputController(state->volumeControl);
   accum *= volumeSig*kOutputGain/nSines;
   ctx->outputs[0] = accum;
   ctx->outputs[1] = accum;

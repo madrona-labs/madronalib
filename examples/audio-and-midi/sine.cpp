@@ -18,7 +18,7 @@ struct SineExampleState
   SineGen s1, s2;
 };
 
-// sineProcess() does all of the audio processing, in DSPVector-sized chunks.
+// sineProcess() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
 void sineProcess(AudioContext* ctx, void *state)
 {
@@ -27,7 +27,7 @@ void sineProcess(AudioContext* ctx, void *state)
   // to this but would have added a lot of template code behind the scenes.
   auto procState = static_cast<SineExampleState*>(state);
 
-  // Running the sine generators makes DSPVectors as output.
+  // Running the sine generators makes SignalBlocks as output.
   // The input parameter is omega: the frequency in Hz divided by the sample rate.
   // The output sines are multiplied by the gain.
   ctx->outputs[0] = procState->s1(220.f/kSampleRate)*kOutputGain;

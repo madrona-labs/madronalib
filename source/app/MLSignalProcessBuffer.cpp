@@ -11,7 +11,7 @@ namespace ml
 {
 // SignalProcessBuffer: utility class to serve a main loop with varying
 // arbitrary chunk sizes, buffer inputs and outputs, and compute DSP in
-// DSPVector-sized chunks.
+// SignalBlock-sized chunks.
 
 SignalProcessBuffer::SignalProcessBuffer(size_t inputs, size_t outputs, size_t maxFrames)
     : maxFrames_(maxFrames)
@@ -59,13 +59,13 @@ void SignalProcessBuffer::process(const float** externalInputs, float** external
     // read one chunk from each input buffer
     for (int c = 0; c < nInputs; c++)
     {
-      // read one DSPVector from the input buffer.
+      // read one SignalBlock from the input buffer.
       context->inputs[c] = inputBuffers_[c].read();
     }
 
     // process one vector of the context, generating event / controller signals
     context->processVector(startOffset);
-    startOffset += kFloatsPerDSPVector;
+    startOffset += kFramesPerBlock;
 
     // run the signal processing function
     processFn(context, state);

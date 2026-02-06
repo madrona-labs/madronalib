@@ -13,7 +13,7 @@ namespace ml
 {
 // SignalProcessBuffer: utility class to serve a main loop with varying
 // arbitrary chunk sizes, buffer inputs and outputs, and compute DSP in
-// DSPVector-sized chunks.
+// SignalBlock-sized chunks.
 
 using SignalProcessFn = void (*)(AudioContext*, void*);
 

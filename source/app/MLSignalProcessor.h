@@ -41,7 +41,7 @@ class SignalProcessor
     inline int getAvailableFrames() const { return (int)(channels_ ? (buffer_.getReadAvailable() / channels_) : 0); }
     inline int getReadAvailable() const { return (int)buffer_.getReadAvailable(); }
     
-    // write frames from a DSPVectorArray< CHANNELS > of data into a published signal.
+    // write frames from a SignalBlockArray< CHANNELS > of data into a published signal.
     // this data is for one voice of the signal.
     // don't use block size downsampler and get output samples as soon as they are available.
     //
@@ -56,7 +56,7 @@ class SignalProcessor
     // the voice param is not used currently but we can transmit the voice number in the future if needed.
     //
     template <size_t CHANNELS>
-    inline void writeQuick(DSPVectorArray<CHANNELS> inputVector, size_t frames, size_t voice)
+    inline void writeQuick(SignalBlockArray<CHANNELS> inputVector, size_t frames, size_t voice)
     {
       // on every (1<<octavesDown_)th frame, rotate and write to DSPBuffer
       int framesWritten = 0;
@@ -94,7 +94,7 @@ class SignalProcessor
       }
     }
     
-    // read the latest n frames of data, where each frame is a DSPVectorArray< CHANNELS >.
+    // read the latest n frames of data, where each frame is a SignalBlockArray< CHANNELS >.
     size_t readLatest(float* pDest, size_t framesRequested);
 
     // read the next n frames of data.
@@ -117,7 +117,7 @@ class SignalProcessor
     }
   };
 
-  virtual void processVector(const DSPVectorDynamic& inputs, DSPVectorDynamic& outputs, void* stateData = nullptr) {}
+  virtual void processVector(const SignalBlockDynamic& inputs, SignalBlockDynamic& outputs, void* stateData = nullptr) {}
 
   // Sample rate access (needed by all adapters)
   virtual void setSampleRate(double sr) { sampleRate_ = sr; }
@@ -188,11 +188,11 @@ class SignalProcessor
     publishedSignals_[signalName] = std::make_unique<PublishedSignal>(maxFrames, maxVoices, channels, octavesDown);
   }
 
-  // store a DSPVectorArray to the named signal buffer.
+  // store a SignalBlockArray to the named signal buffer.
   // we need a buffer for each published signal here to move signals safely from the Processor
   // to the main thread.
   template <size_t CHANNELS>
-  inline void storePublishedSignal(Path signalName, const DSPVectorArray<CHANNELS>& inputVec, int frames, int voice)
+  inline void storePublishedSignal(Path signalName, const SignalBlockArray<CHANNELS>& inputVec, int frames, int voice)
   {
     if(!publishedSignalsAreActive_) return;
     PublishedSignal* publishedSignal = publishedSignals_[signalName].get();

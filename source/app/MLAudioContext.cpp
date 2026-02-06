@@ -87,7 +87,7 @@ void AudioContext::ProcessTime::clear(void)
 // generate phasors from the input parameters
 void AudioContext::ProcessTime::processVector(int startOffset)
 {
-  for (int n = 0; n < kFloatsPerDSPVector; ++n)
+  for (int n = 0; n < kFramesPerBlock; ++n)
   {
     quarterNotesPhase_[n] = omega_;
     omega_ += dpdt_;
@@ -96,8 +96,8 @@ void AudioContext::ProcessTime::processVector(int startOffset)
       omega_ -= 1.f;
     }
   }
-  samplesSincePreviousTime_ += kFloatsPerDSPVector;
-  samplesSinceStart += kFloatsPerDSPVector;
+  samplesSincePreviousTime_ += kFramesPerBlock;
+  samplesSinceStart += kFramesPerBlock;
 }
 
 AudioContext::AudioContext(size_t nInputs, size_t nOutputs) : inputs(nInputs), outputs(nOutputs) {}
@@ -126,7 +126,7 @@ void AudioContext::processVector(int startOffset)
   eventsToSignals.processVector(startOffset);
 }
 
-DSPVector AudioContext::getInputController(size_t n) const
+SignalBlock AudioContext::getInputController(size_t n) const
 {
   return eventsToSignals.getController(n).output;
 }

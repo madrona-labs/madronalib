@@ -129,7 +129,6 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/clap)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/cJSON)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/ffft)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/utf)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/sse2neon)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/app)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/DSP)
@@ -322,8 +321,6 @@ install(FILES include/madronalib.h DESTINATION ${HEADERS_INCLUDE_DIR})
 install(FILES include/mldsp.h DESTINATION ${HEADERS_INCLUDE_DIR})
 
 # TODO: ideally we don't install these?
-install(FILES external/sse2neon/sse2neon.h DESTINATION ${HEADERS_INCLUDE_DIR})
-
 install(FILES
     ${APP_HEADERS}
     ${DSP_HEADERS}

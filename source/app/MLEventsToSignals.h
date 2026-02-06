@@ -75,7 +75,7 @@ class EventsToSignals final
   void clearEvents();
 
   // process incoming events in buffer and generate output signals.
-  // events in the queue in the time range [startOffset, startOffset + kFloatsPerDSPVector) will
+  // events in the queue in the time range [startOffset, startOffset + kFramesPerBlock) will
   // be processed. it is assumed that all events in the queue are sorted by start time. Any
   // events outside the time range will be ignored.
   void processVector(int startOffset);
@@ -121,7 +121,7 @@ class EventsToSignals final
     // data
 
     // output signals (velocity, pitch, voice... )
-    DSPVectorArray<kNumVoiceOutputRows> outputs;
+    SignalBlockArray<kNumVoiceOutputRows> outputs;
 
     size_t nextFrameToProcess{0};
 
@@ -173,7 +173,7 @@ class EventsToSignals final
     void process();
 
     LinearGlide glide;
-    DSPVector output{0.f};
+    SignalBlock output{0.f};
     float inputValue{0.f};
     double sr{0};
     bool recalcNeeded{false};

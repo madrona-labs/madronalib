@@ -30,7 +30,7 @@ struct AaltoverbState
   PitchbendableDelay mDelayL, mDelayR;
 
   // feedback storage
-  DSPVector mvFeedbackL, mvFeedbackR;
+  SignalBlock mvFeedbackL, mvFeedbackR;
 };
 
 void initializeReverb(AaltoverbState& r)
@@ -63,7 +63,7 @@ void initializeReverb(AaltoverbState& r)
   r.mDelayR.setMaxDelayInSamples(3500.f);
 }
 
-// processVector() does all of the audio processing, in DSPVector-sized chunks.
+// processVector() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
 void processVector(AudioContext* ctx, void *stateData)
 {
@@ -82,36 +82,36 @@ void processVector(AudioContext* ctx, void *stateData)
   float feedback = (decayU < 1.0f) ? powf(RT60const, 1.0f/decayIterations) : 1.0f;
 
   // generate smoothed delay time and feedback gain vectors
-  DSPVector vSmoothDelay = r->mSmoothDelay(sizeU*2.0f);
-  DSPVector vSmoothFeedback = r->mSmoothFeedback(feedback);
+  SignalBlock vSmoothDelay = r->mSmoothDelay(sizeU*2.0f);
+  SignalBlock vSmoothFeedback = r->mSmoothFeedback(feedback);
 
-  // get the minimum possible delay in samples, which is the length of a DSPVector.
-  DSPVector vMin(kFloatsPerDSPVector);
+  // get the minimum possible delay in samples, which is the length of a SignalBlock.
+  SignalBlock vMin(kFramesPerBlock);
 
   // get smoothed allpass times in samples
-  DSPVector delayParamInSamples = sr*vSmoothDelay;
-  DSPVector vt1 = max(0.00476*delayParamInSamples, vMin);
-  DSPVector vt2 = max(0.00358*delayParamInSamples, vMin);
-  DSPVector vt3 = max(0.00973*delayParamInSamples, vMin);
-  DSPVector vt4 = max(0.00830*delayParamInSamples, vMin);
-  DSPVector vt5 = max(0.029*delayParamInSamples, vMin);
-  DSPVector vt6 = max(0.021*delayParamInSamples, vMin);
-  DSPVector vt7 = max(0.078*delayParamInSamples, vMin);
-  DSPVector vt8 = max(0.090*delayParamInSamples, vMin);
-  DSPVector vt9 = max(0.111*delayParamInSamples, vMin);
-  DSPVector vt10 = max(0.096*delayParamInSamples, vMin);
+  SignalBlock delayParamInSamples = sr*vSmoothDelay;
+  SignalBlock vt1 = max(0.00476*delayParamInSamples, vMin);
+  SignalBlock vt2 = max(0.00358*delayParamInSamples, vMin);
+  SignalBlock vt3 = max(0.00973*delayParamInSamples, vMin);
+  SignalBlock vt4 = max(0.00830*delayParamInSamples, vMin);
+  SignalBlock vt5 = max(0.029*delayParamInSamples, vMin);
+  SignalBlock vt6 = max(0.021*delayParamInSamples, vMin);
+  SignalBlock vt7 = max(0.078*delayParamInSamples, vMin);
+  SignalBlock vt8 = max(0.090*delayParamInSamples, vMin);
+  SignalBlock vt9 = max(0.111*delayParamInSamples, vMin);
+  SignalBlock vt10 = max(0.096*delayParamInSamples, vMin);
 
   // sum stereo inputs and diffuse with four allpass filters in series
-  DSPVector monoInput = (ctx->inputs[0] + ctx->inputs[1]);
-  DSPVector diffusedInput = r->mAp4(r->mAp3(r->mAp2(r->mAp1(monoInput, vt1), vt2), vt3), vt4);
+  SignalBlock monoInput = (ctx->inputs[0] + ctx->inputs[1]);
+  SignalBlock diffusedInput = r->mAp4(r->mAp3(r->mAp2(r->mAp1(monoInput, vt1), vt2), vt3), vt4);
 
-  // get delay times in samples, subtracting the constant delay of one DSPVector and clamping to zero
-  DSPVector vDelayTimeL = max(0.0313*delayParamInSamples - vMin, DSPVector(0.f));
-  DSPVector vDelayTimeR = max(0.0371*delayParamInSamples - vMin, DSPVector(0.f));
+  // get delay times in samples, subtracting the constant delay of one SignalBlock and clamping to zero
+  SignalBlock vDelayTimeL = max(0.0313*delayParamInSamples - vMin, SignalBlock(0.f));
+  SignalBlock vDelayTimeR = max(0.0371*delayParamInSamples - vMin, SignalBlock(0.f));
 
   // sum diffused input with feedback, and apply late diffusion of two more allpass filters to each channel
-  DSPVector vTapL = r->mAp7(r->mAp5(diffusedInput + r->mDelayL(r->mvFeedbackL, vDelayTimeL), vt5), vt7);
-  DSPVector vTapR = r->mAp8(r->mAp6(diffusedInput + r->mDelayR(r->mvFeedbackR, vDelayTimeR), vt6), vt8);
+  SignalBlock vTapL = r->mAp7(r->mAp5(diffusedInput + r->mDelayL(r->mvFeedbackL, vDelayTimeL), vt5), vt7);
+  SignalBlock vTapR = r->mAp8(r->mAp6(diffusedInput + r->mDelayR(r->mvFeedbackR, vDelayTimeR), vt6), vt8);
 
   // apply final allpass filter and gain, and store the feedback
   r->mvFeedbackR = r->mAp9(vTapL, vt9)*vSmoothFeedback;

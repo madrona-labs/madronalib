@@ -22,11 +22,11 @@ using namespace testUtils;
 
 TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
 {
-  DSPVector a(rangeClosed(-kPi, kPi));
+  SignalBlock a(rangeClosed(-kPi, kPi));
 
   auto sinN = ([&]() {
-    DSPVector v;
-    for (int i = 0; i < kFloatsPerDSPVector; ++i)
+    SignalBlock v;
+    for (int i = 0; i < kFramesPerBlock; ++i)
     {
       v[i] = sinf(a[i]);
     }
@@ -34,11 +34,11 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   });
   auto sinP = ([&]() { return sin(a); });
   auto sinA = ([&]() { return sinApprox(a); });
-  std::vector<std::function<DSPVector(void)> > sinFunctions{sinN, sinP, sinA};
+  std::vector<std::function<SignalBlock(void)> > sinFunctions{sinN, sinP, sinA};
 
   auto cosN = ([&]() {
-    DSPVector v;
-    for (int i = 0; i < kFloatsPerDSPVector; ++i)
+    SignalBlock v;
+    for (int i = 0; i < kFramesPerBlock; ++i)
     {
       v[i] = cosf(a[i]);
     }
@@ -46,11 +46,11 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   });
   auto cosP = ([&]() { return cos(a); });
   auto cosA = ([&]() { return cosApprox(a); });
-  std::vector<std::function<DSPVector(void)> > cosFunctions{cosN, cosP, cosA};
+  std::vector<std::function<SignalBlock(void)> > cosFunctions{cosN, cosP, cosA};
 
   auto logN = ([&]() {
-    DSPVector v;
-    for (int i = 0; i < kFloatsPerDSPVector; ++i)
+    SignalBlock v;
+    for (int i = 0; i < kFramesPerBlock; ++i)
     {
       v[i] = logf(a[i]);
     }
@@ -58,11 +58,11 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   });
   auto logP = ([&]() { return log(a); });
   auto logA = ([&]() { return logApprox(a); });
-  std::vector<std::function<DSPVector(void)> > logFunctions{logN, logP, logA};
+  std::vector<std::function<SignalBlock(void)> > logFunctions{logN, logP, logA};
 
   auto expN = ([&]() {
-    DSPVector v;
-    for (int i = 0; i < kFloatsPerDSPVector; ++i)
+    SignalBlock v;
+    for (int i = 0; i < kFramesPerBlock; ++i)
     {
       v[i] = expf(a[i]);
     }
@@ -70,10 +70,10 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   });
   auto expP = ([&]() { return exp(a); });
   auto expA = ([&]() { return expApprox(a); });
-  std::vector<std::function<DSPVector(void)> > expFunctions{expN, expP, expA};
+  std::vector<std::function<SignalBlock(void)> > expFunctions{expN, expP, expA};
 
   std::vector<
-      std::pair<std::string, std::vector<std::function<DSPVector(void)> > > >
+      std::pair<std::string, std::vector<std::function<SignalBlock(void)> > > >
       functionVectors{{"sin", sinFunctions},
                       {"cos", cosFunctions},
                       {"log", logFunctions},
@@ -89,9 +89,9 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
 
     for (auto fnVec : functionVectors)
     {
-      DSPVector native = fnVec.second[0]();
-      DSPVector precise = fnVec.second[1]();
-      DSPVector approx = fnVec.second[2]();
+      SignalBlock native = fnVec.second[0]();
+      SignalBlock precise = fnVec.second[1]();
+      SignalBlock approx = fnVec.second[2]();
 
       float nativeMaxDiff = max(abs(native - native));
       float preciseMaxDiff = max(abs(native - precise));
@@ -122,19 +122,19 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
         // tries to runs the test on a performance core.
         
 #if (defined __ARM_NEON) || (defined __ARM_NEON__)
-        TimedResult<DSPVector> fnTimeNative =
-        timeIterationsInThread<DSPVector>(fnVec.second[0]);
-        TimedResult<DSPVector> fnTimePrecise =
-        timeIterationsInThread<DSPVector>(fnVec.second[1]);
-        TimedResult<DSPVector> fnTimeApprox =
-        timeIterationsInThread<DSPVector>(fnVec.second[2]);
+        TimedResult<SignalBlock> fnTimeNative =
+        timeIterationsInThread<SignalBlock>(fnVec.second[0]);
+        TimedResult<SignalBlock> fnTimePrecise =
+        timeIterationsInThread<SignalBlock>(fnVec.second[1]);
+        TimedResult<SignalBlock> fnTimeApprox =
+        timeIterationsInThread<SignalBlock>(fnVec.second[2]);
 #else
-        TimedResult<DSPVector> fnTimeNative =
-        timeIterations<DSPVector>(fnVec.second[0]);
-        TimedResult<DSPVector> fnTimePrecise =
-        timeIterations<DSPVector>(fnVec.second[1]);
-        TimedResult<DSPVector> fnTimeApprox =
-        timeIterations<DSPVector>(fnVec.second[2]);
+        TimedResult<SignalBlock> fnTimeNative =
+        timeIterations<SignalBlock>(fnVec.second[0]);
+        TimedResult<SignalBlock> fnTimePrecise =
+        timeIterations<SignalBlock>(fnVec.second[1]);
+        TimedResult<SignalBlock> fnTimeApprox =
+        timeIterations<SignalBlock>(fnVec.second[2]);
 #endif
         
 
@@ -150,20 +150,20 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   SECTION("lerp")
   {
     // lerp with constant mix value
-    DSPVector a{columnIndex()};
-    DSPVector b{0.f};
+    SignalBlock a{columnIndex()};
+    SignalBlock b{0.f};
     auto c = lerp(a, b, 0.5f);
-    REQUIRE(c[kFloatsPerDSPVector - 1] == (kFloatsPerDSPVector - 1) * 0.5f);
+    REQUIRE(c[kFramesPerBlock - 1] == (kFramesPerBlock - 1) * 0.5f);
   }
   
   SECTION("convert")
   {
     constexpr float x{1.25f};
-    DSPVector a{x};
-    DSPVector b{-x};
+    SignalBlock a{x};
+    SignalBlock b{-x};
     auto fa = fractionalPart(a);
     auto fb = fractionalPart(b);
-    REQUIRE(fa[kFloatsPerDSPVector - 1] == -fb[kFloatsPerDSPVector - 1]);
+    REQUIRE(fa[kFramesPerBlock - 1] == -fb[kFramesPerBlock - 1]);
   }
     
   SECTION("map")
@@ -180,11 +180,11 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     // map int -> float
     auto d = map([&](int x) { return x * 2; }, a);
 
-    // map DSPVector -> DSPVector
-    auto e = map([&](DSPVector x) { return x * 2.f; }, a);
+    // map SignalBlock -> SignalBlock
+    auto e = map([&](SignalBlock x) { return x * 2.f; }, a);
 
-    // map DSPVector, int row -> DSPVector
-    auto f = map([&](DSPVector x, int j) { return j * 2; }, a);
+    // map SignalBlock, int row -> SignalBlock
+    auto f = map([&](SignalBlock x, int j) { return j * 2; }, a);
 
     REQUIRE(c == d);
     REQUIRE(d == e);
@@ -192,14 +192,14 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
 
   SECTION("row operations")
   {
-    DSPVectorArray<2> a{repeatRows<2>(columnIndex())};
+    SignalBlockArray<2> a{repeatRows<2>(columnIndex())};
     auto a2{a * 2.f};
 
-    DSPVector b{columnIndex()};
+    SignalBlock b{columnIndex()};
     auto b2 = b * 2.f;
 
-    DSPVectorArray<2> x{3.f};
-    DSPVectorArray<1> y{3.f};
+    SignalBlockArray<2> x{3.f};
+    SignalBlockArray<1> y{3.f};
     auto xy = x * repeatRows<2>(y);
     auto yx = repeatRows<2>(y) * x;
 
@@ -208,7 +208,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     auto aa = repeatRows<4>(a);
 
     auto f{repeatRows<2>(columnIndex())};
-    auto g = map([&](DSPVector x, int j) { return x * (j + 1); }, f);
+    auto g = map([&](SignalBlock x, int j) { return x * (j + 1); }, f);
 
     auto h = stretchRows<6>(g);
 
@@ -222,46 +222,46 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   
   SECTION("combining")
   {
-    DSPVectorArray<2> a{repeatRows<2>(columnIndex())};
-    DSPVectorArray<2> b{rowIndex<2>() + 1};
-    DSPVectorArray<2> c{1};
+    SignalBlockArray<2> a{repeatRows<2>(columnIndex())};
+    SignalBlockArray<2> b{rowIndex<2>() + 1};
+    SignalBlockArray<2> c{1};
 
     auto sum = add(a, b, c);
     
-    DSPVectorArray<3> gains = concatRows(DSPVector{0.300f}, DSPVector{0.030f}, DSPVector{0.003f});
+    SignalBlockArray<3> gains = concatRows(SignalBlock{0.300f}, SignalBlock{0.030f}, SignalBlock{0.003f});
 
     auto mixResult = mix(gains, c, c, c);
     
-    DSPVectorArray<6> gg = repeatRows<2>(gains);
+    SignalBlockArray<6> gg = repeatRows<2>(gains);
 
-    DSPVectorArray<2> h = separateRows<4, 6>(gg);
+    SignalBlockArray<2> h = separateRows<4, 6>(gg);
     
     // TODO tests
   }
   
   SECTION("multiplex")
   {
-    DSPVectorArray<2> input{columnIndex<2>() + rowIndex<2>()};
-    DSPVectorArray<2> a{7};
-    DSPVectorArray<2> b{11};
-    DSPVectorArray<2> c{13};
-    DSPVectorArray<2> d{17};
-    DSPVectorArray<2> e{19};
+    SignalBlockArray<2> input{columnIndex<2>() + rowIndex<2>()};
+    SignalBlockArray<2> a{7};
+    SignalBlockArray<2> b{11};
+    SignalBlockArray<2> c{13};
+    SignalBlockArray<2> d{17};
+    SignalBlockArray<2> e{19};
 
     // rangeOpen(0-1): equal amounts of a, b, c, d, e
     auto dv = multiplex(rangeOpen(0, 1), a, b, c, d, e);
-    REQUIRE(dv[kFloatsPerDSPVector - 1] == e[kFloatsPerDSPVector - 1]);
+    REQUIRE(dv[kFramesPerBlock - 1] == e[kFramesPerBlock - 1]);
     
     // rangeClosed(0, 4.f/5.f): last element should be e
     auto dw = multiplexLinear(rangeClosed(0, 4.f/5.f), a, b, c, d, e);
-    REQUIRE(dv[kFloatsPerDSPVector - 1] == e[kFloatsPerDSPVector - 1]);
+    REQUIRE(dv[kFramesPerBlock - 1] == e[kFramesPerBlock - 1]);
 
     // the sum of the linear demultiplexer's outputs should equal the input
-    auto demuxInput2 = repeatRows<2>(DSPVector{1});
+    auto demuxInput2 = repeatRows<2>(SignalBlock{1});
     demultiplexLinear(rangeClosed(0, 3.f/4.f), demuxInput2, &a, &b, &c, &d);
     auto sumOfDemuxOutputs2 = add(a, b, c, d);
     REQUIRE(demuxInput2 == sumOfDemuxOutputs2);
-    REQUIRE(sumOfDemuxOutputs2[kFloatsPerDSPVector - 1] == 1);
+    REQUIRE(sumOfDemuxOutputs2[kFramesPerBlock - 1] == 1);
     
     // demultiplex to multiple outputs, then multiplex wtih same selector
     // should equal the input
@@ -296,8 +296,8 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   
   SECTION("misc")
   {
-    DSPVector n(2.f);
-    DSPVector m(-n);
+    SignalBlock n(2.f);
+    SignalBlock m(-n);
     REQUIRE(m[0] == -2.f);
   }
 }

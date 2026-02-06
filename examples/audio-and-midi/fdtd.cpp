@@ -74,12 +74,12 @@ void doFDTDStep2D(FDTDSurface* uIn1, FDTDSurface* uIn2, FDTDSurface* uOut, float
 // run the FDTD model with the given input and fundamental frequency.
 // the frequency is updated every sample.
 
-DSPVectorArray< 2 > processFDTDModel(DSPVector inputVec, DSPVector freq, FDTDState* state)
+SignalBlockArray< 2 > processFDTDModel(SignalBlock inputVec, SignalBlock freq, FDTDState* state)
 {
   const float isr = 1.0f/kSampleRate;
-  DSPVector outLVec, outRVec;
+  SignalBlock outLVec, outRVec;
 
-  for(int i=0; i<kFloatsPerDSPVector; ++i)
+  for(int i=0; i<kFramesPerBlock; ++i)
   {
     // get frequency in cycles/sample
     float Fs = freq[i];
@@ -149,11 +149,11 @@ DSPVectorArray< 2 > processFDTDModel(DSPVector inputVec, DSPVector freq, FDTDSta
     state->mpU0 = temp;
   }
   
-  // concatenating the two pickups makes a DSPVectorArray<2>: our stereo output.
+  // concatenating the two pickups makes a SignalBlockArray<2>: our stereo output.
   return concatRows(outLVec, outRVec);
 }
 
-// processFDTD() does all of the audio processing, in DSPVector-sized chunks.
+// processFDTD() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
 
 void processFDTD(AudioContext* ctx, void *untypedState)

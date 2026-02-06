@@ -29,10 +29,10 @@ TEST_CASE("madronalib/core/dspbuffer", "[dspbuffer]")
   buf.read(nines.data(), 250);
 
   // write indices with wrap
-  DSPVector v1(columnIndex());
-  buf.write(v1.getConstBuffer(), kFloatsPerDSPVector);
-  DSPVector v2{};
-  buf.read(v2.getBuffer(), kFloatsPerDSPVector);
+  SignalBlock v1(columnIndex());
+  buf.write(v1.getConstBuffer(), kFramesPerBlock);
+  SignalBlock v2{};
+  buf.read(v2.getBuffer(), kFramesPerBlock);
   // std::cout << v2 << "\n";
   REQUIRE(buf.getReadAvailable() == 0);
   REQUIRE(v2 == v1);
@@ -156,12 +156,12 @@ TEST_CASE("madronalib/core/dspbuffer/overlap", "[dspbuffer][overlap]")
   DSPBuffer buf;
   buf.resize(256);
 
-  DSPVector outputVec, outputVec2;
-  int overlap = kFloatsPerDSPVector / 2;
+  SignalBlock outputVec, outputVec2;
+  int overlap = kFramesPerBlock / 2;
 
   // write constant window buffer
-  DSPVector windowVec;
-  makeWindow(windowVec.getBuffer(), kFloatsPerDSPVector, dspwindows::triangle);
+  SignalBlock windowVec;
+  makeWindow(windowVec.getBuffer(), kFramesPerBlock, dspwindows::triangle);
   // TODO ConstDSPVector windowVec(dspwindows::triangle);
   // - would require constexpr-capable reimplementation of Projections, not
   // using std::function
@@ -169,7 +169,7 @@ TEST_CASE("madronalib/core/dspbuffer/overlap", "[dspbuffer][overlap]")
   // write overlapping triangle windows
   for (int i = 0; i < 8; ++i)
   {
-    buf.writeWithOverlapAdd(windowVec.getBuffer(), kFloatsPerDSPVector,
+    buf.writeWithOverlapAdd(windowVec.getBuffer(), kFramesPerBlock,
                             overlap);
   }
 
@@ -189,12 +189,12 @@ TEST_CASE("madronalib/core/dspbuffer/vectors", "[dspbuffer][vectors]")
   buf.resize(256);
 
   constexpr size_t kRows = 3;
-  DSPVectorArray<kRows> inputVec, outputVec;
+  SignalBlockArray<kRows> inputVec, outputVec;
 
-  // make a DSPVectorArray with a unique int at each sample
+  // make a SignalBlockArray with a unique int at each sample
   inputVec =
-      map([](DSPVector v,
-             int row) { return v + DSPVector(kFloatsPerDSPVector * row); },
+      map([](SignalBlock v,
+             int row) { return v + SignalBlock(kFramesPerBlock * row); },
           repeatRows<kRows>(columnIndex()));
 
   // write long enough that we will wrap
@@ -220,10 +220,10 @@ TEST_CASE("madronalib/core/dspbuffer/peek", "[dspbuffer][peek]")
   buf.write(nines.data(), 203);
   buf.read(nines.data(), 203);
 
-  // write DSPVectors with wrap
-  DSPVector v1(columnIndex());
+  // write SignalBlocks with wrap
+  SignalBlock v1(columnIndex());
   buf.write(v1);
-  v1 += DSPVector(kFloatsPerDSPVector);
+  v1 += SignalBlock(kFramesPerBlock);
   buf.write(v1);
 
   // write one more sample
@@ -242,10 +242,10 @@ TEST_CASE("madronalib/core/dspbuffer/peek", "[dspbuffer][peek]")
 TEST_CASE("madronalib/core/dspbuffer/vector", "[dspbuffer][peek]")
 {
 
-  std::vector< DSPVector > v;
+  std::vector< SignalBlock > v;
   v.resize(4);
   
-  DSPVectorDynamic dv;
+  SignalBlockDynamic dv;
 }
 
 }  // namespace dspBufferTest

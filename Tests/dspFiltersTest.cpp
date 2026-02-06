@@ -26,7 +26,7 @@ TEST_CASE("madronalib/core/dsp_filters", "[dsp_filters]")
   if(!resize(sine1, kSamples)) return;
   if(!resize(sine1Upsampled, kSamples << kOctaves)) return;
 
-  float dw = kTwoPi/2.0f/kFloatsPerDSPVector;
+  float dw = kTwoPi/2.0f/kFramesPerBlock;
   float omega{0.f};
   framesToProcess = getSize(sine1);
   
@@ -37,25 +37,25 @@ TEST_CASE("madronalib/core/dsp_filters", "[dsp_filters]")
     omega += dw;
   }
   
-  // process until we run out of whole DSPVectors - there may be some frames left over
+  // process until we run out of whole SignalBlocks - there may be some frames left over
   size_t frameIdx{0};
-  while(frameIdx + kFloatsPerDSPVector <= framesToProcess)
+  while(frameIdx + kFramesPerBlock <= framesToProcess)
   {
-    DSPVector vIn;
+    SignalBlock vIn;
     auto pSrc = getConstFramePtr(sine1, frameIdx);
     load(vIn, pSrc);
     
-    frameIdx += kFloatsPerDSPVector;
+    frameIdx += kFramesPerBlock;
 
     upper.write(vIn);
     
     for(int i=0; i < (1 << kOctaves); ++i)
     {
-      DSPVector vOut = upper.read();
+      SignalBlock vOut = upper.read();
       bool r = downer.write(vOut);
     }
     
     // TODO real tests, measure delay?
-    DSPVector sineOut = downer.read();
+    SignalBlock sineOut = downer.read();
   }
 }
