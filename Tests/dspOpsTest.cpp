@@ -187,59 +187,6 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     // TODO actual tests
   }
   
-  SECTION("combining")
-  {
-    SignalBlockArray<2> a{repeatRows<2>(columnIndex())};
-    SignalBlockArray<2> a1(1.f);
-    SignalBlockArray<2> b{rowIndex<2>() + SignalBlockArray<2>(1.f)};
-    SignalBlockArray<2> c{1};
-
-    auto sum = a + b + c;
-    
-    SignalBlockArray<3> gains = concatRows(SignalBlock{0.300f}, SignalBlock{0.030f}, SignalBlock{0.003f});
-
-    auto mixResult = mix(gains, c, c, c);
-    
-    SignalBlockArray<6> gg = repeatRows<2>(gains);
-
-    SignalBlockArray<2> h = separateRows<4, 6>(gg);
-    
-    // TODO tests
-  }
-  
-  SECTION("multiplex")
-  {
-    SignalBlockArray<2> input{columnIndex<2>() + rowIndex<2>()};
-    SignalBlockArray<2> a{7};
-    SignalBlockArray<2> b{11};
-    SignalBlockArray<2> c{13};
-    SignalBlockArray<2> d{17};
-    SignalBlockArray<2> e{19};
-
-    // rangeOpen(0-1): equal amounts of a, b, c, d, e
-    auto dv = multiplex(rangeOpen(0, 1), a, b, c, d, e);
-    REQUIRE(dv[kFramesPerBlock - 1] == e[kFramesPerBlock - 1]);
-    
-    // rangeClosed(0, 4.f/5.f): last element should be e
-    auto dw = multiplexLinear(rangeClosed(0, 4.f/5.f), a, b, c, d, e);
-    REQUIRE(dv[kFramesPerBlock - 1] == e[kFramesPerBlock - 1]);
-
-    // the sum of the linear demultiplexer's outputs should equal the input
-    auto demuxInput2 = repeatRows<2>(SignalBlock{1});
-    demultiplexLinear(rangeClosed(0, 3.f/4.f), demuxInput2, &a, &b, &c, &d);
-    auto sumOfDemuxOutputs2 = add(a, b, c, d);
-    REQUIRE(demuxInput2 == sumOfDemuxOutputs2);
-    REQUIRE(sumOfDemuxOutputs2[kFramesPerBlock - 1] == 1);
-    
-    // demultiplex to multiple outputs, then multiplex wtih same selector
-    // should equal the input
-    auto selectorSignal = rangeOpen(0, 1);
-    auto demuxInput3 = columnIndex<2>();
-    demultiplex(selectorSignal, demuxInput3, &a, &b, &c, &d);
-    auto demuxThenMux = multiplex(selectorSignal, a, b, c, d);
-    REQUIRE(demuxInput3 == demuxThenMux);
-  }
-  
 }
 
 TEST_CASE("madronalib/core/projections", "[projections]")

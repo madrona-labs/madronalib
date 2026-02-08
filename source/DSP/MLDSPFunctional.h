@@ -7,12 +7,11 @@
 // overlap-added or in the frequency domain.
 
 
-#if 0 // TEMP
-
 #pragma once
 
 #include <functional>
 
+#include "MLDSPOps.h"
 #include "MLDSPFilters.h"
 
 namespace ml
@@ -363,7 +362,3 @@ class Bank
 };
 
 }  // namespace ml
-
-
-#endif
-

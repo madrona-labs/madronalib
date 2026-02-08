@@ -599,58 +599,13 @@ DEFINE_OP_III2I(selectInt, vecSelectIII(x, y, z))  // select(resultIfTrue, resul
 template <size_t ROWS>
 inline void load(SignalBlockArray<ROWS>& vecDest, const float* pSrc)
 {
-  for (size_t row = 0; row < ROWS; ++row)
-  {
-    std::copy(pSrc + row * kFramesPerBlock,
-              pSrc + (row + 1) * kFramesPerBlock,
-              vecDest[row].data());
-  }
+  std::copy(pSrc, pSrc + ROWS * kFramesPerBlock, vecDest.data());
 }
 
 template <size_t ROWS>
 inline void store(const SignalBlockArray<ROWS>& vecSrc, float* pDest)
 {
-  for (size_t row = 0; row < ROWS; ++row)
-  {
-    std::copy(vecSrc[row].data(),
-              vecSrc[row].data() + kFramesPerBlock,
-              pDest + row * kFramesPerBlock);
-  }
-}
-
-// if the pointers are known to be aligned, copy as SIMD vectors
-template <size_t ROWS>
-inline void loadAligned(SignalBlockArray<ROWS>& vecDest, const float* pSrc)
-{
-  for (size_t row = 0; row < ROWS; ++row)
-  {
-    const float* px = pSrc + row * kFramesPerBlock;
-    float* py = vecDest[row].data();
-    
-    for (size_t n = 0; n < kFramesPerBlock / 4; ++n)
-    {
-      storeFloat4(py, loadFloat4(px));
-      px += 4;
-      py += 4;
-    }
-  }
-}
-
-template <size_t ROWS>
-inline void storeAligned(const SignalBlockArray<ROWS>& vecSrc, float* pDest)
-{
-  for (size_t row = 0; row < ROWS; ++row)
-  {
-    const float* px = vecSrc[row].data();
-    float* py = pDest + row * kFramesPerBlock;
-    
-    for (size_t n = 0; n < kFramesPerBlock / 4; ++n)
-    {
-      storeFloat4(py, loadFloat4(px));
-      px += 4;
-      py += 4;
-    }
-  }
+  std::copy(vecSrc.data(), vecSrc.data() + ROWS * kFramesPerBlock, pDest);
 }
 
 // ----------------------------------------------------------------
@@ -689,22 +644,19 @@ inline float min(const SignalBlock& x)
   return fmin;
 }
 
-
-
-
 // ----------------------------------------------------------------
 // normalize
 
 template <size_t ROWS>
-inline SignalBlockArray<ROWS> normalize(const SignalBlockArray<ROWS>& x1)
+inline SignalBlockArray<ROWS> normalize(const SignalBlockArray<ROWS>& x)
 {
-  SignalBlockArray<ROWS> vy;
-  for (int j = 0; j < ROWS; ++j)
+  SignalBlockArray<ROWS> result;
+  for (size_t j = 0; j < ROWS; ++j)
   {
-    auto inputRow = x1.getRowVectorUnchecked(j);
-    vy.setRowVectorUnchecked(j, inputRow / sum(inputRow));
+    auto inputRow = x.getRow(j);
+    result.setRow(j, inputRow / sum(inputRow));
   }
-  return vy;
+  return result;
 }
 
 
@@ -719,7 +671,7 @@ inline SignalBlockArray<ROWS * N> repeatRows(const SignalBlockArray<N>& x)
   SignalBlockArray<ROWS * N> result;
   for (size_t j = 0, k = 0; j < ROWS * N; ++j)
   {
-    result[j] = x[k];
+    result.setRow(j, x.getRow(k));
     if (++k >= N) k = 0;
   }
   return result;
@@ -732,7 +684,6 @@ inline SignalBlockArray<ROWS> repeatRows(const SignalBlock& x)
   SignalBlockArray<ROWS> result;
   for (size_t j = 0; j < ROWS; ++j)
   {
-//    result[j] = x;
     result.setRow(j, x);
   }
   return result;
@@ -749,7 +700,7 @@ inline SignalBlockArray<ROWS> stretchRows(const SignalBlockArray<N>& x)
   for (size_t j = 0; j < ROWS; ++j)
   {
     size_t k = roundf((j * (N - 1.f)) / (ROWS - 1.f));
-    result[j] = x[k];
+    result.setRow(j, x.getRow(k));
   }
   return result;
 }
@@ -765,7 +716,7 @@ inline SignalBlockArray<ROWS> zeroPadRows(const SignalBlockArray<N>& x)
   constexpr size_t rowsToCopy = (ROWS < N) ? ROWS : N;
   for (size_t j = 0; j < rowsToCopy; ++j)
   {
-    result[j] = x[j];
+    result.setRow(j, x.getRow(j));
   }
   return result;
 }
@@ -782,11 +733,11 @@ inline SignalBlockArray<ROWS> shiftRows(const SignalBlockArray<ROWS>& x, int row
   {
     if (k >= 0 && k < static_cast<int>(ROWS))
     {
-      result[j] = x[k];
+      result.setRow(j, x.getRow(k));
     }
     else
     {
-      result[j] = SignalBlock(0.f);
+      result.setRow(j, SignalBlock(0.f));
     }
     ++k;
   }
@@ -805,7 +756,7 @@ inline SignalBlockArray<ROWS> rotateRows(const SignalBlockArray<ROWS>& x, int ro
   int k = modulo(-rowsToRotate, ROWS);
   for (size_t j = 0; j < ROWS; ++j)
   {
-    result[j] = x[k];
+    result.setRow(j, x.getRow(k));
     if (++k >= static_cast<int>(ROWS)) k = 0;
   }
   return result;
@@ -813,25 +764,6 @@ inline SignalBlockArray<ROWS> rotateRows(const SignalBlockArray<ROWS>& x, int ro
 
 // ----------------------------------------------------------------
 // row-wise combining
-
-/*
-// concatRows with two arguments: append one SignalBlockArray after another.
-template <size_t ROWSA, size_t ROWSB>
-inline SignalBlockArray<ROWSA + ROWSB> concatRows(const SignalBlockArray<ROWSA>& x1,
-                                                  const SignalBlockArray<ROWSB>& x2)
-{
-  SignalBlockArray<ROWSA + ROWSB> result;
-  for (size_t j = 0; j < ROWSA; ++j)
-  {
-    result[j] = x1[j];
-  }
-  for (size_t j = 0; j < ROWSB; ++j)
-  {
-    result[j + ROWSA] = x2[j];
-  }
-  return result;
-}
-*/
 
 // Variadic concatRows - concatenate any number of SignalBlockArrays
 template<size_t... Ns>
@@ -842,7 +774,7 @@ inline SignalBlockArray<(Ns + ...)> concatRows(const SignalBlockArray<Ns>&... ar
   
   auto copyArray = [&](const auto& arr, size_t rowCount) {
     for (size_t j = 0; j < rowCount; ++j) {
-      result[offset + j] = arr[j];
+      result.setRow(offset + j, arr.getRow(j));
     }
     offset += rowCount;
   };
@@ -862,8 +794,11 @@ inline SignalBlockArray<ROWS> rotateLeft(const SignalBlockArray<ROWS>& x)
   
   for (size_t row = 0; row < ROWS; ++row)
   {
-    const float4* x4 = reinterpret_cast<const float4*>(x[row].data());
-    float4* r4 = reinterpret_cast<float4*>(result[row].data());
+    SignalBlock xRow = x.getRow(row);
+    SignalBlock rRow;
+    
+    const float4* x4 = reinterpret_cast<const float4*>(xRow.data());
+    float4* r4 = reinterpret_cast<float4*>(rRow.data());
     
     // Process all but the last float4
     for (size_t n = 0; n < kFramesPerBlock / 4 - 1; ++n)
@@ -873,6 +808,8 @@ inline SignalBlockArray<ROWS> rotateLeft(const SignalBlockArray<ROWS>& x)
     
     // Wrap around: last float4 uses first float4 for right neighbor
     r4[kFramesPerBlock / 4 - 1] = vecShuffleLeft(x4[kFramesPerBlock / 4 - 1], x4[0]);
+    
+    result.setRow(row, rRow);
   }
   
   return result;
@@ -887,8 +824,11 @@ inline SignalBlockArray<ROWS> rotateRight(const SignalBlockArray<ROWS>& x)
   
   for (size_t row = 0; row < ROWS; ++row)
   {
-    const float4* x4 = reinterpret_cast<const float4*>(x[row].data());
-    float4* r4 = reinterpret_cast<float4*>(result[row].data());
+    SignalBlock xRow = x.getRow(row);
+    SignalBlock rRow;
+    
+    const float4* x4 = reinterpret_cast<const float4*>(xRow.data());
+    float4* r4 = reinterpret_cast<float4*>(rRow.data());
     
     // First output float4 wraps around with last input float4
     r4[0] = vecShuffleRight(x4[kFramesPerBlock / 4 - 1], x4[0]);
@@ -898,6 +838,8 @@ inline SignalBlockArray<ROWS> rotateRight(const SignalBlockArray<ROWS>& x)
     {
       r4[n + 1] = vecShuffleRight(x4[n], x4[n + 1]);
     }
+    
+    result.setRow(row, rRow);
   }
   
   return result;
@@ -912,7 +854,7 @@ inline SignalBlockArray<(ROWS + 1) / 2> evenRows(const SignalBlockArray<ROWS>& x
   SignalBlockArray<(ROWS + 1) / 2> result;
   for (size_t j = 0; j < (ROWS + 1) / 2; ++j)
   {
-    result[j] = x[j * 2];
+    result.setRow(j, x.getRow(j * 2));
   }
   return result;
 }
@@ -923,7 +865,7 @@ inline SignalBlockArray<ROWS / 2> oddRows(const SignalBlockArray<ROWS>& x)
   SignalBlockArray<ROWS / 2> result;
   for (size_t j = 0; j < ROWS / 2; ++j)
   {
-    result[j] = x[j * 2 + 1];
+    result.setRow(j, x.getRow(j * 2 + 1));
   }
   return result;
 }
@@ -937,7 +879,7 @@ inline SignalBlockArray<B - A> separateRows(const SignalBlockArray<ROWS>& x)
   SignalBlockArray<B - A> result;
   for (size_t j = A; j < B; ++j)
   {
-    result[j - A] = x[j];
+    result.setRow(j - A, x.getRow(j));
   }
   return result;
 }
@@ -951,7 +893,7 @@ inline SignalBlock addRows(const SignalBlockArray<ROWS>& x)
   SignalBlock result(0.f);
   for (size_t j = 0; j < ROWS; ++j)
   {
-    result = add(result, x[j]);
+    result = add(result, x.getRow(j));
   }
   return result;
 }
@@ -966,7 +908,7 @@ inline SignalBlockArray<ROWS> rowIndex()
   SignalBlockArray<ROWS> result;
   for (size_t j = 0; j < ROWS; ++j)
   {
-    result[j] = SignalBlock(static_cast<float>(j));
+    result.setRow(j, SignalBlock(static_cast<float>(j)));
   }
   return result;
 }
@@ -1032,8 +974,6 @@ inline SignalBlock interpolateDSPVectorLinear(float start, float end)
   float interval = (end - start) / kFramesPerBlock;
   return columnIndex() * SignalBlock(interval) + SignalBlock(start + interval);
 }
-
-
 
 
 
