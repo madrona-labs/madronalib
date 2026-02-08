@@ -17,8 +17,6 @@
 // specified as an output / input ratio A.
 
 
-#if 0 // TEMP
-
 #pragma once
 
 #include <vector>
@@ -41,7 +39,7 @@ SignalBlockArray<COEFFS_SIZE> interpolateCoeffsLinear(const std::array<float, CO
   SignalBlockArray<COEFFS_SIZE> vy;
   for (int i = 0; i < COEFFS_SIZE; ++i)
   {
-    vy.row(i) = interpolateDSPVectorLinear(c0[i], c1[i]);
+    vy.setRow(i, interpolateDSPVectorLinear(c0[i], c1[i]));
   }
   return vy;
 }
@@ -101,9 +99,9 @@ struct Lopass
       float s1 = sinf(piOmega);
       float s2 = sinf(2.0f * piOmega);
       float nrm = 1.0f / (2.f + k[n] * s2);
-      vy.row(g0)[n] = s2 * nrm;
-      vy.row(g1)[n] = (-2.f * s1 * s1 - k[n] * s2) * nrm;
-      vy.row(g2)[n] = (2.0f * s1 * s1) * nrm;
+      vy.rowPtr(g0)[n] = s2 * nrm;
+      vy.rowPtr(g1)[n] = (-2.f * s1 * s1 - k[n] * s2) * nrm;
+      vy.rowPtr(g2)[n] = (2.0f * s1 * s1) * nrm;
     }
     return vy;
   }
@@ -136,8 +134,8 @@ struct Lopass
     {
       float v0 = vx[n];
       float t0 = v0 - state[ic2eq];
-      float t1 = vc.constRow(g0)[n] * t0 + vc.constRow(g1)[n] * state[ic1eq];
-      float t2 = vc.constRow(g2)[n] * t0 + vc.constRow(g0)[n] * state[ic1eq];
+      float t1 = vc.rowPtr(g0)[n] * t0 + vc.rowPtr(g1)[n] * state[ic1eq];
+      float t2 = vc.rowPtr(g2)[n] * t0 + vc.rowPtr(g0)[n] * state[ic1eq];
       float v2 = t2 + state[ic2eq];
       state[ic1eq] += 2.0f * t1;
       state[ic2eq] += 2.0f * t2;
@@ -303,11 +301,11 @@ class LoShelf
     {
       float v0 = vx[n];
       float v3 = v0 - ic2eq;
-      float v1 = vc.constRow(a1)[n] * ic1eq + vc.constRow(a2)[n] * v3;
-      float v2 = ic2eq + vc.constRow(a2)[n] * ic1eq + vc.constRow(a3)[n] * v3;
+      float v1 = vc.rowPtr(a1)[n] * ic1eq + vc.rowPtr(a2)[n] * v3;
+      float v2 = ic2eq + vc.rowPtr(a2)[n] * ic1eq + vc.rowPtr(a3)[n] * v3;
       ic1eq = 2 * v1 - ic1eq;
       ic2eq = 2 * v2 - ic2eq;
-      vy[n] = v0 + vc.constRow(m1)[n] * v1 + vc.constRow(m2)[n] * v2;
+      vy[n] = v0 + vc.rowPtr(m1)[n] * v1 + vc.rowPtr(m2)[n] * v2;
     }
     return vy;
   }
@@ -384,11 +382,11 @@ class HiShelf
     {
       float v0 = vx[n];
       float v3 = v0 - ic2eq;
-      float v1 = vc.constRow(a1)[n] * ic1eq + vc.constRow(a2)[n] * v3;
-      float v2 = ic2eq + vc.constRow(a2)[n] * ic1eq + vc.constRow(a3)[n] * v3;
+      float v1 = vc.rowPtr(a1)[n] * ic1eq + vc.rowPtr(a2)[n] * v3;
+      float v2 = ic2eq + vc.rowPtr(a2)[n] * ic1eq + vc.rowPtr(a3)[n] * v3;
       ic1eq = 2 * v1 - ic1eq;
       ic2eq = 2 * v2 - ic2eq;
-      vy[n] = vc.constRow(m0)[n] * v0 + vc.constRow(m1)[n] * v1 + vc.constRow(m2)[n] * v2;
+      vy[n] = vc.rowPtr(m0)[n] * v0 + vc.rowPtr(m1)[n] * v1 + vc.rowPtr(m2)[n] * v2;
     }
     return vy;
   }
@@ -671,9 +669,9 @@ struct ADSR
   static Coeffs calcCoeffs(float a, float d, float s, float r, float sr)
   {
     const float invSr = 1.0f / sr;
-    const float ka = kTwoPi * invSr / ml::max(a, minSegmentTime);
-    const float kd = kTwoPi * invSr / ml::max(d, minSegmentTime);
-    const float kr = kTwoPi * invSr / ml::max(r, minSegmentTime);
+    const float ka = kTwoPi * invSr / std::max(a, minSegmentTime);
+    const float kd = kTwoPi * invSr / std::max(d, minSegmentTime);
+    const float kr = kTwoPi * invSr / std::max(r, minSegmentTime);
     return {ka, kd, s, kr};
   }
 
@@ -832,13 +830,13 @@ class IntegerDelay
     uintptr_t writeEnd = mWriteIndex + kFramesPerBlock;
     if (writeEnd <= mLengthMask + 1)
     {
-      const float* srcStart = vx.getConstBuffer();
+      const float* srcStart = vx.data();
       std::copy(srcStart, srcStart + kFramesPerBlock, mBuffer.data() + mWriteIndex);
     }
     else
     {
       uintptr_t excess = writeEnd - mLengthMask - 1;
-      const float* srcStart = vx.getConstBuffer();
+      const float* srcStart = vx.data();
       const float* srcSplice = srcStart + kFramesPerBlock - excess;
       const float* srcEnd = srcStart + kFramesPerBlock;
       std::copy(srcStart, srcSplice, mBuffer.data() + mWriteIndex);
@@ -852,13 +850,13 @@ class IntegerDelay
     float* srcBuf = mBuffer.data();
     if (readEnd <= mLengthMask + 1)
     {
-      std::copy(srcBuf + readStart, srcBuf + readEnd, vy.getBuffer());
+      std::copy(srcBuf + readStart, srcBuf + readEnd, vy.data());
     }
     else
     {
       uintptr_t excess = readEnd - mLengthMask - 1;
       uintptr_t readSplice = readStart + kFramesPerBlock - excess;
-      float* pDest = vy.getBuffer();
+      float* pDest = vy.data();
       std::copy(srcBuf + readStart, srcBuf + readSplice, pDest);
       std::copy(srcBuf, srcBuf + excess, pDest + (kFramesPerBlock - excess));
     }
@@ -1047,10 +1045,10 @@ namespace PitchbendableDelayConsts
 // period in samples of allpass fade cycle. must be a power of 2 less than or
 // equal to kFramesPerBlock. 32 sounds good.
 constexpr int kFadePeriod{32};
-constexpr int fadeRamp(int n) { return n % kFadePeriod; }
+constexpr int fadeRamp(size_t n) { return n % kFadePeriod; }
 constexpr int ticks1(int n) { return fadeRamp(n) == kFadePeriod / 2; }
 constexpr int ticks2(int n) { return fadeRamp(n) == 0; }
-constexpr float fadeFn(int n)
+constexpr float fadeFn(size_t n)
 {
   // triangle from 0 to 1 to 0
   return 2.f * ((fadeRamp(n)) > kFadePeriod / 2 ? 1.0f - (fadeRamp(n)) / (kFadePeriod + 0.f)
@@ -1344,7 +1342,7 @@ class Downsampler
     if (_octaves)
     {
       // write input to one of first two buffers
-      const float* pSrc = v.getConstBuffer();
+      const float* pSrc = v.data();
       float* pDest = bufferPtr(_counter & 1);
       std::copy(pSrc, pSrc + kFramesPerBlock, pDest);
 
@@ -1375,7 +1373,7 @@ class Downsampler
     else
     {
       // write input to final buffer
-      const float* pSrc = v.getConstBuffer();
+      const float* pSrc = v.data();
       float* pDest = bufferPtr(_numBuffers - 1);
       std::copy(pSrc, pSrc + kFramesPerBlock, pDest);
       return true;
@@ -1574,6 +1572,4 @@ class TempoLock
 };
 
 }  // namespace ml
-
-#endif
 

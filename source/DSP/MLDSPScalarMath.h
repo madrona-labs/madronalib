@@ -52,6 +52,7 @@ inline float modulo(float a, float b) { return a - b * floor(a / b); }
 // ----------------------------------------------------------------
 #pragma mark scalar-type templates
 
+/*
 template <class c>
 constexpr inline c(min)(const c& a, const c& b)
 {
@@ -63,6 +64,7 @@ constexpr inline c(max)(const c& a, const c& b)
 {
   return (a > b) ? a : b;
 }
+*/
 
 // clamp to closed interval [min, max].
 template <class c>

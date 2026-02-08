@@ -85,6 +85,10 @@ struct alignas(kSIMDAlignBytes) AlignedArray
   AlignedArray<T, N>(T val) { fill(val); }
   AlignedArray<T, N>() { fill(T(0.f)); } // TODO: find bugs and remove default fill!
   
+  // Constructor from index->value function
+  template<typename FN>
+  constexpr AlignedArray(FN f) : dataAligned(make_array<N>(f)) {}
+
   const T& operator[](size_t i) const { return dataAligned[i]; }
   T& operator[](size_t i) { return dataAligned[i]; }
   const T* data() const { return dataAligned.data(); }
@@ -147,8 +151,8 @@ inline std::ostream& operator<<(std::ostream& out, const AlignedArray<T, N>& aa)
 
 
 // ----------------------------------------------------------------
-// SignalBlock
-// one row of kFramesPerBlock floats, time -> horizontal
+// SignalBlockArray<N>
+// N rows of kFramesPerBlock floats, time -> horizontal
 // T::scalar_type will let us write templates on SignalBlock, SignalBlock4, ...
 // and T::time_step or similar for writing filter functions
 // we can also add things like using upsampler_type = Upsampler, and so on
@@ -171,6 +175,10 @@ struct SignalBlockArray : public AlignedArray<float, N * kFramesPerBlock>
   void setRow(size_t i, const SignalBlockArray<1>& block) {
     std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
   }
+  
+  float* rowPtr(size_t i) {return(this->data() + i * kFramesPerBlock);}
+  const float* rowPtr(size_t i) const {return(this->data() + i * kFramesPerBlock);}
+
 };
 
 using SignalBlock = SignalBlockArray<1>;
@@ -193,14 +201,17 @@ struct SignalBlockArrayInt : public AlignedArray<int32_t, N * kFramesPerBlock>
   void setRow(size_t i, const SignalBlockArrayInt<1>& block) {
     std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
   }
+  
+  int32_t* rowPtr(size_t i) {return(this->data() + i * kFramesPerBlock);}
+  const int32_t* rowPtr(size_t i) const {return(this->data() + i * kFramesPerBlock);}
 };
 
 using SignalBlockInt = SignalBlockArrayInt<1>;
 
 
 // ----------------------------------------------------------------
-// SignalBlock4
-// kFramesPerBlock/4 4x4 blocks of samples containing float4 signals.
+// SignalBlock4Array<N>
+// N big "rows" of kFramesPerBlock/4 4x4 blocks of samples containing float4 signals.
 // time -> vertical within each 4x4 block, then to next block every 4 frames.
 // A0 B0 C0 D0 A4 B4 C4 D4 ...
 // A1 B1 C1 D1 A5 B5 C5 D5
@@ -208,7 +219,7 @@ using SignalBlockInt = SignalBlockArrayInt<1>;
 // A3 B3 C3 D3 A7 B7 C7 D7
 //
 // the data are arranged like this so that transposing each 4x4 block gives
-// us four SignalBlocks, or vice versa.
+// us four SignalBlocks, and vice versa.
 
 template<size_t N>
 struct SignalBlock4Array : public AlignedArray<float4, N * kFramesPerBlock>
@@ -228,6 +239,8 @@ struct SignalBlock4Array : public AlignedArray<float4, N * kFramesPerBlock>
   void setRow(size_t i, const SignalBlock4Array<1>& block) {
     std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
   }
+  float4* rowPtr(size_t i) {return(this->data() + i * kFramesPerBlock);}
+  const float4* rowPtr(size_t i) const {return(this->data() + i * kFramesPerBlock);}
 };
 
 
