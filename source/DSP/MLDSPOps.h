@@ -153,27 +153,49 @@ inline std::ostream& operator<<(std::ostream& out, const AlignedArray<T, N>& aa)
 // and T::time_step or similar for writing filter functions
 // we can also add things like using upsampler_type = Upsampler, and so on
 
-struct SignalBlock : public AlignedArray<float, kFramesPerBlock> {
-  using Base = AlignedArray<float, kFramesPerBlock>;
+template<size_t N>
+struct SignalBlockArray : public AlignedArray<float, N * kFramesPerBlock>
+{
+  using Base = AlignedArray<float, N * kFramesPerBlock>;
   using scalar_type = float;
-  static constexpr size_t height = 1;
-  static constexpr size_t strideInElems = 1;
-
-  SignalBlock() : Base() {}
-  SignalBlock(float val) : Base(val) {}
-  constexpr SignalBlock(const Base& b) : Base(b) {}
-};
-
-struct SignalBlockInt : public AlignedArray<int32_t, kFramesPerBlock> {
-  using Base = AlignedArray<int32_t, kFramesPerBlock>;
-  using scalar_type = int32_t;
-  static constexpr size_t height = 1;
+  static constexpr size_t height = N;
   static constexpr size_t strideInElems = 1;
   
-  SignalBlockInt() : Base() {}
-  SignalBlockInt(float val) : Base(val) {}
-  constexpr SignalBlockInt(const Base& b) : Base(b) {}
+  SignalBlockArray() : Base() {}
+  SignalBlockArray(float val) : Base(val) {}
+  constexpr SignalBlockArray(const Base& b) : Base(b) {}
+  
+  SignalBlockArray<1> getRow(size_t i) const {
+    return SignalBlockArray<1>(this->data() + i * kFramesPerBlock);
+  }
+  void setRow(size_t i, const SignalBlockArray<1>& block) {
+    std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
+  }
 };
+
+using SignalBlock = SignalBlockArray<1>;
+
+template<size_t N>
+struct SignalBlockArrayInt : public AlignedArray<int32_t, N * kFramesPerBlock>
+{
+  using Base = AlignedArray<int32_t, N * kFramesPerBlock>;
+  using scalar_type = int32_t;
+  static constexpr size_t height = N;
+  static constexpr size_t strideInElems = 1;
+  
+  SignalBlockArrayInt() : Base() {}
+  SignalBlockArrayInt(int32_t val) : Base(val) {}
+  constexpr SignalBlockArrayInt(const Base& b) : Base(b) {}
+  
+  SignalBlockArrayInt<1> getRow(size_t i) const {
+    return SignalBlockArrayInt<1>(this->data() + i * kFramesPerBlock);
+  }
+  void setRow(size_t i, const SignalBlockArrayInt<1>& block) {
+    std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
+  }
+};
+
+using SignalBlockInt = SignalBlockArrayInt<1>;
 
 
 // ----------------------------------------------------------------
@@ -188,107 +210,28 @@ struct SignalBlockInt : public AlignedArray<int32_t, kFramesPerBlock> {
 // the data are arranged like this so that transposing each 4x4 block gives
 // us four SignalBlocks, or vice versa.
 
-
-struct SignalBlock4 : public AlignedArray<float4, kFramesPerBlock>
-{
-  using Base = AlignedArray<float4, kFramesPerBlock>;
-  using scalar_type = float4;
-  static constexpr size_t height = 4;
-  static constexpr size_t strideInElems = kFramesPerBlock/height;
-  
-  SignalBlock4() : Base() {}
-  SignalBlock4(float4 val) : Base(val) {}
-  SignalBlock4(const Base& b) : Base(b) {}
-};
-
-struct SignalBlockInt4 : public AlignedArray<int4, kFramesPerBlock>
-{
-  using Base = AlignedArray<int4, kFramesPerBlock>;
-  using scalar_type = int4;
-  static constexpr size_t height = 4;
-  static constexpr size_t strideInElems = kFramesPerBlock/height;
-  
-  SignalBlockInt4() : Base() {}
-  SignalBlockInt4(int4 val) : Base(val) {}
-  SignalBlockInt4(const Base& b) : Base(b) {}
-};
-
-// ----------------------------------------------------------------
-// SignalBlockArray, SignalBlock4Array
-
-template<size_t N>
-struct SignalBlockArray : public AlignedArray<float, N * kFramesPerBlock>
-{
-  using Base = AlignedArray<float, N * kFramesPerBlock>;
-  
-  // Inherit constructors
-  using Base::Base;
-    
-  // Constructor from base class (for operator results)
-  SignalBlockArray(const Base& b) : Base(b) {}
-
-  
-  // Row proxy for mutable access
-  struct RowProxy {
-    float* data;
-    
-    operator SignalBlock() const {
-      return SignalBlock(data);
-    }
-    
-    RowProxy& operator=(const SignalBlock& block) {
-      std::copy(block.begin(), block.end(), data);
-      return *this;
-    }
-  };
-  
-  // Mutable access
-  RowProxy operator[](size_t i) {
-    return RowProxy{this->data() + i * kFramesPerBlock};
-  }
-  
-  // Const access
-  SignalBlock operator[](size_t i) const {
-    return SignalBlock(this->data() + i * kFramesPerBlock);
-  }
-};
-
 template<size_t N>
 struct SignalBlock4Array : public AlignedArray<float4, N * kFramesPerBlock>
 {
   using Base = AlignedArray<float4, N * kFramesPerBlock>;
+  using scalar_type = float4;
+  static constexpr size_t height = 4;
+  static constexpr size_t strideInElems = kFramesPerBlock/height;
   
-  // Inherit constructors
-  using Base::Base;
-  
-  // Constructor from base class (for operator results)
+  SignalBlock4Array() : Base() {}
+  SignalBlock4Array(float4 val) : Base(val) {}
   SignalBlock4Array(const Base& b) : Base(b) {}
-
-
-  // Row proxy for mutable access
-  struct RowProxy {
-    float4* data;
     
-    operator SignalBlock4() const {
-      return SignalBlock4(data);
-    }
-    
-    RowProxy& operator=(const SignalBlock4& block) {
-      std::copy(block.begin(), block.end(), data);
-      return *this;
-    }
-  };
-  
-  // Mutable access
-  RowProxy operator[](size_t i) {
-    return RowProxy{this->data() + i * kFramesPerBlock};
+  SignalBlock4Array<1> getRow(size_t i) const {
+    return SignalBlock4Array<1>(this->data() + i * kFramesPerBlock);
   }
-  
-  // Const access
-  SignalBlock operator[](size_t i) const {
-    return SignalBlock(this->data() + i * kFramesPerBlock);
+  void setRow(size_t i, const SignalBlock4Array<1>& block) {
+    std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
   }
 };
+
+
+using SignalBlock4 = SignalBlock4Array<1>;
 
 
 // ----------------------------------------------------------------
@@ -789,7 +732,8 @@ inline SignalBlockArray<ROWS> repeatRows(const SignalBlock& x)
   SignalBlockArray<ROWS> result;
   for (size_t j = 0; j < ROWS; ++j)
   {
-    result[j] = x;
+//    result[j] = x;
+    result.setRow(j, x);
   }
   return result;
 }
