@@ -6,6 +6,8 @@
 #include "MLDSPOps.h"
 #include "MLSignalProcessBuffer.h"
 
+#if 0 // TEMP
+
 using namespace ml;
 namespace ml
 {
@@ -90,3 +92,6 @@ void SignalProcessBuffer::process(const float** externalInputs, float** external
 }
 
 }  // namespace ml
+
+#endif
+

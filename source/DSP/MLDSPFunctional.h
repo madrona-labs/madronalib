@@ -6,6 +6,9 @@
 // operator() and apply the function in a different context, such as upsampled,
 // overlap-added or in the frequency domain.
 
+
+#if 0 // TEMP
+
 #pragma once
 
 #include <functional>
@@ -360,3 +363,7 @@ class Bank
 };
 
 }  // namespace ml
+
+
+#endif
+

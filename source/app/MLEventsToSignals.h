@@ -2,6 +2,8 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
+#if 0
+
 #pragma once
 
 #include "mldsp.h"
@@ -234,3 +236,6 @@ class EventsToSignals final
 };
 
 }  // namespace ml
+
+#endif
+

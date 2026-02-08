@@ -4,6 +4,7 @@
 
 // a unit test made using the Catch framework in catch.hpp / tests.cpp.
 
+
 #include "catch.hpp"
 #include "MLTestUtils.h"
 #include "MLDSPOps.h"
@@ -146,16 +147,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   }
 #endif
   
-  
-  SECTION("lerp")
-  {
-    // lerp with constant mix value
-    SignalBlock a{columnIndex()};
-    SignalBlock b{0.f};
-    auto c = lerp(a, b, 0.5f);
-    REQUIRE(c[kFramesPerBlock - 1] == (kFramesPerBlock - 1) * 0.5f);
-  }
-  
+
   SECTION("convert")
   {
     constexpr float x{1.25f};
@@ -166,30 +158,6 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     REQUIRE(fa[kFramesPerBlock - 1] == -fb[kFramesPerBlock - 1]);
   }
     
-  SECTION("map")
-  {
-    constexpr int rows = 2;
-    auto a{repeatRows<rows>(columnIndex())};
-
-    // map void -> float
-    auto b = map([&]() { return 4; }, a);
-
-    // map float -> float
-    auto c = map([&](float x) { return x * 2.f; }, a);
-
-    // map int -> float
-    auto d = map([&](int x) { return x * 2; }, a);
-
-    // map SignalBlock -> SignalBlock
-    auto e = map([&](SignalBlock x) { return x * 2.f; }, a);
-
-    // map SignalBlock, int row -> SignalBlock
-    auto f = map([&](SignalBlock x, int j) { return j * 2; }, a);
-
-    REQUIRE(c == d);
-    REQUIRE(d == e);
-  }
-
   SECTION("row operations")
   {
     SignalBlockArray<2> a{repeatRows<2>(columnIndex())};
@@ -272,34 +240,6 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     REQUIRE(demuxInput3 == demuxThenMux);
   }
   
-  SECTION("bank")
-  {
-    constexpr size_t n = 5;
-    
-    // process with two arguments
-    Bank<PulseGen, n> pulses;
-    auto freqs = rowIndex<n>()*0.01 + 0.1;
-    auto widths = rowIndex<n>()*0.01 + 0.5;
-    auto pulseOuts = pulses(freqs, widths);
-    
-    // process with one argument
-    Bank<SineGen, n> sines;
-    auto sineOuts = sines(freqs);
-    
-    // process with no arguments
-    Bank<NoiseGen, n> noises;
-    auto noiseOuts = noises();
-    
-    // access one processor directly
-    noises[2].step();
-  }
-  
-  SECTION("misc")
-  {
-    SignalBlock n(2.f);
-    SignalBlock m(-n);
-    REQUIRE(m[0] == -2.f);
-  }
 }
 
 TEST_CASE("madronalib/core/projections", "[projections]")

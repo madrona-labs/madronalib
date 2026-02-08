@@ -12,6 +12,7 @@
 // graphs changeable at runtime, see MLProcs. In general MLProcs will be written
 // using DSPGens, DSPOps, DSPFilters.
 
+#if 0 // TEMP
 #pragma once
 
 #include "MLDSPFunctional.h"
@@ -590,3 +591,5 @@ class SampleAccurateLinearGlide
 };
 
 }  // namespace ml
+#endif
+

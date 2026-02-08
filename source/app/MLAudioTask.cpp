@@ -8,7 +8,7 @@
 #include "MLSignalProcessBuffer.h"
 
 #include "rtaudio/RtAudio.h"
-
+#if 0 // TEMP
 namespace ml
 {
 
@@ -258,3 +258,4 @@ int AudioTask::runConsoleApp()
 AudioTask::~AudioTask() = default;
 
 }  // namespace ml
+#endif
