@@ -176,9 +176,8 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     auto aa = repeatRows<4>(a);
 
     auto f{repeatRows<2>(columnIndex())};
-    auto g = map([&](SignalBlock x, int j) { return x * (j + 1); }, f);
 
-    auto h = stretchRows<6>(g);
+    auto h = stretchRows<6>(b);
 
     auto k = zeroPadRows<6>(columnIndex());
 
@@ -191,10 +190,11 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   SECTION("combining")
   {
     SignalBlockArray<2> a{repeatRows<2>(columnIndex())};
-    SignalBlockArray<2> b{rowIndex<2>() + 1};
+    SignalBlockArray<2> a1(1.f);
+    SignalBlockArray<2> b{rowIndex<2>() + SignalBlockArray<2>(1.f)};
     SignalBlockArray<2> c{1};
 
-    auto sum = add(a, b, c);
+    auto sum = a + b + c;
     
     SignalBlockArray<3> gains = concatRows(SignalBlock{0.300f}, SignalBlock{0.030f}, SignalBlock{0.003f});
 
