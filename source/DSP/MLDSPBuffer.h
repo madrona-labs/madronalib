@@ -7,6 +7,8 @@
 // pa_ringbuffer by Phil Burk and others. C++11 atomics are used to implement
 // the lockfree algorithm.
 
+
+#if 0 // TEMP
 #pragma once
 
 #include <algorithm>
@@ -384,3 +386,6 @@ class DSPBuffer
 };
 
 }  // namespace ml
+
+#endif
+

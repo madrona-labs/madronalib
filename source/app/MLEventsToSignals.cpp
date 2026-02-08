@@ -6,6 +6,7 @@
 #include "MLEventsToSignals.h"
 #include <cassert>
 
+#if 0 // TEMP
 namespace ml
 {
 
@@ -975,3 +976,5 @@ void EventsToSignals::dumpVoices()
 }
 
 }  // namespace ml
+#endif
+

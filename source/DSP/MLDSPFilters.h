@@ -16,6 +16,9 @@
 // where Q is the analog filter "quality." For bell and shelf filters, gain is
 // specified as an output / input ratio A.
 
+
+#if 0 // TEMP
+
 #pragma once
 
 #include <vector>
@@ -1571,3 +1574,6 @@ class TempoLock
 };
 
 }  // namespace ml
+
+#endif
+

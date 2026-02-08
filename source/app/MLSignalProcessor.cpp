@@ -4,6 +4,7 @@
 
 #include "MLSignalProcessor.h"
 
+#if 0 // TEMP
 using namespace ml;
 
 // SignalProcessor::PublishedSignal
@@ -36,3 +37,5 @@ size_t SignalProcessor::PublishedSignal::read(float* pDest, size_t framesRequest
 {
   return buffer_.read(pDest, framesRequested * channels_);
 }
+#endif
+

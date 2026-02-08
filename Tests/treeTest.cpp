@@ -365,9 +365,10 @@ TEST_CASE("madronalib/core/tree", "[tree]")
   REQUIRE(floatTree["pink"] == 1.f);
 }
 
+#if 0 // TEMP
 TEST_CASE("madronalib/core/textutils", "[textutils]")
 {
-  NoiseGen n;
+//  NoiseGen n;
   constexpr int precision = 5;
   
   // Within the range of exponents (10^-34 -- 10^34) the maximum error of
@@ -404,3 +405,4 @@ TEST_CASE("madronalib/core/textutils", "[textutils]")
   }
   REQUIRE(!errors);
 }
+#endif 

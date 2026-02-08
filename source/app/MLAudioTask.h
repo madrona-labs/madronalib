@@ -4,6 +4,8 @@
 
 // AudioTask: adaptor from RtAudio's main loop to madronalib vector processing
 
+
+#if 0 // TEMP
 #pragma once
 
 #include "MLSignalProcessBuffer.h"
@@ -39,3 +41,5 @@ class AudioTask
 };
 
 }  // namespace ml
+#endif
+

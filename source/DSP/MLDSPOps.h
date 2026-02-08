@@ -36,6 +36,9 @@
 #include "MLDSPScalarMath.h"
 
 
+namespace ml {
+
+
 // Here is the signal block size, an important constant. All processing is done in
 // chunks of this block size so that loops can be unrolled at compile time.
 constexpr size_t kFramesPerBlockBits = 6;
@@ -44,14 +47,13 @@ static_assert((kFramesPerBlockBits <= 8),
               "We count on kFramesPerBlockBits to be 8 or less.");
 
 constexpr size_t kSIMDAlignBytes{16};
-constexpr size_t kSIMDVectorsPerBlock{kFramesPerBlock / kSIMDVectorSize};
-static_assert((kFramesPerBlock % kSIMDVectorSize == 0),
+constexpr size_t kSIMDVectorsPerBlock{kFramesPerBlock / kSIMDVectorElems};
+static_assert((kFramesPerBlock % kSIMDVectorElems == 0),
               "Block size must be a multiple of SIMD vectors.");
 
 constexpr size_t roundUpToMultiple(size_t value, size_t multiple) {
   return ((value + multiple - 1) / multiple) * multiple;
 }
-
 
 
 // make_array, used in constructors
@@ -68,10 +70,6 @@ constexpr auto make_array(Function f)
   return make_array_helper(f, std::make_index_sequence<N>{});
 }
 
-
-
-
-
 // ----------------------------------------------------------------
 // AlignedArray
 //
@@ -81,7 +79,6 @@ struct alignas(kSIMDAlignBytes) AlignedArray
   std::array<T, N> dataAligned;
   static_assert(sizeof(T) * N % sizeof(float4) == 0,
                 "AlignedArray size must be a multiple of float4 size (16 bytes)");
-
   
   constexpr AlignedArray<T, N>(std::array<T, N> data) : dataAligned(data) {}
   constexpr AlignedArray<T, N>(const T* dataPtr) { std::copy(dataPtr, dataPtr + N, dataAligned.data() );}
@@ -96,35 +93,57 @@ struct alignas(kSIMDAlignBytes) AlignedArray
   T* data() { return dataAligned.data(); }
   
   void fill(T f) {dataAligned.fill(f);}
+  
+  inline AlignedArray& operator+=(const AlignedArray& x1)
+  {
+    *this = add(*this, x1);
+    return *this;
+  }
+  inline AlignedArray& operator-=(const AlignedArray& x1)
+  {
+    *this = subtract(*this, x1);
+    return *this;
+  }
+  inline AlignedArray& operator*=(const AlignedArray& x1)
+  {
+    *this = multiply(*this, x1);
+    return *this;
+  }
+  inline AlignedArray& operator/=(const AlignedArray& x1)
+  {
+    *this = divide(*this, x1);
+    return *this;
+  }
+  friend inline AlignedArray operator+(const AlignedArray& x1, const AlignedArray& x2)
+  {
+    return add(x1, x2);
+  }
+  friend inline AlignedArray operator-(const AlignedArray& x1, const AlignedArray& x2)
+  {
+    return subtract(x1, x2);
+  }
+  friend inline AlignedArray operator*(const AlignedArray& x1, const AlignedArray& x2)
+  {
+    return multiply(x1, x2);
+  }
+  friend inline AlignedArray operator/(const AlignedArray& x1, const AlignedArray& x2)
+  {
+    return divide(x1, x2);
+  }
 };
 
-
-// Binary operation, (float, float) -> float
-template<typename T, size_t N, typename OP_FF2F>
-inline AlignedArray<T, N> OpFF2F(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, OP_FF2F op) {
-  AlignedArray<T, N> result;
-  
-  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
-  const float4* a4 = reinterpret_cast<const float4*>(a.data());
-  const float4* b4 = reinterpret_cast<const float4*>(b.data());
-  float4* r4 = reinterpret_cast<float4*>(result.data());
-  
-  for (size_t i = 0; i < numFloat4s; ++i) {
-    r4[i] = op(a4[i], b4[i]);
+template <typename T, size_t N>
+inline std::ostream& operator<<(std::ostream& out, const AlignedArray<T, N>& aa)
+{
+  out << "[";
+  for (int i = 0; i < N; ++i)
+  {
+      out << aa[i] << " ";
   }
-  return result;
+  out << "] ";
+
+  return out;
 }
-
-
-// Now define operations with a macro for brevity:
-#define DEFINE_OP_FF2F(name, expr) \
-template<typename T, size_t N> \
-inline AlignedArray<T, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b) { \
-return OpFF2F(a, b, [](float4 x, float4 y) { return (expr); }); \
-}
-
-DEFINE_OP_FF2F(add, x + y)
-
 
 
 // ----------------------------------------------------------------
@@ -142,9 +161,19 @@ struct SignalBlock : public AlignedArray<float, kFramesPerBlock> {
 
   SignalBlock() : Base() {}
   SignalBlock(float val) : Base(val) {}
-  SignalBlock(const float* val) : Base(val) {}
+  constexpr SignalBlock(const Base& b) : Base(b) {}
 };
 
+struct SignalBlockInt : public AlignedArray<int32_t, kFramesPerBlock> {
+  using Base = AlignedArray<int32_t, kFramesPerBlock>;
+  using scalar_type = int32_t;
+  static constexpr size_t height = 1;
+  static constexpr size_t strideInElems = 1;
+  
+  SignalBlockInt() : Base() {}
+  SignalBlockInt(float val) : Base(val) {}
+  constexpr SignalBlockInt(const Base& b) : Base(b) {}
+};
 
 
 // ----------------------------------------------------------------
@@ -167,16 +196,22 @@ struct SignalBlock4 : public AlignedArray<float4, kFramesPerBlock>
   static constexpr size_t height = 4;
   static constexpr size_t strideInElems = kFramesPerBlock/height;
   
-  // Default constructors
   SignalBlock4() : Base() {}
   SignalBlock4(float4 val) : Base(val) {}
-  
+  SignalBlock4(const Base& b) : Base(b) {}
 };
 
-
-
-
-
+struct SignalBlockInt4 : public AlignedArray<int4, kFramesPerBlock>
+{
+  using Base = AlignedArray<int4, kFramesPerBlock>;
+  using scalar_type = int4;
+  static constexpr size_t height = 4;
+  static constexpr size_t strideInElems = kFramesPerBlock/height;
+  
+  SignalBlockInt4() : Base() {}
+  SignalBlockInt4(int4 val) : Base(val) {}
+  SignalBlockInt4(const Base& b) : Base(b) {}
+};
 
 // ----------------------------------------------------------------
 // SignalBlockArray, SignalBlock4Array
@@ -206,482 +241,405 @@ public:
   const SignalBlock& operator[](int j) const { return data_[j]; }
 };
 
+
+// ----------------------------------------------------------------
+// Unary operations, (float) -> float
+
+template<typename T, size_t N, typename OP_F2F>
+inline AlignedArray<T, N> OpF2F(const AlignedArray<T, N>& a, OP_F2F op) {
+  AlignedArray<T, N> result;
+  
+  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
+  const float4* a4 = reinterpret_cast<const float4*>(a.data());
+  float4* r4 = reinterpret_cast<float4*>(result.data());
+  
+  for (size_t i = 0; i < numFloat4s; ++i) {
+    r4[i] = op(a4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_F2F(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<T, N> name(const AlignedArray<T, N>& a) { \
+return OpF2F(a, [](float4 x) { return (expr); }); \
+}
+
+DEFINE_OP_F2F(recipApprox, rcp(x))
+DEFINE_OP_F2F(sqrt, sqrt(x))
+DEFINE_OP_F2F(sqrtApprox, x * rsqrt(x))
+DEFINE_OP_F2F(abs, andNotBits(set1Float(-0.0f), x))
+
+// float sign: -1, 0, or 1
+DEFINE_OP_F2F(sign, andBits(orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)),
+                            compareNotEqual(set1Float(-0.0f), x)))
+
+// up/down sign: -1 or 1
+DEFINE_OP_F2F(signBit, orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)))
+
+// Trig, log and exp, using accurate cephes-derived library
+DEFINE_OP_F2F(sin, vecSin(x))
+DEFINE_OP_F2F(cos, vecCos(x))
+DEFINE_OP_F2F(log, vecLog(x))
+DEFINE_OP_F2F(exp, vecExp(x))
+
+// Lazy log2 and exp2 from natural log / exp
+static const float4 kLogTwoVec{0.69314718055994529f};
+static const float4 kLogTwoRVec{1.4426950408889634f};
+DEFINE_OP_F2F(log2, vecLog(x) * kLogTwoRVec)
+DEFINE_OP_F2F(exp2, vecExp(kLogTwoVec * x))
+
+// Trig, log and exp, using polynomial approximations
+DEFINE_OP_F2F(sinApprox, vecSinApprox(x))
+DEFINE_OP_F2F(cosApprox, vecCosApprox(x))
+DEFINE_OP_F2F(expApprox, vecExpApprox(x))
+DEFINE_OP_F2F(logApprox, vecLogApprox(x))
+
+// Lazy log2 and exp2 approximations
+DEFINE_OP_F2F(log2Approx, vecLogApprox(x) * kLogTwoRVec)
+DEFINE_OP_F2F(exp2Approx, vecExpApprox(kLogTwoVec * x))
+
+// Cubic tanh approx
+DEFINE_OP_F2F(tanhApprox, vecTanhApprox(x))
+
+// Fractional part
+DEFINE_OP_F2F(fractionalPart, x - intToFloat(floatToIntTruncate(x)))
+
+
+// ----------------------------------------------------------------
+// Binary operations, (float, float) -> float
+
+template<typename T, size_t N, typename OP_FF2F>
+inline AlignedArray<T, N> OpFF2F(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, OP_FF2F op) {
+  AlignedArray<T, N> result;
+  
+  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
+  const float4* a4 = reinterpret_cast<const float4*>(a.data());
+  const float4* b4 = reinterpret_cast<const float4*>(b.data());
+  float4* r4 = reinterpret_cast<float4*>(result.data());
+  
+  for (size_t i = 0; i < numFloat4s; ++i) {
+    r4[i] = op(a4[i], b4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_FF2F(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<T, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b) { \
+return OpFF2F(a, b, [](float4 x, float4 y) { return (expr); }); \
+}
+
+DEFINE_OP_FF2F(add, x + y)
+DEFINE_OP_FF2F(subtract, x - y)
+DEFINE_OP_FF2F(multiply, x * y)
+DEFINE_OP_FF2F(divide, x / y)
+
+DEFINE_OP_FF2F(divideApprox, x * rcp(y))
+DEFINE_OP_FF2F(pow, vecExp(vecLog(x) * y))
+DEFINE_OP_FF2F(powApprox, vecExpApprox(vecLogApprox(x) * y))
+DEFINE_OP_FF2F(min, min(x, y))
+DEFINE_OP_FF2F(max, max(x, y))
+
+
+// ----------------------------------------------------------------
+// Ternary operation, (float, float, float) -> float
+
+template<typename T, size_t N, typename OP_FFF2F>
+inline AlignedArray<T, N> OpFFF2F(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b,
+                                  const AlignedArray<T, N>& c, OP_FFF2F op) {
+  AlignedArray<T, N> result;
+  
+  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
+  const float4* a4 = reinterpret_cast<const float4*>(a.data());
+  const float4* b4 = reinterpret_cast<const float4*>(b.data());
+  const float4* c4 = reinterpret_cast<const float4*>(c.data());
+  float4* r4 = reinterpret_cast<float4*>(result.data());
+  
+  for (size_t i = 0; i < numFloat4s; ++i) {
+    r4[i] = op(a4[i], b4[i], c4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_FFF2F(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<T, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, \
+const AlignedArray<T, N>& c) { \
+return OpFFF2F(a, b, c, [](float4 x, float4 y, float4 z) { return (expr); }); \
+}
+
+DEFINE_OP_FFF2F(lerp, x + (z * (y - x)))        // x = lerp(a, b, mix)
+DEFINE_OP_FFF2F(inverseLerp, (z - x) / (y - x)) // mix = inverseLerp(a, b, x)
+DEFINE_OP_FFF2F(clamp, min(max(x, y), z))       // clamp(x, minBound, maxBound)
+DEFINE_OP_FFF2F(within, andBits(compareGreaterThanOrEqual(x, y), compareLessThan(x, z))) // is x in [y, z)?
+
+// ----------------------------------------------------------------
+// Binary operation, (int32, int32) -> int32
+
+template<typename T, size_t N, typename OP_II2I>
+inline AlignedArray<T, N> OpII2I(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, OP_II2I op) {
+  AlignedArray<T, N> result;
+  
+  constexpr size_t numInt4s = sizeof(AlignedArray<T, N>) / sizeof(int4);
+  const int4* a4 = reinterpret_cast<const int4*>(a.data());
+  const int4* b4 = reinterpret_cast<const int4*>(b.data());
+  int4* r4 = reinterpret_cast<int4*>(result.data());
+  
+  for (size_t i = 0; i < numInt4s; ++i) {
+    r4[i] = op(a4[i], b4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_II2I(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<T, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b) { \
+return OpII2I(a, b, [](int4 x, int4 y) { return (expr); }); \
+}
+
+DEFINE_OP_II2I(addInt32, x + y)
+DEFINE_OP_II2I(subtractInt32, x - y)
+
+// ----------------------------------------------------------------
+// Binary operation (float, float) -> float
+// Multiple-row and single-row operands
+
+template<size_t ROWS, typename OP_FF2F>
+inline SignalBlockArray<ROWS> OpFF2F_MS(const SignalBlockArray<ROWS>& a,
+                                        const SignalBlock& b,
+                                        OP_FF2F op) {
+  SignalBlockArray<ROWS> result;
+  
+  for (size_t row = 0; row < ROWS; ++row) {
+    result[row] = OpFF2F(a[row], b[0], op);
+  }
+  
+  return result;
+}
+
+#define DEFINE_OP_FF2F_MS(name, expr) \
+template<size_t ROWS> \
+inline SignalBlockArray<ROWS> name(const SignalBlockArray<ROWS>& a, \
+const SignalBlockArray<1>& b) { \
+return OpFF2F_MS(a, b, [](float4 x, float4 y) { return (expr); }); \
+}
+
+DEFINE_OP_FF2F_MS(add1, x + y)
+DEFINE_OP_FF2F_MS(subtract1, x - y)
+DEFINE_OP_FF2F_MS(multiply1, x * y)
+DEFINE_OP_FF2F_MS(divide1, x / y)
+DEFINE_OP_FF2F_MS(divideApprox1, x * rcp(y))
+DEFINE_OP_FF2F_MS(pow1, vecExp(vecLog(x) * y))
+DEFINE_OP_FF2F_MS(powApprox1, vecExpApprox(vecLogApprox(x) * y))
+DEFINE_OP_FF2F_MS(min1, min(x, y))
+DEFINE_OP_FF2F_MS(max1, max(x, y))
+
+
+// ----------------------------------------------------------------
+// Unary operation, (float) -> int
+
+template<typename T, size_t N, typename OP_F2I>
+inline AlignedArray<int32_t, N> OpF2I(const AlignedArray<T, N>& a, OP_F2I op) {
+  AlignedArray<int32_t, N> result;
+  
+  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
+  const float4* a4 = reinterpret_cast<const float4*>(a.data());
+  int4* r4 = reinterpret_cast<int4*>(result.data());
+  
+  for (size_t i = 0; i < numFloat4s; ++i) {
+    r4[i] = op(a4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_F2I(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<int32_t, N> name(const AlignedArray<T, N>& a) { \
+return OpF2I(a, [](float4 x) { return (expr); }); \
+}
+
+DEFINE_OP_F2I(roundFloatToInt, floatToIntRound(x))
+DEFINE_OP_F2I(truncateFloatToInt, floatToIntTruncate(x))
+
+
+// ----------------------------------------------------------------
+// Unary operation, (int) -> float
+
+template<typename T, size_t N, typename OP_I2F>
+inline AlignedArray<float, N> OpI2F(const AlignedArray<T, N>& a, OP_I2F op) {
+  AlignedArray<float, N> result;
+  
+  constexpr size_t numInt4s = sizeof(AlignedArray<T, N>) / sizeof(int4);
+  const int4* a4 = reinterpret_cast<const int4*>(a.data());
+  float4* r4 = reinterpret_cast<float4*>(result.data());
+  
+  for (size_t i = 0; i < numInt4s; ++i) {
+    r4[i] = op(a4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_I2F(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<float, N> name(const AlignedArray<T, N>& a) { \
+return OpI2F(a, [](int4 x) { return (expr); }); \
+}
+
+DEFINE_OP_I2F(intToFloat, intToFloat(x))
+DEFINE_OP_I2F(unsignedIntToFloat, unsignedIntToFloat(x))
+
+
+// ----------------------------------------------------------------
+// Binary operation, (float, float) -> int
+
+template<typename T, size_t N, typename OP_FF2I>
+inline AlignedArray<int32_t, N> OpFF2I(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, OP_FF2I op) {
+  AlignedArray<int32_t, N> result;
+  
+  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
+  const float4* a4 = reinterpret_cast<const float4*>(a.data());
+  const float4* b4 = reinterpret_cast<const float4*>(b.data());
+  int4* r4 = reinterpret_cast<int4*>(result.data());
+  
+  for (size_t i = 0; i < numFloat4s; ++i) {
+    r4[i] = op(a4[i], b4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_FF2I(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<int32_t, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b) { \
+return OpFF2I(a, b, [](float4 x, float4 y) { return castFloatToInt(expr); }); \
+}
+
+DEFINE_OP_FF2I(equal, compareEqual(x, y))
+DEFINE_OP_FF2I(notEqual, compareNotEqual(x, y))
+DEFINE_OP_FF2I(greaterThan, compareGreaterThan(x, y))
+DEFINE_OP_FF2I(greaterThanOrEqual, compareGreaterThanOrEqual(x, y))
+DEFINE_OP_FF2I(lessThan, compareLessThan(x, y))
+DEFINE_OP_FF2I(lessThanOrEqual, compareLessThanOrEqual(x, y))
+
+
+// ----------------------------------------------------------------
+// Ternary operation, (float, float, int) -> float
+
+template<typename T, size_t N, typename OP_FFI2F>
+inline AlignedArray<float, N> OpFFI2F(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b,
+                                      const AlignedArray<int32_t, N>& c, OP_FFI2F op) {
+  AlignedArray<float, N> result;
+  
+  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
+  const float4* a4 = reinterpret_cast<const float4*>(a.data());
+  const float4* b4 = reinterpret_cast<const float4*>(b.data());
+  const int4* c4 = reinterpret_cast<const int4*>(c.data());
+  float4* r4 = reinterpret_cast<float4*>(result.data());
+  
+  for (size_t i = 0; i < numFloat4s; ++i) {
+    r4[i] = op(a4[i], b4[i], c4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_FFI2F(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<float, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, \
+const AlignedArray<int32_t, N>& c) { \
+return OpFFI2F(a, b, c, [](float4 x, float4 y, int4 z) { return (expr); }); \
+}
+
+DEFINE_OP_FFI2F(select, vecSelectFFI(x, y, z))  // select(resultIfTrue, resultIfFalse, conditionMask)
+
+
+// ----------------------------------------------------------------
+// Ternary operation, (int, int, int) -> int
+
+template<typename T, size_t N, typename OP_III2I>
+inline AlignedArray<int32_t, N> OpIII2I(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b,
+                                        const AlignedArray<T, N>& c, OP_III2I op) {
+  AlignedArray<int32_t, N> result;
+  
+  constexpr size_t numInt4s = sizeof(AlignedArray<T, N>) / sizeof(int4);
+  const int4* a4 = reinterpret_cast<const int4*>(a.data());
+  const int4* b4 = reinterpret_cast<const int4*>(b.data());
+  const int4* c4 = reinterpret_cast<const int4*>(c.data());
+  int4* r4 = reinterpret_cast<int4*>(result.data());
+  
+  for (size_t i = 0; i < numInt4s; ++i) {
+    r4[i] = op(a4[i], b4[i], c4[i]);
+  }
+  return result;
+}
+
+#define DEFINE_OP_III2I(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<int32_t, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, \
+const AlignedArray<T, N>& c) { \
+return OpIII2I(a, b, c, [](int4 x, int4 y, int4 z) { return (expr); }); \
+}
+
+DEFINE_OP_III2I(selectInt, vecSelectIII(x, y, z))  // select(resultIfTrue, resultIfFalse, conditionMask)
+
+
 // ----------------------------------------------------------------
 // load and store
-
 
 template <size_t ROWS>
 inline void load(SignalBlockArray<ROWS>& vecDest, const float* pSrc)
 {
-  std::copy(pSrc, pSrc + kFramesPerBlock * ROWS, vecDest.getBuffer());
+  for (size_t row = 0; row < ROWS; ++row)
+  {
+    std::copy(pSrc + row * kFramesPerBlock,
+              pSrc + (row + 1) * kFramesPerBlock,
+              vecDest[row].data());
+  }
 }
 
 template <size_t ROWS>
 inline void store(const SignalBlockArray<ROWS>& vecSrc, float* pDest)
 {
-  std::copy(vecSrc.getConstBuffer(), vecSrc.getConstBuffer() + kFramesPerBlock * ROWS, pDest);
+  for (size_t row = 0; row < ROWS; ++row)
+  {
+    std::copy(vecSrc[row].data(),
+              vecSrc[row].data() + kFramesPerBlock,
+              pDest + row * kFramesPerBlock);
+  }
 }
 
 // if the pointers are known to be aligned, copy as SIMD vectors
 template <size_t ROWS>
 inline void loadAligned(SignalBlockArray<ROWS>& vecDest, const float* pSrc)
 {
-  const float* px1 = pSrc;
-  float* py1 = vecDest.getBuffer();
-  
-  for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)
+  for (size_t row = 0; row < ROWS; ++row)
   {
-    storeFloat4(py1, loadFloat4(px1));
-    px1 += 4;
-    py1 += 4;
+    const float* px = pSrc + row * kFramesPerBlock;
+    float* py = vecDest[row].data();
+    
+    for (size_t n = 0; n < kFramesPerBlock / 4; ++n)
+    {
+      storeFloat4(py, loadFloat4(px));
+      px += 4;
+      py += 4;
+    }
   }
 }
 
 template <size_t ROWS>
 inline void storeAligned(const SignalBlockArray<ROWS>& vecSrc, float* pDest)
 {
-  const float* px1 = vecSrc.getConstBuffer();
-  float* py1 = pDest;
-  
-  for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)
+  for (size_t row = 0; row < ROWS; ++row)
   {
-    storeFloat4(py1, loadFloat4(px1));
-    px1 += 4;
-    py1 += 4;
+    const float* px = vecSrc[row].data();
+    float* py = pDest + row * kFramesPerBlock;
+    
+    for (size_t n = 0; n < kFramesPerBlock / 4; ++n)
+    {
+      storeFloat4(py, loadFloat4(px));
+      px += 4;
+      py += 4;
+    }
   }
-}
-
-// ----------------------------------------------------------------
-// unary vector operators (float4) -> float4
-
-#define DEFINE_OP1(opName, opComputation)                              \
-template <size_t ROWS>                                               \
-inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1) \
-{                                                                    \
-SignalBlockArray<ROWS> vy;                                           \
-const float* px1 = vx1.getConstBuffer();                           \
-float* py1 = vy.getBuffer();                                       \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)          \
-{                                                                  \
-float4 x = loadFloat4(px1);                                \
-float4 y = (opComputation); \
-storeFloat4(py1, y);                                  \
-px1 += 4;                                     \
-py1 += 4;                                     \
-}                                                                  \
-return vy;                                                         \
-}
-DEFINE_OP1(recipApprox, (rcp(x)));
-DEFINE_OP1(sqrt, (sqrt(x)));
-DEFINE_OP1(sqrtApprox, (x * rsqrt(x)));
-DEFINE_OP1(abs, (andNotBits(set1Float(-0.0f), x)));
-
-// float sign: -1, 0, or 1
-DEFINE_OP1(sign, (andBits(orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)),
-                          compareNotEqual(set1Float(-0.0f), x))));
-
-// up/down sign: -1 or 1
-DEFINE_OP1(signBit, (orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f))));
-
-// trig, log and exp, using accurate cephes-derived library
-DEFINE_OP1(sin, (vecSin(x)));
-DEFINE_OP1(cos, (vecCos(x)));
-DEFINE_OP1(log, (vecLog(x)));
-DEFINE_OP1(exp, (vecExp(x)));
-
-// lazy log2 and exp2 from natural log / exp
-static const float4 kLogTwoVec{0.69314718055994529f};
-static const float4 kLogTwoRVec{1.4426950408889634f};
-DEFINE_OP1(log2, (vecLog(x) * kLogTwoRVec));
-DEFINE_OP1(exp2, (vecExp(kLogTwoVec * x)));
-
-// trig, log and exp, using polynomial approximations
-DEFINE_OP1(sinApprox, (vecSinApprox(x)));
-DEFINE_OP1(cosApprox, (vecCosApprox(x)));
-DEFINE_OP1(expApprox, (vecExpApprox(x)));
-DEFINE_OP1(logApprox, (vecLogApprox(x)));
-
-// lazy log2 and exp2 approximations from log / exp approximations
-DEFINE_OP1(log2Approx, (vecLogApprox(x) * kLogTwoRVec));
-DEFINE_OP1(exp2Approx, (vecExpApprox(kLogTwoVec * x)));
-
-// cubic tanh approx
-DEFINE_OP1(tanhApprox, (vecTanhApprox(x)));
-
-// ----------------------------------------------------------------
-// binary vector operators (float, float) -> float
-
-#define DEFINE_OP2(opName, opComputation)                              \
-template <size_t ROWS>                                               \
-inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
-const SignalBlockArray<ROWS>& vx2) \
-{                                                                    \
-SignalBlockArray<ROWS> vy;                                           \
-const float* px1 = vx1.getConstBuffer();                           \
-const float* px2 = vx2.getConstBuffer();                           \
-float* py1 = vy.getBuffer();                                       \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)          \
-{                                                                  \
-float4 x1 = loadFloat4(px1);                               \
-float4 x2 = loadFloat4(px2);                               \
-auto y = (opComputation); \
-storeFloat4(py1, y);                                  \
-px1 += 4;                                     \
-px2 += 4;                                     \
-py1 += 4;                                     \
-}                                                                  \
-return vy;                                                         \
-}
-
-DEFINE_OP2(add, (x1 + x2));
-DEFINE_OP2(subtract, (x1 - x2));
-DEFINE_OP2(multiply, (x1 * x2));
-DEFINE_OP2(divide, (x1 / x2));
-
-DEFINE_OP2(divideApprox, (x1 * rcp(x2)));
-DEFINE_OP2(pow, (vecExp(vecLog(x1) * x2)));
-DEFINE_OP2(powApprox, (vecExpApprox(vecLogApprox(x1) * x2)));
-DEFINE_OP2(min, (min(x1, x2)));
-DEFINE_OP2(max, (max(x1, x2)));
-
-// ----------------------------------------------------------------
-// binary vector operators (float, float) -> float
-// from multiple-row and single-row operands
-
-#define DEFINE_OP2_MS(opName, opComputation)                           \
-template <size_t ROWS>                                               \
-inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
-const SignalBlockArray<1>& vx2)    \
-{                                                                    \
-SignalBlockArray<ROWS> vy;                                           \
-const float* px1 = vx1.getConstBuffer();                           \
-const float* px2 = vx2.getConstBuffer();                           \
-float* py1 = vy.getBuffer();                                       \
-size_t px2Offset = 0;                                              \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)          \
-{                                                                  \
-float4 x1 = loadFloat4(px1);                               \
-float4 x2 = loadFloat4(px2 + px2Offset);                   \
-auto y = (opComputation); \
-storeFloat4(py1, y);                                  \
-px1 += 4;                                     \
-px2Offset += 4;                               \
-px2Offset &= kFramesPerBlock - 1;                            \
-py1 += 4;                                     \
-}                                                                  \
-return vy;                                                         \
-}
-
-DEFINE_OP2_MS(add1, (x1 + x2));
-DEFINE_OP2_MS(subtract1, (x1 - x2));
-DEFINE_OP2_MS(multiply1, (x1 * x2));
-DEFINE_OP2_MS(divide1, (x1 / x2));
-
-DEFINE_OP2_MS(divideApprox1, (x1 * rcp(x2)));
-DEFINE_OP2_MS(pow1, (vecExp(vecLog(x1) * x2)));
-DEFINE_OP2_MS(powApprox1, (vecExpApprox(vecLogApprox(x1) * x2)));
-DEFINE_OP2_MS(min1, (min(x1, x2)));
-DEFINE_OP2_MS(max1, (max(x1, x2)));
-
-
-// ----------------------------------------------------------------
-// binary vector operators (int32, int32) -> int32
-
-#define DEFINE_OP2_INT32(opName, opComputation)                              \
-template <size_t ROWS>                                                     \
-inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArrayInt<ROWS>& vx1, \
-const SignalBlockArrayInt<ROWS>& vx2) \
-{                                                                          \
-SignalBlockArrayInt<ROWS> vy;                                              \
-const float* px1 = vx1.getConstBuffer();                                 \
-const float* px2 = vx2.getConstBuffer();                                 \
-float* py1 = vy.getBuffer();                                             \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)                \
-{                                                                        \
-int4 x1 = castFloatToInt(loadFloat4(px1));                               \
-int4 x2 = castFloatToInt(loadFloat4(px2));                               \
-auto y = castIntToFloat(opComputation); \
-storeFloat4(py1, y);                                  \
-px1 += 4;                                             \
-px2 += 4;                                             \
-py1 += 4;                                             \
-}                                                                        \
-return vy;                                                               \
-}
-
-DEFINE_OP2_INT32(subtractInt32, (x1 - x2));
-DEFINE_OP2_INT32(addInt32, (x1 + x2));
-
-// ----------------------------------------------------------------
-// ternary vector operators (float, float, float) -> float
-
-#define DEFINE_OP3(opName, opComputation)                              \
-template <size_t ROWS>                                               \
-inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
-const SignalBlockArray<ROWS>& vx2, \
-const SignalBlockArray<ROWS>& vx3) \
-{                                                                    \
-SignalBlockArray<ROWS> vy;                                           \
-const float* px1 = vx1.getConstBuffer();                           \
-const float* px2 = vx2.getConstBuffer();                           \
-const float* px3 = vx3.getConstBuffer();                           \
-float* py1 = vy.getBuffer();                                       \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)          \
-{                                                                  \
-float4 x1 = loadFloat4(px1);                               \
-float4 x2 = loadFloat4(px2);                               \
-float4 x3 = loadFloat4(px3);                               \
-auto y = (opComputation); \
-storeFloat4(py1, y);                                  \
-px1 += 4;                                     \
-px2 += 4;                                     \
-px3 += 4;                                     \
-py1 += 4;                                     \
-}                                                                  \
-return vy;                                                         \
-}
-
-DEFINE_OP3(lerp, (x1 + (x3 * (x2 - x1))));       // x = lerp(a, b, mix)
-DEFINE_OP3(inverseLerp, ((x3 - x1) / (x2 - x1)));  // mix = inverseLerp(a, b, x)
-
-DEFINE_OP3(clamp, (min(max(x1, x2), x3)));    // clamp(x, minBound, maxBound)
-DEFINE_OP3(within, (andBits(compareGreaterThanOrEqual(x1, x2), compareLessThan(x1, x3))));  // is x in the open interval [x2, x3) ?
-
-
-// ----------------------------------------------------------------
-// lerp two vectors with scalar float mixture (constant over each vector)
-
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> lerp(const SignalBlockArray<ROWS>& vx1, const SignalBlockArray<ROWS>& vx2,
-                                 float m)
-{
-  SignalBlockArray<ROWS> vy;
-  const float* px1 = vx1.getConstBuffer();
-  const float* px2 = vx2.getConstBuffer();
-  SignalBlock vmix(m);
-  float* py1 = vy.getBuffer();
-  const float4 vConstMix = set1Float(m);
-  
-  for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)
-  {
-    float4 x1 = loadFloat4(px1);
-    float4 x2 = loadFloat4(px2);
-    float4 mix = x1 + (vConstMix * (x2 - x1));
-    storeFloat4(py1, mix);
-    px1 += 4;
-    px2 += 4;
-    py1 += 4;
-  }
-  return vy;
-}
-
-
-// ----------------------------------------------------------------
-// vector operators (float) -> int
-
-#define DEFINE_OP1_F2I(opName, opComputation)                             \
-template <size_t ROWS>                                                  \
-inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1) \
-{                                                                       \
-SignalBlockArrayInt<ROWS> vy;                                           \
-const float* px1 = vx1.getConstBuffer();                              \
-float* py1 = vy.getBuffer();                                          \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)             \
-{                                                                     \
-float4 x = loadFloat4(px1);                                   \
-auto y = (opComputation); \
-storeFloat4((py1), y);                                   \
-px1 += 4;                                        \
-py1 += 4;                                          \
-}                                                                     \
-return vy;                                                            \
-}
-
-DEFINE_OP1_F2I(roundFloatToInt, (castIntToFloat(floatToIntRound(x))));
-DEFINE_OP1_F2I(truncateFloatToInt, (castIntToFloat(floatToIntTruncate(x))));
-
-// ----------------------------------------------------------------
-// vector operators (int) -> float
-
-#define DEFINE_OP1_I2F(opName, opComputation)                             \
-template <size_t ROWS>                                                  \
-inline SignalBlockArray<ROWS>(opName)(const SignalBlockArrayInt<ROWS>& vx1) \
-{                                                                       \
-SignalBlockArray<ROWS> vy;                                              \
-const float* px1 = vx1.getConstBuffer();                              \
-float* py1 = vy.getBuffer();                                          \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)             \
-{                                                                     \
-int4 x = castFloatToInt(loadFloat4(px1));                             \
-auto y = (opComputation); \
-storeFloat4((py1), y);                                   \
-px1 += 4;                                          \
-py1 += 4;                                        \
-}                                                                     \
-return vy;                                                            \
-}
-
-DEFINE_OP1_I2F(intToFloat, (intToFloat(x)));
-DEFINE_OP1_I2F(unsignedIntToFloat, (unsignedIntToFloat(x)));
-
-// ----------------------------------------------------------------
-// using the conversions above, define fractionalPart
-
-DEFINE_OP1(fractionalPart, (x - intToFloat(floatToIntTruncate(x))));
-
-// ----------------------------------------------------------------
-// binary float vector, float vector -> int vector operators
-
-#define DEFINE_OP2_FF2I(opName, opComputation)                            \
-template <size_t ROWS>                                                  \
-inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1, \
-const SignalBlockArray<ROWS>& vx2) \
-{                                                                       \
-SignalBlockArrayInt<ROWS> vy;                                           \
-const float* px1 = vx1.getConstBuffer();                              \
-const float* px2 = vx2.getConstBuffer();                              \
-float* py1 = vy.getBuffer();                                          \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)             \
-{                                                                     \
-float4 x1 = loadFloat4(px1);                                  \
-float4 x2 = loadFloat4(px2);                                  \
-auto y = (opComputation); \
-storeFloat4((py1), y);                                   \
-px1 += 4;                                        \
-px2 += 4;                                        \
-py1 += 4;                                          \
-}                                                                     \
-return vy;                                                            \
-}
-
-DEFINE_OP2_FF2I(equal, (compareEqual(x1, x2)));
-DEFINE_OP2_FF2I(notEqual, (compareNotEqual(x1, x2)));
-DEFINE_OP2_FF2I(greaterThan, (compareGreaterThan(x1, x2)));
-DEFINE_OP2_FF2I(greaterThanOrEqual, (compareGreaterThanOrEqual(x1, x2)));
-DEFINE_OP2_FF2I(lessThan, (compareLessThan(x1, x2)));
-DEFINE_OP2_FF2I(lessThanOrEqual, (compareLessThanOrEqual(x1, x2)));
-
-// ----------------------------------------------------------------
-// ternary operators float vector, float vector, int vector -> float vector
-
-#define DEFINE_OP3_FFI2F(opName, opComputation)                           \
-template <size_t ROWS>                                                  \
-inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1,    \
-const SignalBlockArray<ROWS>& vx2,    \
-const SignalBlockArrayInt<ROWS>& vx3) \
-{                                                                       \
-SignalBlockArray<ROWS> vy;                                              \
-const float* px1 = vx1.getConstBuffer();                              \
-const float* px2 = vx2.getConstBuffer();                              \
-const float* px3 = vx3.getConstBuffer();                              \
-float* py1 = vy.getBuffer();                                          \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)             \
-{                                                                     \
-float4 x1 = loadFloat4(px1);                                  \
-float4 x2 = loadFloat4(px2);                                  \
-int4 x3 = castFloatToInt(loadFloat4(px3));                            \
-auto y = (opComputation); \
-storeFloat4((py1), y);                                   \
-px1 += 4;                                        \
-px2 += 4;                                        \
-px3 += 4;                                        \
-py1 += 4;                                        \
-}                                                                     \
-return vy;                                                            \
-}
-
-DEFINE_OP3_FFI2F(select, (vecSelectFFI(x1, x2, x3)));  // bitwise select(resultIfTrue,
-// resultIfFalse, conditionMask)
-
-// ----------------------------------------------------------------
-// ternary operators int vector, int vector, int vector -> int vector
-
-#define DEFINE_OP3_III2I(opName, opComputation)                              \
-template <size_t ROWS>                                                     \
-inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArrayInt<ROWS>& vx1, \
-const SignalBlockArrayInt<ROWS>& vx2, \
-const SignalBlockArrayInt<ROWS>& vx3) \
-{                                                                          \
-SignalBlockArrayInt<ROWS> vy;                                              \
-const float* px1 = vx1.getConstBuffer();                                 \
-const float* px2 = vx2.getConstBuffer();                                 \
-const float* px3 = vx3.getConstBuffer();                                 \
-float* py1 = vy.getBuffer();                                             \
-for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)                \
-{                                                                        \
-int4 x1 = castFloatToInt(loadFloat4(px1));                               \
-int4 x2 = castFloatToInt(loadFloat4(px2));                               \
-int4 x3 = castFloatToInt(loadFloat4(px3));                               \
-auto y = castIntToFloat(opComputation); \
-storeFloat4((py1), y);                                   \
-px1 += 4;                                             \
-px2 += 4;                                             \
-px3 += 4;                                             \
-py1 += 4;                                             \
-}                                                                        \
-return vy;                                                               \
-}
-
-DEFINE_OP3_III2I(select, (vecSelectIII(x1, x2, x3)));  // bitwise select(resultIfTrue,
-// resultIfFalse, conditionMask)
-
-// ----------------------------------------------------------------
-// n-ary operators
-
-// add (a, b, c, ...)
-
-template <size_t ROWS>
-SignalBlockArray<ROWS> add(SignalBlockArray<ROWS> a)
-{
-  return a;
-}
-
-template <size_t ROWS, typename... Args>
-SignalBlockArray<ROWS> add(SignalBlockArray<ROWS> first, Args... args)
-{
-  // the + here is the operator defined using vecAdd() above
-  return first + add(args...);
-}
-
-// ----------------------------------------------------------------
-// constexpr definitions
-
-#define ConstSignalBlock constexpr SignalBlock
-#define ConstSignalBlockArray constexpr SignalBlockArray
-#define ConstSignalBlockInt constexpr SignalBlockInt
-#define ConstSignalBlockArrayInt constexpr SignalBlockArrayInt
-
-// ----------------------------------------------------------------
-// single-vector index and sequence generators
-
-constexpr float intToFloatCastFn(int i) { return (float)i; }
-constexpr int indexFn(int i) { return i; }
-
-inline ConstSignalBlock columnIndex() { return (make_array<kFramesPerBlock>(intToFloatCastFn)); }
-inline ConstSignalBlockInt columnIndexInt() { return (make_array<kIntsPerDSPVector>(indexFn)); }
-
-// return a linear sequence from start to end, where end will fall on the first
-// index of the next vector.
-inline SignalBlock rangeOpen(float start, float end)
-{
-  float interval = (end - start) / (kFramesPerBlock);
-  return columnIndex() * SignalBlock(interval) + SignalBlock(start);
-}
-
-// return a linear sequence from start to end, where end falls on the last index
-// of this vector.
-inline SignalBlock rangeClosed(float start, float end)
-{
-  float interval = (end - start) / (kFramesPerBlock - 1.f);
-  return columnIndex() * SignalBlock(interval) + SignalBlock(start);
-}
-
-// return a linear sequence from start to end, where start falls one sample
-// "before" this vector and end falls on the last index of this vector.
-inline SignalBlock interpolateDSPVectorLinear(float start, float end)
-{
-  float interval = (end - start) / (kFramesPerBlock);
-  return columnIndex() * SignalBlock(interval) + SignalBlock(start + interval);
 }
 
 // ----------------------------------------------------------------
@@ -689,45 +647,39 @@ inline SignalBlock interpolateDSPVectorLinear(float start, float end)
 
 inline float sum(const SignalBlock& x)
 {
-  const float* px1 = x.getConstBuffer();
+  const float4* x4 = reinterpret_cast<const float4*>(x.data());
   float sum = 0;
-  for (int n = 0; n < kSIMDVectorsPerBlock; ++n)
+  for (size_t i = 0; i < kFramesPerBlock / 4; ++i)
   {
-    sum += vecSumH(loadFloat4(px1));
-    px1 += 4;
+    sum += vecSumH(x4[i]);
   }
   return sum;
 }
 
-inline float mean(const SignalBlock& x)
-{
-  constexpr float kGain = 1.0f / kFramesPerBlock;
-  return sum(x) * kGain;
-}
-
 inline float max(const SignalBlock& x)
 {
-  const float* px1 = x.getConstBuffer();
+  const float4* x4 = reinterpret_cast<const float4*>(x.data());
   float fmax = FLT_MIN;
-  for (int n = 0; n < kSIMDVectorsPerBlock; ++n)
+  for (size_t i = 0; i < kFramesPerBlock / 4; ++i)
   {
-    fmax = ml::max(fmax, vecMaxH(loadFloat4(px1)));
-    px1 += 4;
+    fmax = std::max(fmax, vecMaxH(x4[i]));
   }
   return fmax;
 }
 
 inline float min(const SignalBlock& x)
 {
-  const float* px1 = x.getConstBuffer();
+  const float4* x4 = reinterpret_cast<const float4*>(x.data());
   float fmin = FLT_MAX;
-  for (int n = 0; n < kSIMDVectorsPerBlock; ++n)
+  for (size_t i = 0; i < kFramesPerBlock / 4; ++i)
   {
-    fmin = ml::min(fmin, vecMinH(loadFloat4(px1)));
-    px1 += 4;
+    fmin = std::min(fmin, vecMinH(x4[i]));
   }
   return fmin;
 }
+
+
+
 
 // ----------------------------------------------------------------
 // normalize
@@ -744,22 +696,36 @@ inline SignalBlockArray<ROWS> normalize(const SignalBlockArray<ROWS>& x1)
   return vy;
 }
 
+
 // ----------------------------------------------------------------
 // row-wise operations and conversions
 
 // for the given output ROWS and given an input SignalBlockArray with N rows,
 // repeat all the input rows enough times to fill the output SignalBlockArray.
 template <size_t ROWS, size_t N>
-inline SignalBlockArray<ROWS * N> repeatRows(const SignalBlockArray<N>& x1)
+inline SignalBlockArray<ROWS * N> repeatRows(const SignalBlockArray<N>& x)
 {
-  SignalBlockArray<ROWS * N> vy;
-  for (int j = 0, k = 0; j < ROWS * N; ++j)
+  SignalBlockArray<ROWS * N> result;
+  for (size_t j = 0, k = 0; j < ROWS * N; ++j)
   {
-    vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(k));
+    result[j] = x[k];
     if (++k >= N) k = 0;
   }
-  return vy;
+  return result;
 }
+
+// Overload for repeating a single SignalBlock
+template <size_t ROWS>
+inline SignalBlockArray<ROWS> repeatRows(const SignalBlock& x)
+{
+  SignalBlockArray<ROWS> result;
+  for (size_t j = 0; j < ROWS; ++j)
+  {
+    result[j] = x;
+  }
+  return result;
+}
+
 
 // for the given ROWS and given an input SignalBlockArray x with N rows,
 // stretch x by repeating rows as necessary to make an output SignalBlockArray
@@ -767,13 +733,13 @@ inline SignalBlockArray<ROWS * N> repeatRows(const SignalBlockArray<N>& x1)
 template <size_t ROWS, size_t N>
 inline SignalBlockArray<ROWS> stretchRows(const SignalBlockArray<N>& x)
 {
-  SignalBlockArray<ROWS> vy;
-  for (int j = 0; j < ROWS; ++j)
+  SignalBlockArray<ROWS> result;
+  for (size_t j = 0; j < ROWS; ++j)
   {
-    int k = roundf((j * (N - 1.f)) / (ROWS - 1.f));
-    vy.setRowVectorUnchecked(j, x.getRowVectorUnchecked(k));
+    size_t k = roundf((j * (N - 1.f)) / (ROWS - 1.f));
+    result[j] = x[k];
   }
-  return vy;
+  return result;
 }
 
 // for the given ROWS and given an input SignalBlockArray x with N rows,
@@ -783,13 +749,13 @@ template <size_t ROWS, size_t N>
 inline SignalBlockArray<ROWS> zeroPadRows(const SignalBlockArray<N>& x)
 {
   // default constructor currently zero-fills
-  SignalBlockArray<ROWS> vy;
-  constexpr size_t rowsToCopy = min(ROWS, N);
-  for (int j = 0; j < rowsToCopy; ++j)
+  SignalBlockArray<ROWS> result;
+  constexpr size_t rowsToCopy = (ROWS < N) ? ROWS : N;
+  for (size_t j = 0; j < rowsToCopy; ++j)
   {
-    vy.setRowVectorUnchecked(j, x.getRowVectorUnchecked(j));
+    result[j] = x[j];
   }
-  return vy;
+  return result;
 }
 
 // Shift the array down by the number of rows given in rowsToShift.
@@ -798,21 +764,21 @@ inline SignalBlockArray<ROWS> zeroPadRows(const SignalBlockArray<N>& x)
 template <size_t ROWS>
 inline SignalBlockArray<ROWS> shiftRows(const SignalBlockArray<ROWS>& x, int rowsToShift)
 {
-  SignalBlockArray<ROWS> vy;
+  SignalBlockArray<ROWS> result;
   int k = -rowsToShift;
-  for (int j = 0; j < ROWS; ++j)
+  for (size_t j = 0; j < ROWS; ++j)
   {
-    if (within(k, 0, static_cast<int>(ROWS)))
+    if (k >= 0 && k < static_cast<int>(ROWS))
     {
-      vy.setRowVectorUnchecked(j, x.getRowVectorUnchecked(k));
+      result[j] = x[k];
     }
     else
     {
-      vy.setRowVectorUnchecked(j, 0.f);
+      result[j] = SignalBlock(0.f);
     }
     ++k;
   }
-  return vy;
+  return result;
 }
 
 // Rotate the array down by the number of rows given in rowsToRotate.
@@ -821,16 +787,16 @@ inline SignalBlockArray<ROWS> shiftRows(const SignalBlockArray<ROWS>& x, int row
 template <size_t ROWS>
 inline SignalBlockArray<ROWS> rotateRows(const SignalBlockArray<ROWS>& x, int rowsToRotate)
 {
-  SignalBlockArray<ROWS> vy;
+  SignalBlockArray<ROWS> result;
   
   // get start index k to which row 0 is mapped
   int k = modulo(-rowsToRotate, ROWS);
-  for (int j = 0; j < ROWS; ++j)
+  for (size_t j = 0; j < ROWS; ++j)
   {
-    vy.setRowVectorUnchecked(j, x.getRowVectorUnchecked(k));
-    if (++k >= ROWS) k = 0;
+    result[j] = x[k];
+    if (++k >= static_cast<int>(ROWS)) k = 0;
   }
-  return vy;
+  return result;
 }
 
 // ----------------------------------------------------------------
@@ -839,205 +805,107 @@ inline SignalBlockArray<ROWS> rotateRows(const SignalBlockArray<ROWS>& x, int ro
 // concatRows with two arguments: append one SignalBlockArray after another.
 template <size_t ROWSA, size_t ROWSB>
 inline SignalBlockArray<ROWSA + ROWSB> concatRows(const SignalBlockArray<ROWSA>& x1,
-                                                const SignalBlockArray<ROWSB>& x2)
+                                                  const SignalBlockArray<ROWSB>& x2)
 {
-  SignalBlockArray<ROWSA + ROWSB> vy;
-  for (int j = 0; j < ROWSA; ++j)
+  SignalBlockArray<ROWSA + ROWSB> result;
+  for (size_t j = 0; j < ROWSA; ++j)
   {
-    vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j));
+    result[j] = x1[j];
   }
-  for (int j = 0; j < ROWSB; ++j)
+  for (size_t j = 0; j < ROWSB; ++j)
   {
-    vy.setRowVectorUnchecked(j + ROWSA, x2.getRowVectorUnchecked(j));
+    result[j + ROWSA] = x2[j];
   }
-  return vy;
+  return result;
 }
 
-// concatRows with three arguments.
-template <size_t ROWSA, size_t ROWSB, size_t ROWSC>
-inline SignalBlockArray<ROWSA + ROWSB + ROWSC> concatRows(const SignalBlockArray<ROWSA>& x1,
-                                                        const SignalBlockArray<ROWSB>& x2,
-                                                        const SignalBlockArray<ROWSC>& x3)
-{
-  SignalBlockArray<ROWSA + ROWSB + ROWSC> vy;
-  for (int j = 0; j < ROWSA; ++j)
-  {
-    vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j));
-  }
-  for (int j = 0; j < ROWSB; ++j)
-  {
-    vy.setRowVectorUnchecked(j + ROWSA, x2.getRowVectorUnchecked(j));
-  }
-  for (int j = 0; j < ROWSC; ++j)
-  {
-    vy.setRowVectorUnchecked(j + ROWSA + ROWSB, x3.getRowVectorUnchecked(j));
-  }
-  return vy;
-}
-
-// NOTE: of course all this repeated code looks bad, but
-// i'm not sure there is a reasonable way to generalize this in C++11. The problem is determining
-// the number of rows in the output type. It should be possible with return type deduction (auto) in
-// C++14.
-// TODO variadic templates can expand into a template argument list, so maybe this IS possible
-// by wrapping the concatRows template in another template - give it a try.
-
-// concatRows with four arguments.
-template <size_t ROWSA, size_t ROWSB, size_t ROWSC, size_t ROWSD>
-inline SignalBlockArray<ROWSA + ROWSB + ROWSC + ROWSD> concatRows(const SignalBlockArray<ROWSA>& x1,
-                                                                const SignalBlockArray<ROWSB>& x2,
-                                                                const SignalBlockArray<ROWSC>& x3,
-                                                                const SignalBlockArray<ROWSD>& x4)
-{
-  SignalBlockArray<ROWSA + ROWSB + ROWSC + ROWSD> vy;
-  for (int j = 0; j < ROWSA; ++j)
-  {
-    vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j));
-  }
-  for (int j = 0; j < ROWSB; ++j)
-  {
-    vy.setRowVectorUnchecked(j + ROWSA, x2.getRowVectorUnchecked(j));
-  }
-  for (int j = 0; j < ROWSC; ++j)
-  {
-    vy.setRowVectorUnchecked(j + ROWSA + ROWSB, x3.getRowVectorUnchecked(j));
-  }
-  for (int j = 0; j < ROWSD; ++j)
-  {
-    vy.setRowVectorUnchecked(j + ROWSA + ROWSB + ROWSC, x4.getRowVectorUnchecked(j));
-  }
-  return vy;
-}
 // Rotate the elements of each row of a SignalBlockArray by one element left.
 // The first element of each row is moved to the end
 template <size_t ROWS>
-inline ml::SignalBlockArray<ROWS> rotateLeft(const ml::SignalBlockArray<ROWS>& x)
+inline SignalBlockArray<ROWS> rotateLeft(const SignalBlockArray<ROWS>& x)
 {
-  ml::SignalBlockArray<ROWS> vy;
+  SignalBlockArray<ROWS> result;
   
-  for (size_t row = 0; row < ROWS; row++)
+  for (size_t row = 0; row < ROWS; ++row)
   {
-    const float* px1 = x.getConstBuffer() + (row * kFramesPerBlock);
-    const float* px2 = px1 + 4;
-    float* py1 = vy.getBuffer() + (row * kFramesPerBlock);
+    const float4* x4 = reinterpret_cast<const float4*>(x[row].data());
+    float4* r4 = reinterpret_cast<float4*>(result[row].data());
     
-    for (int n = 0; n < kSIMDVectorsPerBlock - 1; ++n)
+    // Process all but the last float4
+    for (size_t n = 0; n < kFramesPerBlock / 4 - 1; ++n)
     {
-      auto y = vecShuffleLeft(loadFloat4(px1), loadFloat4(px2));
-      storeFloat4(py1, y);
-      
-      px1 += 4;
-      px2 += 4;
-      py1 += 4;
+      r4[n] = vecShuffleLeft(x4[n], x4[n + 1]);
     }
     
-    px2 = x.getConstBuffer() + (row * kFramesPerBlock);
-    
-    auto y = vecShuffleLeft(loadFloat4(px1), loadFloat4(px2));
-    storeFloat4(py1, y);
+    // Wrap around: last float4 uses first float4 for right neighbor
+    r4[kFramesPerBlock / 4 - 1] = vecShuffleLeft(x4[kFramesPerBlock / 4 - 1], x4[0]);
   }
   
-  return vy;
+  return result;
 }
 
 // Rotate the elements of each row of a SignalBlockArray by one element right.
 // The last element of each row is moved to the start
 template <size_t ROWS>
-inline ml::SignalBlockArray<ROWS> rotateRight(const ml::SignalBlockArray<ROWS>& x)
+inline SignalBlockArray<ROWS> rotateRight(const SignalBlockArray<ROWS>& x)
 {
-  ml::SignalBlockArray<ROWS> vy;
+  SignalBlockArray<ROWS> result;
   
-  for (size_t row = 0; row < ROWS; row++)
+  for (size_t row = 0; row < ROWS; ++row)
   {
-    const float* px1 = x.getConstBuffer() + (row * kFramesPerBlock);
-    const float* px2 = px1 + 4;
-    float* py1 = vy.getBuffer() + (row * kFramesPerBlock) + 4;
+    const float4* x4 = reinterpret_cast<const float4*>(x[row].data());
+    float4* r4 = reinterpret_cast<float4*>(result[row].data());
     
-    for (int n = 0; n < kSIMDVectorsPerBlock - 1; ++n)
+    // First output float4 wraps around with last input float4
+    r4[0] = vecShuffleRight(x4[kFramesPerBlock / 4 - 1], x4[0]);
+    
+    // Process remaining float4s
+    for (size_t n = 0; n < kFramesPerBlock / 4 - 1; ++n)
     {
-      auto y = vecShuffleRight(loadFloat4(px1), loadFloat4(px2));
-      storeFloat4(py1, y);
-      
-      px1 += 4;
-      px2 += 4;
-      py1 += 4;
+      r4[n + 1] = vecShuffleRight(x4[n], x4[n + 1]);
     }
-    
-    px2 = x.getConstBuffer() + (row * kFramesPerBlock);
-    py1 = vy.getBuffer() + (row * kFramesPerBlock);
-    
-    auto y = vecShuffleRight(loadFloat4(px1), loadFloat4(px2));
-    storeFloat4(py1, y);
   }
   
-  return vy;
-}
-// shuffle two DSPVectorArrays, alternating x1 to even rows of result and x2 to
-// odd rows. if the sources are different sizes, the excess rows are all
-// appended to the destination after shuffling is done.
-template <size_t ROWSA, size_t ROWSB>
-inline SignalBlockArray<ROWSA + ROWSB> shuffleRows(const SignalBlockArray<ROWSA> x1,
-                                                 const SignalBlockArray<ROWSB> x2)
-{
-  SignalBlockArray<ROWSA + ROWSB> vy;
-  int ja = 0;
-  int jb = 0;
-  int jy = 0;
-  while ((ja < ROWSA) || (jb < ROWSB))
-  {
-    if (ja < ROWSA)
-    {
-      vy.setRowVectorUnchecked(jy, x1.getRowVectorUnchecked(ja));
-      ja++;
-      jy++;
-    }
-    if (jb < ROWSB)
-    {
-      vy.setRowVectorUnchecked(jy, x2.getRowVectorUnchecked(jb));
-      jb++;
-      jy++;
-    }
-  }
-  return vy;
+  return result;
 }
 
 // ----------------------------------------------------------------
 // separating rows
 
 template <size_t ROWS>
-inline SignalBlockArray<(ROWS + 1) / 2> evenRows(const SignalBlockArray<ROWS>& x1)
+inline SignalBlockArray<(ROWS + 1) / 2> evenRows(const SignalBlockArray<ROWS>& x)
 {
-  SignalBlockArray<(ROWS + 1) / 2> vy;
-  for (int j = 0; j < (ROWS + 1) / 2; ++j)
+  SignalBlockArray<(ROWS + 1) / 2> result;
+  for (size_t j = 0; j < (ROWS + 1) / 2; ++j)
   {
-    vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j * 2));
+    result[j] = x[j * 2];
   }
-  return vy;
+  return result;
 }
 
 template <size_t ROWS>
-inline SignalBlockArray<ROWS / 2> oddRows(const SignalBlockArray<ROWS>& x1)
+inline SignalBlockArray<ROWS / 2> oddRows(const SignalBlockArray<ROWS>& x)
 {
-  SignalBlockArray<ROWS / 2> vy;
-  for (int j = 0; j < ROWS / 2; ++j)
+  SignalBlockArray<ROWS / 2> result;
+  for (size_t j = 0; j < ROWS / 2; ++j)
   {
-    vy.setRowVectorUnchecked(j, x1.getRowVectorUnchecked(j * 2 + 1));
+    result[j] = x[j * 2 + 1];
   }
-  return vy;
+  return result;
 }
 
-// return the SignalBlockArray consisting of rows [A-B) of the input.
+// return the SignalBlockArray consisting of rows [A, B) of the input.
 template <size_t A, size_t B, size_t ROWS>
 inline SignalBlockArray<B - A> separateRows(const SignalBlockArray<ROWS>& x)
 {
   static_assert(B <= ROWS, "separateRows: range out of bounds!");
   static_assert(A < ROWS, "separateRows: range out of bounds!");
-  SignalBlockArray<B - A> vy;
-  for (int j = A; j < B; ++j)
+  SignalBlockArray<B - A> result;
+  for (size_t j = A; j < B; ++j)
   {
-    vy.setRowVectorUnchecked(j - A, x.getRowVectorUnchecked(j));
+    result[j - A] = x[j];
   }
-  return vy;
+  return result;
 }
 
 // ----------------------------------------------------------------
@@ -1046,98 +914,93 @@ inline SignalBlockArray<B - A> separateRows(const SignalBlockArray<ROWS>& x)
 template <size_t ROWS>
 inline SignalBlock addRows(const SignalBlockArray<ROWS>& x)
 {
-  SignalBlock vy{0.f};
-  
-  for (int j = 0; j < ROWS; ++j)
+  SignalBlock result(0.f);
+  for (size_t j = 0; j < ROWS; ++j)
   {
-    vy = add(vy, x.getRowVectorUnchecked(j));
+    result = add(result, x[j]);
   }
-  return vy;
+  return result;
 }
 
 // ----------------------------------------------------------------
-// rowIndex - returns a SignalBlock of j rows, each row filled
+// rowIndex - returns a SignalBlockArray of ROWS rows, each row filled
 // with the index of its row
 
 template <size_t ROWS>
 inline SignalBlockArray<ROWS> rowIndex()
 {
-  SignalBlockArray<ROWS> y;
-  for (int j = 0; j < ROWS; ++j)
+  SignalBlockArray<ROWS> result;
+  for (size_t j = 0; j < ROWS; ++j)
   {
-    y.setRowVectorUnchecked(j, SignalBlock(j));
+    result[j] = SignalBlock(static_cast<float>(j));
   }
-  return y;
+  return result;
 }
-
-// ----------------------------------------------------------------
-// columnIndex<n> - shorthand for repeatRows<n>(columnIndex())
-
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> columnIndex()
-{
-  return repeatRows<ROWS>(SignalBlock(make_array<kFramesPerBlock>(intToFloatCastFn)));
-}
-
-// TODO variadic splitRows(bundleSIg, outputRow1, outputRow2, ... )
 
 // ----------------------------------------------------------------
 // for testing
 
-template <size_t ROWS>
-inline std::ostream& operator<<(std::ostream& out, const SignalBlockArray<ROWS>& vecArray)
-{
-  //    if(ROWS > 1) out << "[   ";
-  for (int v = 0; v < ROWS; ++v)
-  {
-    //  if(ROWS > 1) if(v > 0) out << "\n    ";
-    if (ROWS > 1) out << "\n    v" << v << ": ";
-    out << "[";
-    for (int i = 0; i < kFramesPerBlock; ++i)
-    {
-      out << vecArray[v * kFramesPerBlock + i] << " ";
-    }
-    out << "] ";
-  }
-  //    if(ROWS > 1) out << "]";
-  return out;
-}
-
-template <size_t ROWS>
-inline std::ostream& operator<<(std::ostream& out, const SignalBlockArrayInt<ROWS>& vecArray)
-{
-  out << "@" << std::hex << reinterpret_cast<unsigned long>(&vecArray) << std::dec << "\n ";
-  //    if(ROWS > 1) out << "[   ";
-  for (int v = 0; v < ROWS; ++v)
-  {
-    if (ROWS > 1)
-      if (v > 0) out << "\n    ";
-    if (ROWS > 1) out << "v" << v << ": ";
-    out << "[";
-    for (int i = 0; i < kIntsPerDSPVector; ++i)
-    {
-      out << vecArray[v * kIntsPerDSPVector + i] << " ";
-    }
-    out << "] ";
-  }
-  //    if(ROWS > 1) out << "]";
-  return out;
-}
-
 inline bool validate(const SignalBlock& x)
 {
-  bool r = true;
-  for (int n = 0; n < kFramesPerBlock; ++n)
+  for (size_t n = 0; n < kFramesPerBlock; ++n)
   {
-    const float maxUsefulValue = 1e8;
+    constexpr float maxUsefulValue = 1e12f;
     if (ml::isNaN(x[n]) || (fabs(x[n]) > maxUsefulValue))
     {
       std::cout << "error: " << x[n] << " at index " << n << "\n";
       std::cout << x << "\n";
-      r = false;
-      break;
+      return false;
     }
   }
-  return r;
+  return true;
 }
+
+
+// ----------------------------------------------------------------
+// constexpr array construction helpers
+
+constexpr float intToFloatCastFn(int i) { return static_cast<float>(i); }
+constexpr int indexFn(int i) { return i; }
+
+constexpr SignalBlock columnIndex() {
+  return SignalBlock(std::array<float, kFramesPerBlock>{
+    make_array<kFramesPerBlock>(intToFloatCastFn)
+  });
+}
+
+template<size_t N>
+constexpr SignalBlockArray<N> columnIndex() {
+  return repeatRows<N>(columnIndex());
+}
+
+constexpr SignalBlockInt columnIndexInt() {
+  return SignalBlockInt(std::array<int32_t, kFramesPerBlock>{
+    make_array<kFramesPerBlock>(indexFn)
+  });
+}
+
+// These can't easily be constexpr because they use arithmetic operators
+// which rely on SIMD. Keep them as runtime functions:
+inline SignalBlock rangeOpen(float start, float end)
+{
+  float interval = (end - start) / kFramesPerBlock;
+  return columnIndex() * SignalBlock(interval) + SignalBlock(start);
+}
+
+inline SignalBlock rangeClosed(float start, float end)
+{
+  float interval = (end - start) / (kFramesPerBlock - 1.f);
+  return columnIndex() * SignalBlock(interval) + SignalBlock(start);
+}
+
+inline SignalBlock interpolateDSPVectorLinear(float start, float end)
+{
+  float interval = (end - start) / kFramesPerBlock;
+  return columnIndex() * SignalBlock(interval) + SignalBlock(start + interval);
+}
+
+
+
+
+
 }  // namespace ml
