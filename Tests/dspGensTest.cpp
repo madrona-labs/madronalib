@@ -4,7 +4,7 @@
 
 // a unit test made using the Catch framework in catch.hpp / tests.cpp.
 
-#if 0 // TEMP
+
 #include "catch.hpp"
 #include "MLTestUtils.h"
 #include "MLDSPGens.h"
@@ -47,5 +47,5 @@ TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
   
 }
 
-#endif
+
 

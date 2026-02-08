@@ -72,7 +72,8 @@ constexpr auto make_array(Function f)
 
 // ----------------------------------------------------------------
 // AlignedArray
-//
+// array type on which we define all of the underlying SIMD operators.
+
 template<typename T, size_t N>
 struct alignas(kSIMDAlignBytes) AlignedArray
 {
@@ -85,10 +86,10 @@ struct alignas(kSIMDAlignBytes) AlignedArray
   AlignedArray<T, N>(T val) { fill(val); }
   AlignedArray<T, N>() { fill(T(0.f)); } // TODO: find bugs and remove default fill!
   
-  // Constructor from index->value function
-  template<typename FN>
-  constexpr AlignedArray(FN f) : dataAligned(make_array<N>(f)) {}
-
+  // constexpr constructor taking a function(size_t -> T)
+  constexpr AlignedArray(T (*fn)(size_t))
+  : AlignedArray(make_array<N>(fn)) {}
+  
   const T& operator[](size_t i) const { return dataAligned[i]; }
   T& operator[](size_t i) { return dataAligned[i]; }
   const T* data() const { return dataAligned.data(); }
@@ -149,63 +150,98 @@ inline std::ostream& operator<<(std::ostream& out, const AlignedArray<T, N>& aa)
   return out;
 }
 
+// ----------------------------------------------------------------
+// SignalBlockBase - common base for signal types with kFramesPerBlock frames.
+
+template<typename T, size_t N>
+struct SignalBlockBase : public AlignedArray<T, N * kFramesPerBlock>
+{
+  using Base = AlignedArray<T, N * kFramesPerBlock>;
+  using scalar_type = T;
+  static constexpr size_t height = N;
+  static constexpr size_t strideInElems = 1; 
+  
+  SignalBlockBase() : Base() {}
+  SignalBlockBase(T val) : Base(val) {}
+  constexpr SignalBlockBase(const Base& b) : Base(b) {}
+  
+  SignalBlockBase<T, 1> getRow(size_t i) const {
+    return SignalBlockBase<T, 1>(this->data() + i * kFramesPerBlock);
+  }
+  
+  void setRow(size_t i, const SignalBlockBase<T, 1>& block) {
+    std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
+  }
+  
+  T* rowPtr(size_t i) {
+    return this->data() + i * kFramesPerBlock;
+  }
+  
+  const T* rowPtr(size_t i) const {
+    return this->data() + i * kFramesPerBlock;
+  }
+  
+  struct RowView {
+    T* _data;
+    
+    T& operator[](size_t i) { return _data[i]; }
+    const T& operator[](size_t i) const { return _data[i]; }
+    
+    RowView& operator+=(const SignalBlockBase<T, 1>& other) {
+      for (size_t i = 0; i < kFramesPerBlock; ++i) {
+        _data[i] += other[i];
+      }
+      return *this;
+    }
+    
+    RowView& operator-=(const SignalBlockBase<T, 1>& other) {
+      for (size_t i = 0; i < kFramesPerBlock; ++i) {
+        _data[i] -= other[i];
+      }
+      return *this;
+    }
+    
+    RowView& operator*=(const SignalBlockBase<T, 1>& other) {
+      for (size_t i = 0; i < kFramesPerBlock; ++i) {
+        _data[i] *= other[i];
+      }
+      return *this;
+    }
+    
+    operator SignalBlockBase<T, 1>() const {
+      return SignalBlockBase<T, 1>(_data);
+    }
+  };
+  
+  RowView row(size_t i) {
+    return RowView{this->data() + i * kFramesPerBlock};
+  }
+};
+
 
 // ----------------------------------------------------------------
-// SignalBlockArray<N>
+// SignalBlockArray<N> and int version
 // N rows of kFramesPerBlock floats, time -> horizontal
 // T::scalar_type will let us write templates on SignalBlock, SignalBlock4, ...
 // and T::time_step or similar for writing filter functions
 // we can also add things like using upsampler_type = Upsampler, and so on
 
-template<size_t N>
-struct SignalBlockArray : public AlignedArray<float, N * kFramesPerBlock>
-{
-  using Base = AlignedArray<float, N * kFramesPerBlock>;
-  using scalar_type = float;
-  static constexpr size_t height = N;
-  static constexpr size_t strideInElems = 1;
-  
-  SignalBlockArray() : Base() {}
-  SignalBlockArray(float val) : Base(val) {}
-  constexpr SignalBlockArray(const Base& b) : Base(b) {}
-  
-  SignalBlockArray<1> getRow(size_t i) const {
-    return SignalBlockArray<1>(this->data() + i * kFramesPerBlock);
-  }
-  void setRow(size_t i, const SignalBlockArray<1>& block) {
-    std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
-  }
-  
-  float* rowPtr(size_t i) {return(this->data() + i * kFramesPerBlock);}
-  const float* rowPtr(size_t i) const {return(this->data() + i * kFramesPerBlock);}
 
+template<size_t N>
+struct SignalBlockArray : public SignalBlockBase<float, N>
+{
+  using Base = SignalBlockBase<float, N>;
+  using Base::Base;
+};
+
+template<size_t N>
+struct SignalBlockArrayInt : public SignalBlockBase<int32_t, N>
+{
+  using Base = SignalBlockBase<int32_t, N>;
+  using Base::Base;
 };
 
 using SignalBlock = SignalBlockArray<1>;
-
-template<size_t N>
-struct SignalBlockArrayInt : public AlignedArray<int32_t, N * kFramesPerBlock>
-{
-  using Base = AlignedArray<int32_t, N * kFramesPerBlock>;
-  using scalar_type = int32_t;
-  static constexpr size_t height = N;
-  static constexpr size_t strideInElems = 1;
-  
-  SignalBlockArrayInt() : Base() {}
-  SignalBlockArrayInt(int32_t val) : Base(val) {}
-  constexpr SignalBlockArrayInt(const Base& b) : Base(b) {}
-  
-  SignalBlockArrayInt<1> getRow(size_t i) const {
-    return SignalBlockArrayInt<1>(this->data() + i * kFramesPerBlock);
-  }
-  void setRow(size_t i, const SignalBlockArrayInt<1>& block) {
-    std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
-  }
-  
-  int32_t* rowPtr(size_t i) {return(this->data() + i * kFramesPerBlock);}
-  const int32_t* rowPtr(size_t i) const {return(this->data() + i * kFramesPerBlock);}
-};
-
 using SignalBlockInt = SignalBlockArrayInt<1>;
 
 
@@ -213,36 +249,21 @@ using SignalBlockInt = SignalBlockArrayInt<1>;
 // SignalBlock4Array<N>
 // N big "rows" of kFramesPerBlock/4 4x4 blocks of samples containing float4 signals.
 // time -> vertical within each 4x4 block, then to next block every 4 frames.
-// A0 B0 C0 D0 A4 B4 C4 D4 ...
-// A1 B1 C1 D1 A5 B5 C5 D5
-// A2 B2 C2 D2 A6 B6 C6 D6
-// A3 B3 C3 D3 A7 B7 C7 D7
+// A0 B0 C0 D0   A4 B4 C4 D4 ...
+// A1 B1 C1 D1   A5 B5 C5 D5
+// A2 B2 C2 D2   A6 B6 C6 D6
+// A3 B3 C3 D3   A7 B7 C7 D7
 //
 // the data are arranged like this so that transposing each 4x4 block gives
 // us four SignalBlocks, and vice versa.
+//
 
 template<size_t N>
-struct SignalBlock4Array : public AlignedArray<float4, N * kFramesPerBlock>
+struct SignalBlock4Array : public SignalBlockBase<float4, N>
 {
-  using Base = AlignedArray<float4, N * kFramesPerBlock>;
-  using scalar_type = float4;
-  static constexpr size_t height = 4;
-  static constexpr size_t strideInElems = kFramesPerBlock/height;
-  
-  SignalBlock4Array() : Base() {}
-  SignalBlock4Array(float4 val) : Base(val) {}
-  SignalBlock4Array(const Base& b) : Base(b) {}
-    
-  SignalBlock4Array<1> getRow(size_t i) const {
-    return SignalBlock4Array<1>(this->data() + i * kFramesPerBlock);
-  }
-  void setRow(size_t i, const SignalBlock4Array<1>& block) {
-    std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
-  }
-  float4* rowPtr(size_t i) {return(this->data() + i * kFramesPerBlock);}
-  const float4* rowPtr(size_t i) const {return(this->data() + i * kFramesPerBlock);}
+  using Base = SignalBlockBase<float4, N>;
+  using Base::Base;
 };
-
 
 using SignalBlock4 = SignalBlock4Array<1>;
 
@@ -658,7 +679,7 @@ inline float min(const SignalBlock& x)
 }
 
 // ----------------------------------------------------------------
-// normalize
+// normalize each row
 
 template <size_t ROWS>
 inline SignalBlockArray<ROWS> normalize(const SignalBlockArray<ROWS>& x)
@@ -671,7 +692,6 @@ inline SignalBlockArray<ROWS> normalize(const SignalBlockArray<ROWS>& x)
   }
   return result;
 }
-
 
 // ----------------------------------------------------------------
 // row-wise operations and conversions
@@ -927,25 +947,6 @@ inline SignalBlockArray<ROWS> rowIndex()
 }
 
 // ----------------------------------------------------------------
-// for testing
-
-inline bool validate(const SignalBlock& x)
-{
-  for (size_t n = 0; n < kFramesPerBlock; ++n)
-  {
-    constexpr float maxUsefulValue = 1e12f;
-    if (ml::isNaN(x[n]) || (fabs(x[n]) > maxUsefulValue))
-    {
-      std::cout << "error: " << x[n] << " at index " << n << "\n";
-      std::cout << x << "\n";
-      return false;
-    }
-  }
-  return true;
-}
-
-
-// ----------------------------------------------------------------
 // constexpr array construction helpers
 
 constexpr float intToFloatCastFn(int i) { return static_cast<float>(i); }
@@ -986,6 +987,25 @@ inline SignalBlock interpolateDSPVectorLinear(float start, float end)
 {
   float interval = (end - start) / kFramesPerBlock;
   return columnIndex() * SignalBlock(interval) + SignalBlock(start + interval);
+}
+
+
+// ----------------------------------------------------------------
+// for testing
+
+inline bool validate(const SignalBlock& x)
+{
+  for (size_t n = 0; n < kFramesPerBlock; ++n)
+  {
+    constexpr float maxUsefulValue = 1e12f;
+    if (ml::isNaN(x[n]) || (fabs(x[n]) > maxUsefulValue))
+    {
+      std::cout << "error: " << x[n] << " at index " << n << "\n";
+      std::cout << x << "\n";
+      return false;
+    }
+  }
+  return true;
 }
 
 

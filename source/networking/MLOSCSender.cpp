@@ -48,7 +48,7 @@ void OSCSender::sendDataToSocket() { mSocket->Send(mStream->Data(), mStream->Siz
  osc::OutboundPacketStream& operator<<(osc::OutboundPacketStream& stream, const ml::Matrix& sig)
  {
  stream << sig.getWidth() << sig.getHeight() << sig.getDepth() << static_cast<int>(sig.getRate());
- stream << osc::Blob(sig.getConstBuffer(), sig.getSize() * sizeof(float));
+ stream << osc::Blob(sig.data(), sig.getSize() * sizeof(float));
  return stream;
  }
  */

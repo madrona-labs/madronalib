@@ -2,7 +2,7 @@
 // Created by Randy Jones on 2/27/25.
 //
 
-#if 0 // TEMP
+
 #include "MLAudioContext.h"
 
 namespace ml
@@ -141,5 +141,3 @@ void AudioContext::updateTime(const double ppqPos, const double bpmIn, bool isPl
 }
 
 }  // namespace ml
-#endif
-

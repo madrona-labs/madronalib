@@ -170,8 +170,8 @@ void processFDTD(AudioContext* ctx, void *untypedState)
   auto FDTDOutput = processFDTDModel(ticks, freq/kSampleRate, state);
 
   // write the main outputs
-  ctx->outputs[0] = FDTDOutput.row(0);
-  ctx->outputs[1] = FDTDOutput.row(1);
+  ctx->outputs[0] = FDTDOutput.getRow(0);
+  ctx->outputs[1] = FDTDOutput.getRow(1);
 }
 
 int main()

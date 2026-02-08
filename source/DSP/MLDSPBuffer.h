@@ -8,7 +8,6 @@
 // the lockfree algorithm.
 
 
-#if 0 // TEMP
 #pragma once
 
 #include <algorithm>
@@ -190,7 +189,7 @@ class DSPBuffer
     }
     else
     {
-      const float *pSrc = srcVec.getConstBuffer();
+      const float *pSrc = srcVec.data();
       std::copy(pSrc, pSrc + dr.size1, dr.p1);
       std::copy(pSrc + dr.size1, pSrc + dr.size1 + dr.size2, dr.p2);
       writeIndex_.store(advanceDistanceIndex(currentWriteIndex, samples),
@@ -243,7 +242,7 @@ class DSPBuffer
     }
     else
     {
-      float *pDest = destVec.getBuffer();
+      float *pDest = destVec.data();
       std::copy(dr.p1, dr.p1 + dr.size1, pDest);
       std::copy(dr.p2, dr.p2 + dr.size2, pDest + dr.size1);
       readIndex_.store(advanceDistanceIndex(currentReadIndex, samples), std::memory_order_release);
@@ -269,7 +268,7 @@ class DSPBuffer
     }
     else
     {
-      float *pDest = destVec.getBuffer();
+      float *pDest = destVec.data();
       std::copy(dr.p1, dr.p1 + dr.size1, pDest);
       std::copy(dr.p2, dr.p2 + dr.size2, pDest + dr.size1);
       readIndex_.store(advanceDistanceIndex(currentReadIndex, samples), std::memory_order_release);
@@ -386,6 +385,3 @@ class DSPBuffer
 };
 
 }  // namespace ml
-
-#endif
-

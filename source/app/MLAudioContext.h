@@ -2,7 +2,6 @@
 // Created by Randy Jones on 2/27/25.
 //
 
-#if 0 // TEMP
 #pragma once
 
 #include "MLDSPOps.h"
@@ -104,4 +103,4 @@ class AudioContext final
 };
 
 }  // namespace ml
-#endif
+

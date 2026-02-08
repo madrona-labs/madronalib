@@ -6,7 +6,7 @@
 #include "MLEventsToSignals.h"
 #include <cassert>
 
-#if 0 // TEMP
+
 namespace ml
 {
 
@@ -134,10 +134,10 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
     // write current pitch, velocity and elapsed time up to destTime
     for (int t = static_cast<int>(nextFrameToProcess); t < endFrame; ++t)
     {
-      outputs.row(kGate)[t] = currentVelocity;
-      outputs.row(kPitch)[t] = pitchGlide.nextSample(currentPitch);
+      outputs.rowPtr(kGate)[t] = currentVelocity;
+      outputs.rowPtr(kPitch)[t] = pitchGlide.nextSample(currentPitch);
       eventAgeInSamples += eventAgeStep;
-      outputs.row(kElapsedTime)[t] = samplesToSeconds(eventAgeInSamples, sr);
+      outputs.rowPtr(kElapsedTime)[t] = samplesToSeconds(eventAgeInSamples, sr);
     }
     nextFrameToProcess = endFrame;
   };
@@ -194,10 +194,10 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       writeOutputFrames(destTime - 1);
 
       // write retrigger frame
-      outputs.row(kGate)[destTime - 1] = 0;
-      outputs.row(kPitch)[destTime - 1] = pitchGlide.nextSample(currentPitch);
+      outputs.rowPtr(kGate)[destTime - 1] = 0;
+      outputs.rowPtr(kPitch)[destTime - 1] = pitchGlide.nextSample(currentPitch);
       eventAgeInSamples += eventAgeStep;
-      outputs.row(kElapsedTime)[destTime - 1] = samplesToSeconds(eventAgeInSamples, sr);
+      outputs.rowPtr(kElapsedTime)[destTime - 1] = samplesToSeconds(eventAgeInSamples, sr);
 
       // set new values
       currentPitch = e.value1;
@@ -227,34 +227,36 @@ void EventsToSignals::Voice::endProcess(float pitchBend)
   for (int t = (int)nextFrameToProcess; t < kFramesPerBlock; ++t)
   {
     // write velocity to end of buffer.
-    outputs.row(kGate)[t] = currentVelocity;
+    outputs.rowPtr(kGate)[t] = currentVelocity;
 
     // write pitch to end of buffer.
-    outputs.row(kPitch)[t] = pitchGlide.nextSample(currentPitch);
+    outputs.rowPtr(kPitch)[t] = pitchGlide.nextSample(currentPitch);
 
     // keep increasing age
     eventAgeInSamples += eventAgeStep;
-    outputs.row(kElapsedTime)[t] = samplesToSeconds(eventAgeInSamples, sr);
+    outputs.rowPtr(kElapsedTime)[t] = samplesToSeconds(eventAgeInSamples, sr);
   }
 
   // process glides, accurate to the DSP vector
   auto bendGlide = pitchBendGlide(currentPitchBend);
   auto driftSig = pitchDriftGlide(currentDriftValue);
-  outputs.row(kMod) = modGlide(currentMod);
-  outputs.row(kX) = xGlide(currentX);
-  outputs.row(kY) = yGlide(currentY);
+  outputs.setRow(kMod, modGlide(currentMod));
+  outputs.setRow(kX, xGlide(currentX));
+  outputs.setRow(kY, yGlide(currentY));
 
   if (currentVelocity == 0.f)
   {
     currentZ = 0.f;
   }
-  outputs.row(kZ) = zGlide(currentZ);
+  outputs.setRow(kZ, zGlide(currentZ));
 
   // add pitch bend in semitones to pitch output
-  outputs.row(kPitch) += bendGlide * pitchBend * (1.f / 12);
+  auto p = outputs.getRow(kPitch);
+  outputs.setRow(kPitch, p + bendGlide * pitchBend * (1.f / 12));
 
   // add drift to pitch output
-  outputs.row(kPitch) += driftSig * driftAmount * kDriftScale;
+  p = outputs.getRow(kPitch);
+  outputs.setRow(kPitch, p + driftSig * driftAmount * kDriftScale);
 }
 
 #pragma mark -
@@ -297,7 +299,7 @@ EventsToSignals::EventsToSignals()
     voices[i].reset();
 
     // set vox output signal
-    voices[i].outputs.row(kVoice) = SignalBlock((float)i - 1);
+    voices[i].outputs.setRow(kVoice, SignalBlock((float)i - 1));
   }
 
   controllers.resize(kNumControllers);
@@ -948,11 +950,11 @@ void EventsToSignals::dumpVoices()
         break;
     }
 
-    std::cout << " x:" << voice.outputs.row(kX)[0];
-    std::cout << " y:" << voice.outputs.row(kY)[0];
-    std::cout << " z:" << voice.outputs.row(kZ)[0];
-    std::cout << " pitch:" << voice.outputs.row(kPitch)[0];
-    std::cout << " mod:" << voice.outputs.row(kMod)[0];
+    std::cout << " x:" << voice.outputs.rowPtr(kX)[0];
+    std::cout << " y:" << voice.outputs.rowPtr(kY)[0];
+    std::cout << " z:" << voice.outputs.rowPtr(kZ)[0];
+    std::cout << " pitch:" << voice.outputs.rowPtr(kPitch)[0];
+    std::cout << " mod:" << voice.outputs.rowPtr(kMod)[0];
 
     std::cout << "\n";
   };
@@ -976,5 +978,3 @@ void EventsToSignals::dumpVoices()
 }
 
 }  // namespace ml
-#endif
-

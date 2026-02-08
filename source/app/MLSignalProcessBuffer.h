@@ -1,7 +1,7 @@
 //
 // Created by Randy Jones on 2/27/25.
 //
-#if 0 // TEMP
+
 #pragma once
 
 #include "MLAudioContext.h"
@@ -35,4 +35,4 @@ class SignalProcessBuffer final
 };
 
 }  // namespace ml
-#endif 
+
