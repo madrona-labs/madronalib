@@ -8,6 +8,8 @@
 // These define float4, int4, and a bunch of operations on them.
 // We are currently only using 4-element vectors on both SSE and NEON.
 
+constexpr size_t kSIMDVectorSize{4};
+
 #if (defined __ARM_NEON) || (defined __ARM_NEON__)
 #include "MLDSPMathNEON.h" // NEON
 #else

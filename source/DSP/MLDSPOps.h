@@ -43,8 +43,10 @@ constexpr size_t kFramesPerBlock = 1 << kFramesPerBlockBits;
 static_assert((kFramesPerBlockBits <= 8),
               "We count on kFramesPerBlockBits to be 8 or less.");
 
-
 constexpr size_t kSIMDAlignBytes{16};
+constexpr size_t kSIMDVectorsPerBlock{kFramesPerBlock / kSIMDVectorSize};
+static_assert((kFramesPerBlock % kSIMDVectorSize == 0),
+              "Block size must be a multiple of SIMD vectors.");
 
 constexpr size_t roundUpToMultiple(size_t value, size_t multiple) {
   return ((value + multiple - 1) / multiple) * multiple;
@@ -72,16 +74,19 @@ constexpr auto make_array(Function f)
 
 // ----------------------------------------------------------------
 // AlignedArray
-
+//
 template<typename T, size_t N>
 struct alignas(kSIMDAlignBytes) AlignedArray
 {
   std::array<T, N> dataAligned;
+  static_assert(sizeof(T) * N % sizeof(float4) == 0,
+                "AlignedArray size must be a multiple of float4 size (16 bytes)");
+
   
   constexpr AlignedArray<T, N>(std::array<T, N> data) : dataAligned(data) {}
   constexpr AlignedArray<T, N>(const T* dataPtr) { std::copy(dataPtr, dataPtr + N, dataAligned.data() );}
   AlignedArray<T, N>(T val) { fill(val); }
-  AlignedArray<T, N>() { fill(T(0.f)); }
+  AlignedArray<T, N>() { fill(T(0.f)); } // TODO: find bugs and remove default fill!
   
   const T& operator[](size_t i) const { return dataAligned[i]; }
   T& operator[](size_t i) { return dataAligned[i]; }
@@ -94,88 +99,78 @@ struct alignas(kSIMDAlignBytes) AlignedArray
 };
 
 
-// ----------------------------------------------------------------
-// AlignedArray2D
-
-
-template<typename T, size_t COLS>
-static constexpr size_t calculatePaddedCols() {
-  constexpr size_t bytes_needed = COLS * sizeof(T);
-  constexpr size_t aligned_bytes = ((bytes_needed + kSIMDAlignBytes - 1) / kSIMDAlignBytes) * kSIMDAlignBytes;
-  return aligned_bytes / sizeof(T);
+// Binary operation, (float, float) -> float
+template<typename T, size_t N, typename OP_FF2F>
+inline AlignedArray<T, N> OpFF2F(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, OP_FF2F op) {
+  AlignedArray<T, N> result;
+  
+  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
+  const float4* a4 = reinterpret_cast<const float4*>(a.data());
+  const float4* b4 = reinterpret_cast<const float4*>(b.data());
+  float4* r4 = reinterpret_cast<float4*>(result.data());
+  
+  for (size_t i = 0; i < numFloat4s; ++i) {
+    r4[i] = op(a4[i], b4[i]);
+  }
+  return result;
 }
 
-template<typename T, size_t COLS, size_t ROWS>
-struct AlignedArray2D : public AlignedArray<T, calculatePaddedCols<T, COLS>()*ROWS>
-{
-  static_assert(kSIMDAlignBytes % sizeof(T) == 0, "Type size must evenly divide alignment boundary");
-  static constexpr size_t kRowStride = calculatePaddedCols<T, COLS>();
-  using Base = AlignedArray<T, kRowStride*ROWS>;
-  
-  // Constructors
-  AlignedArray2D() : Base() {}
-  AlignedArray2D(T val) : Base(val) {}
-  
-  // get data ptr
-  T* data() { return Base::data(); }
-  
-  // 2D access - row major order
-  T& operator()(size_t row, size_t col) {
-    assert(row < ROWS && col < COLS);
-    return this->dataAligned[row * kRowStride + col];
-  }
-  
-  const T& operator()(size_t row, size_t col) const {
-    assert(row < ROWS && col < COLS);
-    return this->dataAligned[row * kRowStride + col];
-  }
-  
-  // Get pointer to start of a row (will be 16-byte aligned)
-  T* row(size_t r) {
-    assert(r < ROWS);
-    return &this->dataAligned[r * kRowStride];
-  }
-  
-  const T* row(size_t r) const {
-    assert(r < ROWS);
-    return &this->dataAligned[r * kRowStride];
-  }
-  
-  AlignedArray<T, COLS> getRow(size_t r) const {
-    assert(r < ROWS);
-    AlignedArray<T, COLS> result;
-    std::copy(row(r), row(r) + COLS, result.data());
-    return result;
-  }
-  
-  void setRow(size_t r, const AlignedArray<T, COLS>& src)  {
-    assert(r < ROWS);
-    std::copy(src.begin(), src.end(), this->row(r));
-  }
-  
 
-  AlignedArray<T, ROWS> getColumn(size_t i)
-  {
-    AlignedArray<T, ROWS> r;
-    for(int j=0; j<ROWS; ++j)
-    {
-      r[j] = row(j)[i];
-    }
-    return r;
-  }
+// Now define operations with a macro for brevity:
+#define DEFINE_OP_FF2F(name, expr) \
+template<typename T, size_t N> \
+inline AlignedArray<T, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b) { \
+return OpFF2F(a, b, [](float4 x, float4 y) { return (expr); }); \
+}
+
+DEFINE_OP_FF2F(add, x + y)
+
+
+
+// ----------------------------------------------------------------
+// SignalBlock
+// one row of kFramesPerBlock floats, time -> horizontal
+// T::scalar_type will let us write templates on SignalBlock, SignalBlock4, ...
+// and T::time_step or similar for writing filter functions
+// we can also add things like using upsampler_type = Upsampler, and so on
+
+struct SignalBlock : public AlignedArray<float, kFramesPerBlock> {
+  using Base = AlignedArray<float, kFramesPerBlock>;
+  using scalar_type = float;
+  static constexpr size_t height = 1;
+  static constexpr size_t strideInElems = 1;
+
+  SignalBlock() : Base() {}
+  SignalBlock(float val) : Base(val) {}
+  SignalBlock(const float* val) : Base(val) {}
+};
+
+
+
+// ----------------------------------------------------------------
+// SignalBlock4
+// kFramesPerBlock/4 4x4 blocks of samples containing float4 signals.
+// time -> vertical within each 4x4 block, then to next block every 4 frames.
+// A0 B0 C0 D0 A4 B4 C4 D4 ...
+// A1 B1 C1 D1 A5 B5 C5 D5
+// A2 B2 C2 D2 A6 B6 C6 D6
+// A3 B3 C3 D3 A7 B7 C7 D7
+//
+// the data are arranged like this so that transposing each 4x4 block gives
+// us four SignalBlocks, or vice versa.
+
+
+struct SignalBlock4 : public AlignedArray<float4, kFramesPerBlock>
+{
+  using Base = AlignedArray<float4, kFramesPerBlock>;
+  using scalar_type = float4;
+  static constexpr size_t height = 4;
+  static constexpr size_t strideInElems = kFramesPerBlock/height;
   
-  void setColumn(size_t i, AlignedArray<T, ROWS> x)
-  {
-    for(int j=0; j<ROWS; ++j)
-    {
-      row(j)[i] = x[j];
-    }
-  }
+  // Default constructors
+  SignalBlock4() : Base() {}
+  SignalBlock4(float4 val) : Base(val) {}
   
-  // Get actual dimensions
-  constexpr size_t rows() const { return ROWS; }
-  constexpr size_t cols() const { return COLS; }
-  constexpr size_t rowStride() const { return kRowStride; }
 };
 
 
@@ -183,375 +178,23 @@ struct AlignedArray2D : public AlignedArray<T, calculatePaddedCols<T, COLS>()*RO
 
 
 
-
-
-
-
-
-
-
-
 // ----------------------------------------------------------------
-// SignalBlockArray
-//
-// An array of SignalBlocks. Each SignalBlock holds kFramesPerBlock float32 samples.
-// A SignalBlockArray< ROWS > holds kFramesPerBlock*ROWS samples.
-// Knowing the array size at compile time helps efficiency by allowing the compiler to
-// unroll loops.
+// SignalBlockArray, SignalBlock4Array
 
+template <size_t N>
+using SignalBlockArray = std::array<SignalBlock, N>;
 
-namespace ml
-{
+template <size_t N>
+using SignalBlock4Array = std::array<SignalBlock4, N>;
 
-constexpr size_t kSIMDVectorsPerDSPVector = kFramesPerBlock / 4;
-constexpr size_t kBytesPerSIMDVector = 4 * sizeof(float);
-constexpr size_t kSIMDVectorMask = ~(kBytesPerSIMDVector - 1);
-
-inline bool isSIMDAligned(float* p) {
-  uintptr_t pM = (uintptr_t)p;
-  return ((pM & kSIMDVectorMask) == 0);
-}
-
-
-template <size_t ROWS>
-class SignalBlockArray
-{
-  union Data
-  {
-    float4 _align[kSIMDVectorsPerDSPVector * ROWS];   // unused except to force alignment
-    std::array<float, kFramesPerBlock * ROWS> arrayData_;  // for constexpr ctor
-    float asFloat[kFramesPerBlock * ROWS];
-    
-    Data() {}
-    constexpr Data(std::array<float, kFramesPerBlock * ROWS> a) : arrayData_(a) {}
-  };
-  Data data_;
-  
-public:
-  // getBuffer, getConstBuffer
-  inline float* getBuffer() { return data_.asFloat; }
-  inline const float* getConstBuffer() const { return data_.asFloat; }
-  
-  // constexpr constructor taking a std::array. Use with make_array
-  constexpr SignalBlockArray(std::array<float, kFramesPerBlock * ROWS> a) : data_(a) {}
-  
-  // constexpr constructor taking a function(int -> float)
-  constexpr SignalBlockArray(float (*fn)(int))
-  : SignalBlockArray(make_array<kFramesPerBlock * ROWS>(fn))
-  {
-  }
-  
-  // TODO constexpr constructor taking a Projection - requires Projection
-  // rewrite without std::function
-  
-  // default constructor: zeroes the data.
-  // TODO this seems to be taking a lot of time! investigate
-  constexpr SignalBlockArray() { data_.arrayData_.fill(0.f); }
-  
-  // conversion constructor to float.  This keeps the syntax of common DSP code
-  // shorter: "va + SignalBlock(1.f)" becomes just "va + 1.f".
-  constexpr SignalBlockArray(float k) { operator=(k); }
-  
-  // unaligned data * ctors
-  explicit SignalBlockArray(float* pData) { load(*this, pData); }
-  explicit SignalBlockArray(const float* pData) { load(*this, pData); }
-  
-  // aligned data * ctors
-  explicit SignalBlockArray(SignalBlockArray* pData) { loadAligned(*this, pData); }
-  explicit SignalBlockArray(const SignalBlockArray* pData) { loadAligned(*this, pData); }
-  
-  inline float& operator[](size_t i) { return getBuffer()[i]; }
-  inline const float operator[](size_t i) const { return getConstBuffer()[i]; }
-  
-  // = float: set each element of the SignalBlockArray to the float value k.
-  inline SignalBlockArray operator=(float k)
-  {
-    const float4 vk(k);
-    float* py1 = getBuffer();
-    
-    for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
-    {
-      storeFloat4(py1, vk);
-      py1 += 4;
-    }
-    return *this;
-  }
-  
-  // default copy and = constructors.
-  
-  SignalBlockArray(const SignalBlockArray& x1) noexcept = default;
-  SignalBlockArray& operator=(const SignalBlockArray& x1) noexcept = default;
-  
-  // equality by value
-  bool operator==(const SignalBlockArray& x1) const
-  {
-    const float* px1 = x1.getConstBuffer();
-    const float* py1 = getConstBuffer();
-    
-    for (int n = 0; n < kFramesPerBlock * ROWS; ++n)
-    {
-      if (py1[n] != px1[n]) return false;
-    }
-    return true;
-  }
-  
-  // TODO compare the performance of getting rid of everything between here and row(), and
-  // just using row() and constRow() for reading and writing
-  
-  // return row J from this SignalBlockArray, when J is known at compile time.
-  template <int J>
-  inline SignalBlockArray<1> getRowVector() const
-  {
-    static_assert((J >= 0) && (J < ROWS), "getRowVector index out of bounds");
-    return getRowVectorUnchecked(J);
-  }
-  
-  // set row J of this SignalBlockArray to x1, when J is known at compile time.
-  template <int J>
-  inline void setRowVector(const SignalBlockArray<1> x1)
-  {
-    static_assert((J >= 0) && (J < ROWS), "setRowVector index out of bounds");
-    setRowVectorUnchecked(J, x1);
-  }
-  
-  // get a row vector j when j is not known at compile time.
-  inline SignalBlockArray<1> getRowVectorUnchecked(size_t j) const
-  {
-    SignalBlockArray<1> vy;
-    const float* px1 = getConstBuffer() + kFramesPerBlock * j;
-    float* py1 = vy.getBuffer();
-    
-    for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
-    {
-      storeFloat4(py1, loadFloat4(px1));
-      px1 += 4;
-      py1 += 4;
-    }
-    return vy;
-  }
-  
-  // set a row vector j when j is not known at compile time.
-  inline void setRowVectorUnchecked(size_t j, const SignalBlockArray<1> x1)
-  {
-    const float* px1 = x1.getConstBuffer();
-    float* py1 = getBuffer() + kFramesPerBlock * j;
-    
-    for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
-    {
-      storeFloat4(py1, loadFloat4(px1));
-      px1 += 4;
-      py1 += 4;
-    }
-  }
-  
-  // return a const pointer to the first element in row J of this
-  // SignalBlockArray.
-  inline const float* getRowDataConst(int j) const
-  {
-    const float* py1 = getConstBuffer() + kFramesPerBlock * j;
-    return py1;
-  }
-  
-  // return a pointer to the first element in row J of this SignalBlockArray.
-  inline float* getRowData(int j)
-  {
-    float* py1 = getBuffer() + kFramesPerBlock * j;
-    return py1;
-  }
-  
-  // return a reference to a row of this SignalBlockArray.
-  inline SignalBlockArray<1>& row(int j)
-  {
-    float* py1 = getBuffer() + kFramesPerBlock * j;
-    SignalBlockArray<1>* pRow = reinterpret_cast<SignalBlockArray<1>*>(py1);
-    return *pRow;
-  }
-  
-  // return a const reference to a row of this SignalBlockArray.
-  inline const SignalBlockArray<1>& constRow(int j) const
-  {
-    const float* py1 = getConstBuffer() + kFramesPerBlock * j;
-    const SignalBlockArray<1>* pRow = reinterpret_cast<const SignalBlockArray<1>*>(py1);
-    return *pRow;
-  }
-  
-  inline SignalBlockArray& operator+=(const SignalBlockArray& x1)
-  {
-    *this = add(*this, x1);
-    return *this;
-  }
-  inline SignalBlockArray& operator-=(const SignalBlockArray& x1)
-  {
-    *this = subtract(*this, x1);
-    return *this;
-  }
-  inline SignalBlockArray& operator*=(const SignalBlockArray& x1)
-  {
-    *this = multiply(*this, x1);
-    return *this;
-  }
-  inline SignalBlockArray& operator/=(const SignalBlockArray& x1)
-  {
-    *this = divide(*this, x1);
-    return *this;
-  }
-  
-  // binary operators - defining these here inside the class as non-template
-  // functions enables the compiler to call implicit conversions on either
-  // argument.
-  
-  friend inline SignalBlockArray operator+(const SignalBlockArray& x1, const SignalBlockArray& x2)
-  {
-    return add(x1, x2);
-  }
-  friend inline SignalBlockArray operator-(const SignalBlockArray& x1)
-  {
-    // TODO should be able to declare this constexpr!
-    SignalBlockArray zero(0.f);
-    
-    return subtract(zero, x1);
-  }
-  friend inline SignalBlockArray operator-(const SignalBlockArray& x1, const SignalBlockArray& x2)
-  {
-    return subtract(x1, x2);
-  }
-  friend inline SignalBlockArray operator*(const SignalBlockArray& x1, const SignalBlockArray& x2)
-  {
-    return multiply(x1, x2);
-  }
-  friend inline SignalBlockArray operator/(const SignalBlockArray& x1, const SignalBlockArray& x2)
-  {
-    return divide(x1, x2);
-  }
-};  // class SignalBlockArray
-
-// ----------------------------------------------------------------
-// SignalBlock
-//
-// Special case of the SignalBlockArray with one row.
-// The most common data type in a typical DSP function.
-
-typedef SignalBlockArray<1> SignalBlock;
-
-// ----------------------------------------------------------------
-// SignalBlockArrayInt
-//
-// DSP Vector holding int32 values.
-
-constexpr size_t kIntsPerDSPVector = kFramesPerBlock;
-
-template <size_t ROWS>
-class SignalBlockArrayInt
-{
-  union Data
-  {
-    int4 _align[kSIMDVectorsPerDSPVector * ROWS];     // unused except to force alignment
-    std::array<int32_t, kIntsPerDSPVector * ROWS> arrayData_;  // for constexpr ctor
-    int32_t asInt[kIntsPerDSPVector * ROWS];
-    float asFloat[kFramesPerBlock * ROWS];
-    
-    Data() {}
-    constexpr Data(std::array<int32_t, kIntsPerDSPVector * ROWS> a) : arrayData_(a) {}
-  };
-  
-public:
-  Data data_;
-  
-  // getBuffer, getConstBuffer
-  inline float* getBuffer() { return data_.asFloat; }
-  inline const float* getConstBuffer() const { return data_.asFloat; }
-  inline int32_t* getBufferInt() { return data_.asInt; }
-  inline const int32_t* getConstBufferInt() const { return data_.asInt; }
-  
-  explicit SignalBlockArrayInt() { operator=(0); }
-  explicit SignalBlockArrayInt(int32_t k) { operator=(k); }
-  
-  inline int32_t& operator[](int i) { return getBufferInt()[i]; }
-  inline const int32_t operator[](int i) const { return getConstBufferInt()[i]; }
-  
-  // set each element of the SignalBlockArray to the int32_t value k.
-  inline SignalBlockArrayInt operator=(int32_t k)
-  {
-    int4 i4 = set1Int(k);
-    float4 vk = castIntToFloat(i4);
-    int32_t* py1 = getBufferInt();
-    
-    for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
-    {
-      storeFloat4(reinterpret_cast<float*>(py1), vk);
-      py1 += 4;
-    }
-    return *this;
-  }
-  
-  // constexpr constructor taking a std::array. Use with make_array
-  constexpr SignalBlockArrayInt(std::array<int32_t, kFramesPerBlock * ROWS> a) : data_(a) {}
-  
-  // constexpr constructor taking a function(int -> int)
-  constexpr SignalBlockArrayInt(int (*fn)(int))
-  : SignalBlockArrayInt(make_array<kFramesPerBlock * ROWS>(fn))
-  {
-  }
-  
-  SignalBlockArrayInt(const SignalBlockArrayInt& x1) noexcept = default;
-  SignalBlockArrayInt& operator=(const SignalBlockArrayInt& x1) noexcept = default;
-  
-  // equality by value
-  bool operator==(const SignalBlockArrayInt& x1)
-  {
-    const int* px1 = x1.getConstBufferInt();
-    const int* py1 = getConstBufferInt();
-    
-    for (int n = 0; n < kIntsPerDSPVector * ROWS; ++n)
-    {
-      if (py1[n] != px1[n]) return false;
-    }
-    return true;
-  }
-  
-  // return a reference to a row of this SignalBlockArrayInt.
-  inline SignalBlockArrayInt<1>& row(int j)
-  {
-    float* py1 = getBuffer() + kIntsPerDSPVector * j;
-    SignalBlockArrayInt<1>* pRow = reinterpret_cast<SignalBlockArrayInt<1>*>(py1);
-    return *pRow;
-  }
-  
-  // return a reference to a row of this SignalBlockArrayInt.
-  inline const SignalBlockArrayInt<1>& constRow(int j) const
-  {
-    const float* py1 = getConstBuffer() + kIntsPerDSPVector * j;
-    const SignalBlockArrayInt<1>* pRow = reinterpret_cast<const SignalBlockArrayInt<1>*>(py1);
-    return *pRow;
-  }
-  
-  friend inline SignalBlockArrayInt operator+(const SignalBlockArrayInt& x1,
-                                            const SignalBlockArrayInt& x2)
-  {
-    return addInt32(x1, x2);
-  }
-  
-  friend inline SignalBlockArrayInt operator-(const SignalBlockArrayInt& x1)
-  {
-    SignalBlockArrayInt zero(0);
-    return subtractInt32(zero, x1);
-  }
-  
-  friend inline SignalBlockArrayInt operator-(const SignalBlockArrayInt& x1,
-                                            const SignalBlockArrayInt& x2)
-  {
-    return subtractInt32(x1, x2);
-  }
-  
-};  // class SignalBlockArrayInt
-
-typedef SignalBlockArrayInt<1> SignalBlockInt;
 
 // ----------------------------------------------------------------
 // SignalBlockDynamic: for holding a number of SignalBlocks only known at runtime.
 
 class SignalBlockDynamic final
 {
+  std::vector<SignalBlock> data_;
+  
 public:
   SignalBlockDynamic() = default;
   ~SignalBlockDynamic() = default;
@@ -561,15 +204,12 @@ public:
   size_t size() const { return data_.size(); }
   SignalBlock& operator[](int j) { return data_[j]; }
   const SignalBlock& operator[](int j) const { return data_[j]; }
-  
-private:
-  std::vector<SignalBlock> data_;
 };
 
 // ----------------------------------------------------------------
 // load and store
 
-// some loads and stores may be unaligned, let std::copy handle this
+
 template <size_t ROWS>
 inline void load(SignalBlockArray<ROWS>& vecDest, const float* pSrc)
 {
@@ -589,7 +229,7 @@ inline void loadAligned(SignalBlockArray<ROWS>& vecDest, const float* pSrc)
   const float* px1 = pSrc;
   float* py1 = vecDest.getBuffer();
   
-  for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
+  for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)
   {
     storeFloat4(py1, loadFloat4(px1));
     px1 += 4;
@@ -603,7 +243,7 @@ inline void storeAligned(const SignalBlockArray<ROWS>& vecSrc, float* pDest)
   const float* px1 = vecSrc.getConstBuffer();
   float* py1 = pDest;
   
-  for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
+  for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)
   {
     storeFloat4(py1, loadFloat4(px1));
     px1 += 4;
@@ -621,7 +261,7 @@ inline SignalBlockArray<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1) \
 SignalBlockArray<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                           \
 float* py1 = vy.getBuffer();                                       \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)          \
 {                                                                  \
 float4 x = loadFloat4(px1);                                \
 float4 y = (opComputation); \
@@ -680,7 +320,7 @@ SignalBlockArray<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                           \
 const float* px2 = vx2.getConstBuffer();                           \
 float* py1 = vy.getBuffer();                                       \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)          \
 {                                                                  \
 float4 x1 = loadFloat4(px1);                               \
 float4 x2 = loadFloat4(px2);                               \
@@ -718,7 +358,7 @@ const float* px1 = vx1.getConstBuffer();                           \
 const float* px2 = vx2.getConstBuffer();                           \
 float* py1 = vy.getBuffer();                                       \
 size_t px2Offset = 0;                                              \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)          \
 {                                                                  \
 float4 x1 = loadFloat4(px1);                               \
 float4 x2 = loadFloat4(px2 + px2Offset);                   \
@@ -756,7 +396,7 @@ SignalBlockArrayInt<ROWS> vy;                                              \
 const float* px1 = vx1.getConstBuffer();                                 \
 const float* px2 = vx2.getConstBuffer();                                 \
 float* py1 = vy.getBuffer();                                             \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)                \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)                \
 {                                                                        \
 int4 x1 = castFloatToInt(loadFloat4(px1));                               \
 int4 x2 = castFloatToInt(loadFloat4(px2));                               \
@@ -786,7 +426,7 @@ const float* px1 = vx1.getConstBuffer();                           \
 const float* px2 = vx2.getConstBuffer();                           \
 const float* px3 = vx3.getConstBuffer();                           \
 float* py1 = vy.getBuffer();                                       \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)          \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)          \
 {                                                                  \
 float4 x1 = loadFloat4(px1);                               \
 float4 x2 = loadFloat4(px2);                               \
@@ -822,7 +462,7 @@ inline SignalBlockArray<ROWS> lerp(const SignalBlockArray<ROWS>& vx1, const Sign
   float* py1 = vy.getBuffer();
   const float4 vConstMix = set1Float(m);
   
-  for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)
+  for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)
   {
     float4 x1 = loadFloat4(px1);
     float4 x2 = loadFloat4(px2);
@@ -846,7 +486,7 @@ inline SignalBlockArrayInt<ROWS>(opName)(const SignalBlockArray<ROWS>& vx1) \
 SignalBlockArrayInt<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                              \
 float* py1 = vy.getBuffer();                                          \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)             \
 {                                                                     \
 float4 x = loadFloat4(px1);                                   \
 auto y = (opComputation); \
@@ -870,7 +510,7 @@ inline SignalBlockArray<ROWS>(opName)(const SignalBlockArrayInt<ROWS>& vx1) \
 SignalBlockArray<ROWS> vy;                                              \
 const float* px1 = vx1.getConstBuffer();                              \
 float* py1 = vy.getBuffer();                                          \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)             \
 {                                                                     \
 int4 x = castFloatToInt(loadFloat4(px1));                             \
 auto y = (opComputation); \
@@ -901,7 +541,7 @@ SignalBlockArrayInt<ROWS> vy;                                           \
 const float* px1 = vx1.getConstBuffer();                              \
 const float* px2 = vx2.getConstBuffer();                              \
 float* py1 = vy.getBuffer();                                          \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)             \
 {                                                                     \
 float4 x1 = loadFloat4(px1);                                  \
 float4 x2 = loadFloat4(px2);                                  \
@@ -935,7 +575,7 @@ const float* px1 = vx1.getConstBuffer();                              \
 const float* px2 = vx2.getConstBuffer();                              \
 const float* px3 = vx3.getConstBuffer();                              \
 float* py1 = vy.getBuffer();                                          \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)             \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)             \
 {                                                                     \
 float4 x1 = loadFloat4(px1);                                  \
 float4 x2 = loadFloat4(px2);                                  \
@@ -967,7 +607,7 @@ const float* px1 = vx1.getConstBuffer();                                 \
 const float* px2 = vx2.getConstBuffer();                                 \
 const float* px3 = vx3.getConstBuffer();                                 \
 float* py1 = vy.getBuffer();                                             \
-for (int n = 0; n < kSIMDVectorsPerDSPVector * ROWS; ++n)                \
+for (int n = 0; n < kSIMDVectorsPerBlock * ROWS; ++n)                \
 {                                                                        \
 int4 x1 = castFloatToInt(loadFloat4(px1));                               \
 int4 x2 = castFloatToInt(loadFloat4(px2));                               \
@@ -1051,7 +691,7 @@ inline float sum(const SignalBlock& x)
 {
   const float* px1 = x.getConstBuffer();
   float sum = 0;
-  for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
+  for (int n = 0; n < kSIMDVectorsPerBlock; ++n)
   {
     sum += vecSumH(loadFloat4(px1));
     px1 += 4;
@@ -1069,7 +709,7 @@ inline float max(const SignalBlock& x)
 {
   const float* px1 = x.getConstBuffer();
   float fmax = FLT_MIN;
-  for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
+  for (int n = 0; n < kSIMDVectorsPerBlock; ++n)
   {
     fmax = ml::max(fmax, vecMaxH(loadFloat4(px1)));
     px1 += 4;
@@ -1081,7 +721,7 @@ inline float min(const SignalBlock& x)
 {
   const float* px1 = x.getConstBuffer();
   float fmin = FLT_MAX;
-  for (int n = 0; n < kSIMDVectorsPerDSPVector; ++n)
+  for (int n = 0; n < kSIMDVectorsPerBlock; ++n)
   {
     fmin = ml::min(fmin, vecMinH(loadFloat4(px1)));
     px1 += 4;
@@ -1281,7 +921,7 @@ inline ml::SignalBlockArray<ROWS> rotateLeft(const ml::SignalBlockArray<ROWS>& x
     const float* px2 = px1 + 4;
     float* py1 = vy.getBuffer() + (row * kFramesPerBlock);
     
-    for (int n = 0; n < kSIMDVectorsPerDSPVector - 1; ++n)
+    for (int n = 0; n < kSIMDVectorsPerBlock - 1; ++n)
     {
       auto y = vecShuffleLeft(loadFloat4(px1), loadFloat4(px2));
       storeFloat4(py1, y);
@@ -1313,7 +953,7 @@ inline ml::SignalBlockArray<ROWS> rotateRight(const ml::SignalBlockArray<ROWS>& 
     const float* px2 = px1 + 4;
     float* py1 = vy.getBuffer() + (row * kFramesPerBlock) + 4;
     
-    for (int n = 0; n < kSIMDVectorsPerDSPVector - 1; ++n)
+    for (int n = 0; n < kSIMDVectorsPerBlock - 1; ++n)
     {
       auto y = vecShuffleRight(loadFloat4(px1), loadFloat4(px2));
       storeFloat4(py1, y);
