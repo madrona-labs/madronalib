@@ -216,11 +216,79 @@ struct SignalBlockInt4 : public AlignedArray<int4, kFramesPerBlock>
 // ----------------------------------------------------------------
 // SignalBlockArray, SignalBlock4Array
 
-template <size_t N>
-using SignalBlockArray = std::array<SignalBlock, N>;
+template<size_t N>
+struct SignalBlockArray : public AlignedArray<float, N * kFramesPerBlock>
+{
+  using Base = AlignedArray<float, N * kFramesPerBlock>;
+  
+  // Inherit constructors
+  using Base::Base;
+    
+  // Constructor from base class (for operator results)
+  SignalBlockArray(const Base& b) : Base(b) {}
 
-template <size_t N>
-using SignalBlock4Array = std::array<SignalBlock4, N>;
+  
+  // Row proxy for mutable access
+  struct RowProxy {
+    float* data;
+    
+    operator SignalBlock() const {
+      return SignalBlock(data);
+    }
+    
+    RowProxy& operator=(const SignalBlock& block) {
+      std::copy(block.begin(), block.end(), data);
+      return *this;
+    }
+  };
+  
+  // Mutable access
+  RowProxy operator[](size_t i) {
+    return RowProxy{this->data() + i * kFramesPerBlock};
+  }
+  
+  // Const access
+  SignalBlock operator[](size_t i) const {
+    return SignalBlock(this->data() + i * kFramesPerBlock);
+  }
+};
+
+template<size_t N>
+struct SignalBlock4Array : public AlignedArray<float4, N * kFramesPerBlock>
+{
+  using Base = AlignedArray<float4, N * kFramesPerBlock>;
+  
+  // Inherit constructors
+  using Base::Base;
+  
+  // Constructor from base class (for operator results)
+  SignalBlock4Array(const Base& b) : Base(b) {}
+
+
+  // Row proxy for mutable access
+  struct RowProxy {
+    float4* data;
+    
+    operator SignalBlock4() const {
+      return SignalBlock4(data);
+    }
+    
+    RowProxy& operator=(const SignalBlock4& block) {
+      std::copy(block.begin(), block.end(), data);
+      return *this;
+    }
+  };
+  
+  // Mutable access
+  RowProxy operator[](size_t i) {
+    return RowProxy{this->data() + i * kFramesPerBlock};
+  }
+  
+  // Const access
+  SignalBlock operator[](size_t i) const {
+    return SignalBlock(this->data() + i * kFramesPerBlock);
+  }
+};
 
 
 // ----------------------------------------------------------------
@@ -802,6 +870,7 @@ inline SignalBlockArray<ROWS> rotateRows(const SignalBlockArray<ROWS>& x, int ro
 // ----------------------------------------------------------------
 // row-wise combining
 
+/*
 // concatRows with two arguments: append one SignalBlockArray after another.
 template <size_t ROWSA, size_t ROWSB>
 inline SignalBlockArray<ROWSA + ROWSB> concatRows(const SignalBlockArray<ROWSA>& x1,
@@ -816,6 +885,27 @@ inline SignalBlockArray<ROWSA + ROWSB> concatRows(const SignalBlockArray<ROWSA>&
   {
     result[j + ROWSA] = x2[j];
   }
+  return result;
+}
+*/
+
+// Variadic concatRows - concatenate any number of SignalBlockArrays
+template<size_t... Ns>
+inline SignalBlockArray<(Ns + ...)> concatRows(const SignalBlockArray<Ns>&... arrays)
+{
+  SignalBlockArray<(Ns + ...)> result;
+  size_t offset = 0;
+  
+  auto copyArray = [&](const auto& arr, size_t rowCount) {
+    for (size_t j = 0; j < rowCount; ++j) {
+      result[offset + j] = arr[j];
+    }
+    offset += rowCount;
+  };
+  
+  // Fold expression to process each array
+  (copyArray(arrays, Ns), ...);
+  
   return result;
 }
 
