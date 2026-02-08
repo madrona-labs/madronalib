@@ -12,7 +12,6 @@
 // graphs changeable at runtime, see MLProcs. In general MLProcs will be written
 // using DSPGens, DSPOps, DSPFilters.
 
-#if 0 // TEMP
 #pragma once
 
 #include "MLDSPFunctional.h"
@@ -67,15 +66,17 @@ class ImpulseGen
   {
     // make windowed sinc table
     SignalBlock windowVec;
-    makeWindow(windowVec.getBuffer(), kTableSize, dspwindows::blackman);
+    makeWindow(windowVec.data(), kTableSize, dspwindows::blackman);
     const float omega = 0.25f;
     auto sincFn{[&](int i)
                 {
                   float pi_x = ml::kTwoPi * omega * i;
                   return (i == 0) ? 1.f : sinf(pi_x) / pi_x;
                 }};
-    SignalBlock sincVec = map(sincFn, columnIndexInt() - SignalBlockInt((kTableSize - 1) / 2));
-    _table = normalize(sincVec * windowVec);
+    auto indexCentered = columnIndexInt() - SignalBlockInt((kTableSize - 1) / 2);
+    SignalBlock sincVec = map(sincFn, indexCentered);
+    SignalBlock windowedSinc = sincVec * windowVec;
+    _table = normalize(windowedSinc);
   }
   ~ImpulseGen() {}
 
@@ -193,7 +194,7 @@ class PhasorGen
 
     // accumulate 32-bit phase with wrap
     SignalBlockInt omega32V;
-    for (int n = 0; n < kIntsPerDSPVector; ++n)
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       mOmega32 += intStepsPerSampleV[n];
       omega32V[n] = mOmega32;
@@ -245,7 +246,7 @@ class OneShotGen
     // accumulate 32-bit phase with wrap
     // we test for wrap at every sample to get a clean ending
     SignalBlockInt omega32V;
-    for (int n = 0; n < kIntsPerDSPVector; ++n)
+    for (int n = 0; n < kFramesPerBlock; ++n)
     {
       mOmega32 += intStepsPerSampleV[n] * mGate;
       if (mOmega32 < mOmegaPrev)
@@ -407,8 +408,8 @@ class SawGen
 
 // linear interpolate over signal length to next value.
 
-constexpr float unityRampFn(int i) { return (i + 1) / static_cast<float>(kFramesPerBlock); }
-ConstSignalBlock kUnityRampVec{unityRampFn};
+constexpr float unityRampFn(size_t i) { return (i + 1) / static_cast<float>(kFramesPerBlock); }
+constexpr SignalBlock kUnityRampVec{unityRampFn};
 
 struct Interpolator1
 {
@@ -591,5 +592,3 @@ class SampleAccurateLinearGlide
 };
 
 }  // namespace ml
-#endif
-

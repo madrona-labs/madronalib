@@ -32,9 +32,9 @@ TEST_CASE("madronalib/core/dspbuffer", "[dspbuffer]")
 
   // write indices with wrap
   SignalBlock v1(columnIndex());
-  buf.write(v1.getConstBuffer(), kFramesPerBlock);
+  buf.write(v1.data(), kFramesPerBlock);
   SignalBlock v2{};
-  buf.read(v2.getBuffer(), kFramesPerBlock);
+  buf.read(v2.data(), kFramesPerBlock);
   // std::cout << v2 << "\n";
   REQUIRE(buf.getReadAvailable() == 0);
   REQUIRE(v2 == v1);
@@ -163,7 +163,7 @@ TEST_CASE("madronalib/core/dspbuffer/overlap", "[dspbuffer][overlap]")
 
   // write constant window buffer
   SignalBlock windowVec;
-  makeWindow(windowVec.getBuffer(), kFramesPerBlock, dspwindows::triangle);
+  makeWindow(windowVec.data(), kFramesPerBlock, dspwindows::triangle);
   // TODO ConstSignalBlock windowVec(dspwindows::triangle);
   // - would require constexpr-capable reimplementation of Projections, not
   // using std::function
@@ -171,7 +171,7 @@ TEST_CASE("madronalib/core/dspbuffer/overlap", "[dspbuffer][overlap]")
   // write overlapping triangle windows
   for (int i = 0; i < 8; ++i)
   {
-    buf.writeWithOverlapAdd(windowVec.getBuffer(), kFramesPerBlock,
+    buf.writeWithOverlapAdd(windowVec.data(), kFramesPerBlock,
                             overlap);
   }
 

@@ -1046,8 +1046,8 @@ namespace PitchbendableDelayConsts
 // equal to kFramesPerBlock. 32 sounds good.
 constexpr int kFadePeriod{32};
 constexpr int fadeRamp(size_t n) { return n % kFadePeriod; }
-constexpr int ticks1(int n) { return fadeRamp(n) == kFadePeriod / 2; }
-constexpr int ticks2(int n) { return fadeRamp(n) == 0; }
+constexpr int ticks1(size_t n) { return fadeRamp(n) == kFadePeriod / 2; }
+constexpr int ticks2(size_t n) { return fadeRamp(n) == 0; }
 constexpr float fadeFn(size_t n)
 {
   // triangle from 0 to 1 to 0
@@ -1170,7 +1170,7 @@ class FDN
       // we have one SignalBlock feedback latency, so compensate delay times for
       // that.
       int len = times[n] - kFramesPerBlock;
-      len = max(1, len);
+      len = std::max(1, len);
       mDelays[n].setDelayInSamples(len);
     }
   }

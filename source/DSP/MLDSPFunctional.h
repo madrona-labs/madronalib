@@ -16,89 +16,31 @@
 
 namespace ml
 {
-// ----------------------------------------------------------------
-// basic higher-order functions
 
-// Evaluate a function (void)->(float), store at each element of the
-// SignalBlockArray and return the result. x is a dummy argument just used to
-// infer the vector size.
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> map(std::function<float()> f, const SignalBlockArray<ROWS> x)
+// Element-wise map: apply f to each element of input array
+template<typename InT, size_t N, typename Function>
+auto map(Function f, const AlignedArray<InT, N>& input)
 {
-  SignalBlockArray<ROWS> y;
-  for (int n = 0; n < kFramesPerBlock * ROWS; ++n)
-  {
-    y[n] = f();
+  using OutT = decltype(f(std::declval<InT>()));
+  AlignedArray<OutT, N> output;
+  for (size_t i = 0; i < N; ++i) {
+    output[i] = f(input[i]);
   }
-  return y;
+  return output;
 }
 
-// Apply a function (float)->(float) to each element of the SignalBlockArray x and
-// return the result.
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> map(std::function<float(float)> f, const SignalBlockArray<ROWS> x)
+// Row-wise map: apply f to each row of a SignalBlockArray
+template<size_t N, typename Function>
+auto mapRows(Function f, const SignalBlockArray<N>& input)
 {
-  SignalBlockArray<ROWS> y;
-  for (int n = 0; n < kFramesPerBlock * ROWS; ++n)
-  {
-    y[n] = f(x[n]);
+  using OutRow = decltype(f(std::declval<SignalBlock>()));
+  
+  // Assumes f returns a SignalBlock (or compatible type)
+  SignalBlockArray<N> output;
+  for (size_t i = 0; i < N; ++i) {
+    output.setRow(i, f(input.getRow(i)));
   }
-  return y;
-}
-
-// Apply a function (int)->(float) to each element of the SignalBlockArrayInt x
-// and return the result.
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> map(std::function<float(int)> f, const SignalBlockArrayInt<ROWS> x)
-{
-  SignalBlockArray<ROWS> y;
-  for (int n = 0; n < kFramesPerBlock * ROWS; ++n)
-  {
-    y[n] = f(x[n]);
-  }
-  return y;
-}
-
-// Apply a function (SignalBlock)->(SignalBlock) to each row of the SignalBlockArray x
-// and return the result.
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> map(std::function<SignalBlock(const SignalBlock)> f,
-                                const SignalBlockArray<ROWS> x)
-{
-  SignalBlockArray<ROWS> y;
-  for (int j = 0; j < ROWS; ++j)
-  {
-    y.row(j) = f(x.constRow(j));
-  }
-  return y;
-}
-
-// Apply a function (SignalBlock, int row)->(SignalBlock) to each row of the
-// SignalBlockArray x and return the result.
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> map(std::function<SignalBlock(const SignalBlock, int)> f,
-                                const SignalBlockArray<ROWS> x)
-{
-  SignalBlockArray<ROWS> y;
-  for (int j = 0; j < ROWS; ++j)
-  {
-    y.row(j) = f(x.constRow(j), j);
-  }
-  return y;
-}
-
-// Apply a function (SignalBlock, int row)->(SignalBlock) to each row of the
-// SignalBlockArray x and return the result.
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> map(std::function<SignalBlock(const SignalBlock, const SignalBlock)> f,
-                                const SignalBlockArray<ROWS> x)
-{
-  SignalBlockArray<ROWS> y;
-  for (int j = 0; j < ROWS; ++j)
-  {
-    y.row(j) = f(x.constRow(j), j);
-  }
-  return y;
+  return output;
 }
 
 // ----------------------------------------------------------------
@@ -144,8 +86,7 @@ class Upsample2xFunction
     outputType vy;
     for (int j = 0; j < OUT_ROWS; ++j)
     {
-      vy.row(j) =
-          mDowners[j].downsample(mUpsampledOutput1.constRow(j), mUpsampledOutput2.constRow(j));
+      vy.setRow(j, mDowners[j].downsample(mUpsampledOutput1.getRow(j), mUpsampledOutput2.getRow(j)));
     }
     return vy;
   }
@@ -197,10 +138,10 @@ class Downsample2xFunction
       for (int j = 0; j < OUT_ROWS; ++j)
       {
         // first half is returned
-        vy.row(j) = mUppers[j].upsampleFirstHalf(mDownsampledOutput.constRow(j));
+        vy.setRow(j, mUppers[j].upsampleFirstHalf(mDownsampledOutput.getRow(j)));
 
         // second half is buffered
-        mOutputBuffer.row(j) = mUppers[j].upsampleSecondHalf(mDownsampledOutput.constRow(j));
+        mOutputBuffer.setRow(j, mUppers[j].upsampleSecondHalf(mDownsampledOutput.getRow(j)));
       }
     }
     else
@@ -268,7 +209,7 @@ class FeedbackDelayFunction
 
     for (int j = 0; j < ROWS; ++j)
     {
-      vy1.row(j) = mDelays[j](vFnOutput.row(j), vDelayTime - SignalBlock(kFramesPerBlock));
+      vy1.setRow(j, mDelays[j](vFnOutput.getRow(j), vDelayTime - SignalBlock(kFramesPerBlock)));
     }
     return vFnOutput;
   }
@@ -305,7 +246,7 @@ class FeedbackDelayFunctionWithTap
 
     for (int j = 0; j < ROWS; ++j)
     {
-      vy1.row(j) = mDelays[j](vFeedback.row(j), vDelayTime - SignalBlock(kFramesPerBlock));
+      vy1.setRow(j, mDelays[j](vFeedback.getRow(j), vDelayTime - SignalBlock(kFramesPerBlock)));
     }
     return vOutputTap;
   }

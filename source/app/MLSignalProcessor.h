@@ -4,7 +4,7 @@
 
 #pragma once
 
-#if 0 // TEMP
+
 #include "MLDSPUtils.h"
 #include "MLParameters.h"
 #include "MLPlatform.h"
@@ -215,5 +215,3 @@ class SignalProcessor
 };
 
 }  // namespace ml
-#endif
-

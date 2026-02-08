@@ -4,7 +4,7 @@
 
 #pragma once
 
-#if 0 // TEMP
+
 #ifdef _WIN32
 #include <memory>
 #else
@@ -243,4 +243,3 @@ void demultiplexLinear(SignalBlock selector, SignalBlockArray<ROWS> input,
 // REQUIRE(addRows(demultiplex(outputSelector, signalInput)) == signalInput);
 
 }  // namespace ml
-#endif
