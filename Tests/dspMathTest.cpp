@@ -339,17 +339,19 @@ TEST_CASE("madronalib/dsp_math/float4_shuffle", "[dsp_math]")
 
 TEST_CASE("madronalib/dsp_math/transpose4x4", "[dsp_math]")
 {
-  float4 r0(1.0f, 2.0f, 3.0f, 4.0f);
-  float4 r1(5.0f, 6.0f, 7.0f, 8.0f);
-  float4 r2(9.0f, 10.0f, 11.0f, 12.0f);
-  float4 r3(13.0f, 14.0f, 15.0f, 16.0f);
+  float4 r[4];
+  
+  r[0] = float4(1.0f, 2.0f, 3.0f, 4.0f);
+  r[1] = float4(5.0f, 6.0f, 7.0f, 8.0f);
+  r[2] = float4(9.0f, 10.0f, 11.0f, 12.0f);
+  r[3] = float4(13.0f, 14.0f, 15.0f, 16.0f);
 
-  transpose4x4(r0, r1, r2, r3);
+  transpose4x4InPlace(r);
 
-  REQUIRE(eq(r0, float4(1.0f, 5.0f, 9.0f, 13.0f)));
-  REQUIRE(eq(r1, float4(2.0f, 6.0f, 10.0f, 14.0f)));
-  REQUIRE(eq(r2, float4(3.0f, 7.0f, 11.0f, 15.0f)));
-  REQUIRE(eq(r3, float4(4.0f, 8.0f, 12.0f, 16.0f)));
+  REQUIRE(eq(r[0], float4(1.0f, 5.0f, 9.0f, 13.0f)));
+  REQUIRE(eq(r[1], float4(2.0f, 6.0f, 10.0f, 14.0f)));
+  REQUIRE(eq(r[2], float4(3.0f, 7.0f, 11.0f, 15.0f)));
+  REQUIRE(eq(r[3], float4(4.0f, 8.0f, 12.0f, 16.0f)));
 }
 
 // ================================================================

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "MLDSPOps.h"
+#include "MLDSPScalarMath.h"
 
 namespace ml
 {
