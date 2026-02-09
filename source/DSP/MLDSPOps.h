@@ -33,7 +33,7 @@
 
 #include "MLDSPMath.h"
 #include "MLDSPMathApprox.h"
-#include "MLDSPScalarMath.h"
+//#include "MLDSPScalarMath.h"
 
 
 namespace ml {
@@ -158,8 +158,6 @@ struct SignalBlockBase : public AlignedArray<T, N * kFramesPerBlock>
 {
   using Base = AlignedArray<T, N * kFramesPerBlock>;
   using scalar_type = T;
-  static constexpr size_t height = N;
-  static constexpr size_t strideInElems = 1; 
   
   SignalBlockBase() : Base() {}
   SignalBlockBase(T val) : Base(val) {}
@@ -263,6 +261,27 @@ struct SignalBlock4Array : public SignalBlockBase<float4, N>
 {
   using Base = SignalBlockBase<float4, N>;
   using Base::Base;
+  
+  // Get pointer to the start of the nth 4x4 block
+  float4* getBlockPtr(size_t n) {
+    return this->data() + n * 4;
+  }
+  
+  // Transpose all 4x4 blocks in a single row
+  void transposeRow(size_t row) {
+    constexpr size_t blocksPerRow = kFramesPerBlock / 4;
+    size_t firstBlock = row * blocksPerRow;
+    for (size_t i = 0; i < blocksPerRow; ++i) {
+      transpose4x4InPlace(getBlockPtr(firstBlock + i));
+    }
+  }
+  
+  // Transpose all 4x4 blocks in all rows
+  void transposeRows() {
+    for (size_t row = 0; row < N; ++row) {
+      transposeRow(row);
+    }
+  }
 };
 
 using SignalBlock4 = SignalBlock4Array<1>;
@@ -656,6 +675,17 @@ inline float sum(const SignalBlock& x)
   return sum;
 }
 
+inline float mean(const SignalBlock& x)
+{
+  const float4* x4 = reinterpret_cast<const float4*>(x.data());
+  float sum = 0;
+  for (size_t i = 0; i < kFramesPerBlock / 4; ++i)
+  {
+    sum += vecSumH(x4[i]);
+  }
+  return sum / kFramesPerBlock;
+}
+
 inline float max(const SignalBlock& x)
 {
   const float4* x4 = reinterpret_cast<const float4*>(x.data());
@@ -783,6 +813,9 @@ inline SignalBlockArray<ROWS> shiftRows(const SignalBlockArray<ROWS>& x, int row
 template <size_t ROWS>
 inline SignalBlockArray<ROWS> rotateRows(const SignalBlockArray<ROWS>& x, int rowsToRotate)
 {
+  // modulo for positive and negative integers
+  auto modulo = [&](int a, int b) { return a >= 0 ? (a % b) : (b - std::abs(a % b)) % b; };
+
   SignalBlockArray<ROWS> result;
   
   // get start index k to which row 0 is mapped
@@ -998,10 +1031,8 @@ inline bool validate(const SignalBlock& x)
   for (size_t n = 0; n < kFramesPerBlock; ++n)
   {
     constexpr float maxUsefulValue = 1e12f;
-    if (ml::isNaN(x[n]) || (fabs(x[n]) > maxUsefulValue))
+    if (std::isnan(x[n]) || (fabs(x[n]) > maxUsefulValue))
     {
-      std::cout << "error: " << x[n] << " at index " << n << "\n";
-      std::cout << x << "\n";
       return false;
     }
   }

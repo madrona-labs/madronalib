@@ -44,7 +44,7 @@ inline int chunkSizeToContain(int chunkSizeExponent, int x)
 }
 
 // modulo for positive and negative integers
-inline int modulo(int a, int b) { return a >= 0 ? (a % b) : (b - abs(a % b)) % b; }
+inline int modulo(int a, int b) { return a >= 0 ? (a % b) : (b - std::abs(a % b)) % b; }
 
 // modulo for floats
 inline float modulo(float a, float b) { return a - b * floor(a / b); }
@@ -52,23 +52,25 @@ inline float modulo(float a, float b) { return a - b * floor(a / b); }
 // ----------------------------------------------------------------
 #pragma mark scalar-type templates
 
-/*
+
 template <class c>
-constexpr inline c(min)(const c& a, const c& b)
+constexpr inline std::enable_if_t<std::is_scalar_v<c>, c>
+min(const c& a, const c& b)
 {
   return (a < b) ? a : b;
 }
 
 template <class c>
-constexpr inline c(max)(const c& a, const c& b)
+constexpr inline std::enable_if_t<std::is_scalar_v<c>, c>
+max(const c& a, const c& b)
 {
   return (a > b) ? a : b;
 }
-*/
 
-// clamp to closed interval [min, max].
+// clamp to closed interval [min, max] - only for scalar types
 template <class c>
-constexpr inline c(clamp)(const c& x, const c& min, const c& max)
+constexpr inline std::enable_if_t<std::is_scalar_v<c>, c>
+clamp(const c& x, const c& min, const c& max)
 {
   return (x < min) ? min : (x > max ? max : x);
 }
@@ -94,7 +96,8 @@ constexpr inline bool withinClosedInterval(const c& x, const c& min, const c& ma
 }
 
 template <class c>
-constexpr inline int(sign)(const c& x)
+constexpr inline std::enable_if_t<std::is_scalar_v<c>, c>
+sign (const c& x)
 {
   return (x == 0) ? 0 : ((x > 0) ? 1 : -1);
 }
