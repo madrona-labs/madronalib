@@ -33,8 +33,6 @@
 
 #include "MLDSPMath.h"
 #include "MLDSPMathApprox.h"
-//#include "MLDSPScalarMath.h"
-
 
 namespace ml {
 
@@ -97,6 +95,15 @@ struct alignas(kSIMDAlignBytes) AlignedArray
   const T* end() const { return dataAligned.data() + N; }
   T* data() { return dataAligned.data(); }
   
+  // compare contents by value
+  bool operator==(const AlignedArray<T, N>& other) const {
+    return std::memcmp(dataAligned.data(), other.dataAligned.data(), N * sizeof(T)) == 0;
+  }
+  
+  bool operator!=(const AlignedArray<T, N>& other) const {
+    return !(*this == other);
+  }
+  
   void fill(T f) {dataAligned.fill(f);}
   
   inline AlignedArray& operator+=(const AlignedArray& x1)
@@ -143,7 +150,11 @@ inline std::ostream& operator<<(std::ostream& out, const AlignedArray<T, N>& aa)
   out << "[";
   for (int i = 0; i < N; ++i)
   {
-      out << aa[i] << " ";
+    if((i > 0) && ((i % kFramesPerBlock) == 0))
+    {
+      out << "\n";
+    }
+    out << aa[i] << " ";
   }
   out << "] ";
 
@@ -151,23 +162,25 @@ inline std::ostream& operator<<(std::ostream& out, const AlignedArray<T, N>& aa)
 }
 
 // ----------------------------------------------------------------
-// SignalBlockBase - common base for signal types with kFramesPerBlock frames.
+// SignalBlockArray - common base for signal types with kFramesPerBlock frames
+// per row and some number of rows
 
-template<typename T, size_t N>
-struct SignalBlockBase : public AlignedArray<T, N * kFramesPerBlock>
+template<typename T, size_t ROWS>
+struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
 {
-  using Base = AlignedArray<T, N * kFramesPerBlock>;
+  using Base = AlignedArray<T, ROWS * kFramesPerBlock>;
   using scalar_type = T;
   
-  SignalBlockBase() : Base() {}
-  SignalBlockBase(T val) : Base(val) {}
-  constexpr SignalBlockBase(const Base& b) : Base(b) {}
+  SignalBlockArrayBase() : Base() {}
+  SignalBlockArrayBase(T val) : Base(val) {}
+  constexpr SignalBlockArrayBase(const Base& b) : Base(b) {}
   
-  SignalBlockBase<T, 1> getRow(size_t i) const {
-    return SignalBlockBase<T, 1>(this->data() + i * kFramesPerBlock);
+
+  SignalBlockArrayBase<T, 1> getRow(size_t i) const {
+    return SignalBlockArrayBase<T, 1>(this->data() + i * kFramesPerBlock);
   }
   
-  void setRow(size_t i, const SignalBlockBase<T, 1>& block) {
+  void setRow(size_t i, const SignalBlockArrayBase<T, 1>& block) {
     std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
   }
   
@@ -179,35 +192,38 @@ struct SignalBlockBase : public AlignedArray<T, N * kFramesPerBlock>
     return this->data() + i * kFramesPerBlock;
   }
   
+  // because there are no actual single-row objects, we can't return a reference
+  // to one to make a row() method. Instead, we use this RowView class to provide
+  // mutable access.
   struct RowView {
     T* _data;
     
     T& operator[](size_t i) { return _data[i]; }
     const T& operator[](size_t i) const { return _data[i]; }
     
-    RowView& operator+=(const SignalBlockBase<T, 1>& other) {
+    RowView& operator+=(const SignalBlockArrayBase<T, 1>& other) {
       for (size_t i = 0; i < kFramesPerBlock; ++i) {
         _data[i] += other[i];
       }
       return *this;
     }
     
-    RowView& operator-=(const SignalBlockBase<T, 1>& other) {
+    RowView& operator-=(const SignalBlockArrayBase<T, 1>& other) {
       for (size_t i = 0; i < kFramesPerBlock; ++i) {
         _data[i] -= other[i];
       }
       return *this;
     }
     
-    RowView& operator*=(const SignalBlockBase<T, 1>& other) {
+    RowView& operator*=(const SignalBlockArrayBase<T, 1>& other) {
       for (size_t i = 0; i < kFramesPerBlock; ++i) {
         _data[i] *= other[i];
       }
       return *this;
     }
     
-    operator SignalBlockBase<T, 1>() const {
-      return SignalBlockBase<T, 1>(_data);
+    operator SignalBlockArrayBase<T, 1>() const {
+      return SignalBlockArrayBase<T, 1>(_data);
     }
   };
   
@@ -218,34 +234,26 @@ struct SignalBlockBase : public AlignedArray<T, N * kFramesPerBlock>
 
 
 // ----------------------------------------------------------------
-// SignalBlockArray<N> and int version
-// N rows of kFramesPerBlock floats, time -> horizontal
+// SignalBlockArray<ROWS> and int version
+// ROWS rows of kFramesPerBlock floats, time -> horizontal
 // T::scalar_type will let us write templates on SignalBlock, SignalBlock4, ...
 // and T::time_step or similar for writing filter functions
 // we can also add things like using upsampler_type = Upsampler, and so on
 
+using SignalBlock = SignalBlockArrayBase<float, 1>;
 
-template<size_t N>
-struct SignalBlockArray : public SignalBlockBase<float, N>
-{
-  using Base = SignalBlockBase<float, N>;
-  using Base::Base;
-};
+template<size_t ROWS>
+using SignalBlockArray = SignalBlockArrayBase<float, ROWS>;
 
-template<size_t N>
-struct SignalBlockArrayInt : public SignalBlockBase<int32_t, N>
-{
-  using Base = SignalBlockBase<int32_t, N>;
-  using Base::Base;
-};
+using SignalBlockInt = SignalBlockArrayBase<int32_t, 1>;
 
-using SignalBlock = SignalBlockArray<1>;
-using SignalBlockInt = SignalBlockArrayInt<1>;
+template<size_t ROWS>
+using SignalBlockIntArray = SignalBlockArrayBase<int32_t, ROWS>;
 
 
 // ----------------------------------------------------------------
-// SignalBlock4Array<N>
-// N big "rows" of kFramesPerBlock/4 4x4 blocks of samples containing float4 signals.
+// SignalBlock4Array<ROWS>
+// ROWS big "rows" of kFramesPerBlock/4 4x4 blocks of samples containing float4 signals.
 // time -> vertical within each 4x4 block, then to next block every 4 frames.
 // A0 B0 C0 D0   A4 B4 C4 D4 ...
 // A1 B1 C1 D1   A5 B5 C5 D5
@@ -256,35 +264,34 @@ using SignalBlockInt = SignalBlockArrayInt<1>;
 // us four SignalBlocks, and vice versa.
 //
 
-template<size_t N>
-struct SignalBlock4Array : public SignalBlockBase<float4, N>
-{
-  using Base = SignalBlockBase<float4, N>;
-  using Base::Base;
-  
-  // Get pointer to the start of the nth 4x4 block
-  float4* getBlockPtr(size_t n) {
-    return this->data() + n * 4;
-  }
-  
-  // Transpose all 4x4 blocks in a single row
-  void transposeRow(size_t row) {
-    constexpr size_t blocksPerRow = kFramesPerBlock / 4;
-    size_t firstBlock = row * blocksPerRow;
-    for (size_t i = 0; i < blocksPerRow; ++i) {
-      transpose4x4InPlace(getBlockPtr(firstBlock + i));
-    }
-  }
-  
-  // Transpose all 4x4 blocks in all rows
-  void transposeRows() {
-    for (size_t row = 0; row < N; ++row) {
-      transposeRow(row);
-    }
-  }
-};
+using SignalBlock4 = SignalBlockArrayBase<float4, 1>;
 
-using SignalBlock4 = SignalBlock4Array<1>;
+template<size_t ROWS>
+using SignalBlock4Array = SignalBlockArrayBase<float4, ROWS>;
+
+// Get pointer to the start of the nth 4x4 block
+template<size_t ROWS>
+float4* getBlockPtr(SignalBlock4Array<ROWS>& array, size_t n) {
+  return array.data() + n * 4;
+}
+
+// Transpose all 4x4 blocks in a single row
+template<size_t ROWS>
+void transposeRow(SignalBlock4Array<ROWS>& array, size_t row) {
+  constexpr size_t blocksPerRow = kFramesPerBlock / 4;
+  size_t firstBlock = row * blocksPerRow;
+  for (size_t i = 0; i < blocksPerRow; ++i) {
+    transpose4x4InPlace(getBlockPtr(array, firstBlock + i));
+  }
+}
+
+// Transpose all 4x4 blocks in all rows
+template<size_t ROWS>
+void transposeRows(SignalBlock4Array<ROWS>& array) {
+  for (size_t row = 0; row < ROWS; ++row) {
+    transposeRow(array, row);
+  }
+}
 
 
 // ----------------------------------------------------------------
@@ -466,26 +473,26 @@ DEFINE_OP_II2I(addInt32, x + y)
 DEFINE_OP_II2I(subtractInt32, x - y)
 
 // ----------------------------------------------------------------
-// Binary operation (float, float) -> float
+// Binary operation (T, T) -> T
 // Multiple-row and single-row operands
 
-template<size_t ROWS, typename OP_FF2F>
-inline SignalBlockArray<ROWS> OpFF2F_MS(const SignalBlockArray<ROWS>& a,
-                                        const SignalBlock& b,
-                                        OP_FF2F op) {
-  SignalBlockArray<ROWS> result;
+template<typename T, size_t ROWS, typename OP>
+inline SignalBlockArrayBase<T, ROWS> OpFF2F_MS(const SignalBlockArrayBase<T, ROWS>& a,
+                                        const SignalBlockArrayBase<T, 1>& b,
+                                        OP op) {
+  SignalBlockArrayBase<T, ROWS> result;
   
   for (size_t row = 0; row < ROWS; ++row) {
-    result[row] = OpFF2F(a[row], b[0], op);
+    result.setRow(row, OpFF2F(a.getRow(row), b, op));
   }
   
   return result;
 }
 
 #define DEFINE_OP_FF2F_MS(name, expr) \
-template<size_t ROWS> \
-inline SignalBlockArray<ROWS> name(const SignalBlockArray<ROWS>& a, \
-const SignalBlockArray<1>& b) { \
+template<typename T, size_t ROWS> \
+inline SignalBlockArrayBase<T, ROWS> name(const SignalBlockArrayBase<T, ROWS>& a, \
+const SignalBlockArrayBase<T, 1>& b) { \
 return OpFF2F_MS(a, b, [](float4 x, float4 y) { return (expr); }); \
 }
 
@@ -980,6 +987,33 @@ inline SignalBlockArray<ROWS> rowIndex()
 }
 
 // ----------------------------------------------------------------
+// frameIndex - returns a SignalBlockArray<T> of ROWS rows, each row filled
+// with the index of its row in time order.
+
+
+// TEMP wrong order!
+
+
+template <typename T, size_t ROWS>
+inline SignalBlockArrayBase<T, ROWS> frameIndex()
+{
+  SignalBlockArrayBase<T, ROWS> result;
+  T elem(0.f);
+  T elemOne(1.f);
+  T* writePtr = result.data();
+  for (size_t j = 0; j < ROWS; ++j)
+  {
+    for(size_t i=0; i< kFramesPerBlock; ++i)
+    {
+      *writePtr = elem;
+      elem += elemOne;
+      writePtr++;
+    }
+  }
+  return result;
+}
+
+// ----------------------------------------------------------------
 // constexpr array construction helpers
 
 constexpr float intToFloatCastFn(int i) { return static_cast<float>(i); }
@@ -1002,8 +1036,11 @@ constexpr SignalBlockInt columnIndexInt() {
   });
 }
 
+// ----------------------------------------------------------------
+// range array construction helpers
+
 // These can't easily be constexpr because they use arithmetic operators
-// which rely on SIMD. Keep them as runtime functions:
+// that rely on SIMD. Keep them as runtime functions:
 inline SignalBlock rangeOpen(float start, float end)
 {
   float interval = (end - start) / kFramesPerBlock;
@@ -1016,10 +1053,37 @@ inline SignalBlock rangeClosed(float start, float end)
   return columnIndex() * SignalBlock(interval) + SignalBlock(start);
 }
 
-inline SignalBlock interpolateDSPVectorLinear(float start, float end)
+// make a block from (start + interval) to end.
+inline SignalBlock interpolateBlockLinear(float start, float end)
 {
   float interval = (end - start) / kFramesPerBlock;
   return columnIndex() * SignalBlock(interval) + SignalBlock(start + interval);
+}
+
+// ----------------------------------------------------------------
+// float4 range array construction helpers
+
+inline float4 columnToFloat4Fn(size_t i) { return float4(i); }
+inline SignalBlock4 columnIndex4() {
+  return SignalBlock4(columnToFloat4Fn);
+}
+
+inline SignalBlock4 rangeOpen(float4 start, float4 end)
+{
+  float4 interval = (end - start) / float4(kFramesPerBlock);
+  return columnIndex4() * SignalBlock4(interval) + SignalBlock4(start);
+}
+
+inline SignalBlock4 rangeClosed(float4 start, float4 end)
+{
+  float4 interval = (end - start) / float4(kFramesPerBlock - 1.f);
+  return columnIndex4() * SignalBlock4(interval) + SignalBlock4(start);
+}
+
+inline SignalBlock4 interpolateBlockLinear(float4 start, float4 end)
+{
+  float4 interval = (end - start) / float4(kFramesPerBlock);
+  return columnIndex4() * SignalBlock4(interval) + SignalBlock4(start + interval);
 }
 
 

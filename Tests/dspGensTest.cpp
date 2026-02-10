@@ -45,6 +45,13 @@ TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
 //  std::cout << "2: " << vg2 << "\n";
 
   
+  // TEMP
+  Counter<float> cf;
+  for(int i=0; i<4; ++i)
+  {
+    std::cout << cf() << "\n";
+  }
+  
 }
 
 
