@@ -39,19 +39,16 @@ TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
   auto vg1 = g1(1.f/kFramesPerBlock);
   auto vg2 = g1(1.f/kFramesPerBlock);
 
-  
-//  std::cout << "0: " << vg0 << "\n";
-//  std::cout << "1: " << vg1 << "\n";
-//  std::cout << "2: " << vg2 << "\n";
-
-  
-  // TEMP
+  // validate element order and horizontal <-> vertical transforms
   Counter<float> cf;
-  for(int i=0; i<4; ++i)
-  {
-    std::cout << cf() << "\n";
-  }
+  SignalBlock cfOut = cf();
+  auto cfh = repeatRows<4>(cfOut);
   
+  Counter<float4> cg;
+  SignalBlock4 cgOut = cg();
+  auto cgh = verticalToHorizontal(cgOut);
+  
+  REQUIRE(cfh == cgh);
 }
 
 

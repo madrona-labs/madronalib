@@ -293,6 +293,55 @@ void transposeRows(SignalBlock4Array<ROWS>& array) {
   }
 }
 
+// Convert vertical SIMD (SignalBlock4) to 4 horizontal SignalBlocks.
+// Transpose separates the lanes within each 4x4 block,
+// then we deinterleave to collect each lane contiguously.
+inline SignalBlockArray<4> verticalToHorizontal(const SignalBlock4& v)
+{
+  // Step 1: transpose each 4x4 block to separate lanes
+  SignalBlock4 temp = v;
+  transposeRow(temp, 0);
+  
+  // After transpose, memory is: [A0-3][B0-3][C0-3][D0-3] [A4-7][B4-7]...
+  // Step 2: gather every 4th float4 into contiguous rows
+  SignalBlockArray<4> result;
+  constexpr size_t numBlocks = kFramesPerBlock / 4;
+  
+  for (size_t lane = 0; lane < 4; ++lane)
+  {
+    float4* dest = reinterpret_cast<float4*>(result.rowPtr(lane));
+    for (size_t block = 0; block < numBlocks; ++block)
+    {
+      dest[block] = temp[block * 4 + lane];
+    }
+  }
+  
+  return result;
+}
+
+// Convert 4 horizontal SignalBlocks to vertical SIMD (SignalBlock4).
+// Interleave the rows into ABCD blocks, then transpose to get
+// back to the vertical-SIMD layout.
+inline SignalBlock4 horizontalToVertical(const SignalBlockArray<4>& h)
+{
+  SignalBlock4 temp;
+  constexpr size_t numBlocks = kFramesPerBlock / 4;
+  
+  // Step 1: scatter each row's float4s into interleaved block positions
+  for (size_t lane = 0; lane < 4; ++lane)
+  {
+    const float4* src = reinterpret_cast<const float4*>(h.rowPtr(lane));
+    for (size_t block = 0; block < numBlocks; ++block)
+    {
+      temp[block * 4 + lane] = src[block];
+    }
+  }
+  
+  // Step 2: transpose to get vertical-SIMD layout
+  transposeRow(temp, 0);
+  
+  return temp;
+}
 
 // ----------------------------------------------------------------
 // SignalBlockDynamic: for holding a number of SignalBlocks only known at runtime.

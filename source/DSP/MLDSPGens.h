@@ -19,54 +19,26 @@ namespace ml
 // ----------------------------------------------------------------
 // Time-ordered block processing, used by Gens and Filters
 
-template<typename T>
-inline constexpr size_t timeToMemIndex(size_t t)
-{
-  if constexpr (std::is_same_v<T, float>)
-  {
-    return t;
-  }
-  else
-  {
-    constexpr size_t numBlocks = kFramesPerBlock / 4;
-    return (t & 3) * numBlocks + (t >> 2);
-  }
-}
 
-template<typename T>
-inline constexpr size_t memToTimeIndex(size_t i)
-{
-  if constexpr (std::is_same_v<T, float>)
-  {
-    return i;
-  }
-  else
-  {
-    constexpr size_t numBlocks = kFramesPerBlock / 4;
-    return (i % numBlocks) * 4 + (i / numBlocks);
-  }
-}
-
-template<typename T, typename StepFn>
-inline SignalBlockArrayBase<T, 1> processBlock(const SignalBlockArrayBase<T, 1>& input, StepFn stepFn)
+template<typename T, typename FN>
+inline SignalBlockArrayBase<T, 1> processBlock(const SignalBlockArrayBase<T, 1>& input, FN stepFn)
 {
   SignalBlockArrayBase<T, 1> output;
   for (size_t t = 0; t < kFramesPerBlock; ++t)
   {
-    const size_t idx = timeToMemIndex<T>(t);
-    output[idx] = stepFn(input[idx]);
+    output[t] = stepFn(input[t]);
   }
   return output;
 }
 
-template<typename T, typename StepFn>
-inline SignalBlockArrayBase<T, 1> processBlock(StepFn stepFn)
+// no input
+template<typename T, typename FN>
+inline SignalBlockArrayBase<T, 1> processBlock(FN stepFn)
 {
   SignalBlockArrayBase<T, 1> output;
   for (size_t t = 0; t < kFramesPerBlock; ++t)
   {
-    const size_t idx = timeToMemIndex<T>(t);
-    output[idx] = stepFn();
+    output[t] = stepFn();
   }
   return output;
 }
