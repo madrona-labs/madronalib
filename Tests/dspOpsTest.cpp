@@ -148,6 +148,15 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     REQUIRE(maxResult[kFramesPerBlock - 1] == Approx(1.0f));
   }
   
+  SECTION("multiple/single")
+  {
+    SignalBlock4Array<2> a = frameIndex<float4, 2>();
+    SignalBlock4 b(float4(1, 2, 3, 4));
+    auto c = add1(a, b);
+    auto d = subtract1(c, b);
+    REQUIRE(a == d);
+  }
+  
   SECTION("ternary operations")
   {
     SignalBlock a(1.0f);
@@ -194,6 +203,11 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     
     REQUIRE(preciseMaxDiff < 2e-6f);
     REQUIRE(approxMaxDiff < 2e-4f);
+    
+    // This works. We need more float4 array tests!
+    SignalBlock4 a4(rangeClosed(float4(-kPi), float4(kPi)));
+    auto sina4 = sin(a4);
+
   }
   
   SECTION("log/exp functions precision")
@@ -474,7 +488,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     SignalBlock4Array<2> original = block;
     
     // Transpose all rows
-    block.transposeRows();
+    transposeRows(block);
     
     // Verify it changed (check a few values to ensure transpose happened)
     bool changed = false;
@@ -486,7 +500,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     REQUIRE(changed);
     
     // Transpose again - should get back original
-    block.transposeRows();
+    transposeRows(block);
     
     // Verify we got back the original
     for (size_t row = 0; row < 2; ++row) {
@@ -503,7 +517,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     }
     
     SignalBlock4 originalSingle = singleRow;
-    singleRow.transposeRow(0);
+    transposeRow(singleRow, 0);
     
     // Verify change
     bool singleChanged = false;
@@ -515,7 +529,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     REQUIRE(singleChanged);
     
     // Transpose back
-    singleRow.transposeRow(0);
+    transposeRow(singleRow, 0);
     for (size_t i = 0; i < kFramesPerBlock; ++i) {
       REQUIRE(eq(singleRow[i], originalSingle[i]));
     }
@@ -530,7 +544,6 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     bad[0] = std::numeric_limits<float>::quiet_NaN();
     REQUIRE(!validate(bad));
   }
-  
   
 #if DO_TIME_TESTS
   SECTION("time")

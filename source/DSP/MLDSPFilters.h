@@ -4,18 +4,13 @@
 
 // DSP filters: functor objects implementing an operator()(SignalBlock input, ...).
 // All these filters have some state, otherwise they would be DSPOps.
-//
-// These objects are for building fixed DSP graphs in a functional style. The
-// compiler should have many opportunities to optimize these graphs. For dynamic
-// graphs changeable at runtime, see MLProcs. In general MLProcs will be written
-// using DSPGens, DSPOps, DSPFilters.
+// All these filterstake some input, otherwise they would be DSPGens.
 //
 // Filter cutoffs are set by a parameter omega, equal to frequency / sample
 // rate. This lets filter objects be unaware of the sample rate, resulting in
 // less code overall. For all filters, k is a damping parameter equal to 1/Q
 // where Q is the analog filter "quality." For bell and shelf filters, gain is
 // specified as an output / input ratio A.
-
 
 #pragma once
 
@@ -39,7 +34,7 @@ SignalBlockArray<COEFFS_SIZE> interpolateCoeffsLinear(const std::array<float, CO
   SignalBlockArray<COEFFS_SIZE> vy;
   for (int i = 0; i < COEFFS_SIZE; ++i)
   {
-    vy.setRow(i, interpolateDSPVectorLinear(c0[i], c1[i]));
+    vy.setRow(i, interpolateBlockLinear(c0[i], c1[i]));
   }
   return vy;
 }
@@ -65,9 +60,9 @@ struct Lopass
 
   inline void clear() { state.fill(0.f); }
 
+  // TODO: add something like
   // template<typename T> T lopassCalc(T x)
-  // this will do x1 (float) and x4 (SIMD) versions
-  // further templates will use x4 version to create Banks of COLS, ROWS
+  // this will do x1 (float) and x4 (SIMD, vertical) versions
   
   // get internal coefficients for a given omega and k.
   // omega: the frequency divided by the sample rate.
