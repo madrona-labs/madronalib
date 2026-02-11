@@ -9928,7 +9928,7 @@ RtAudioErrorType RtApiPulse::abortStream( void )
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <math.h>
+//#include <math.h>
 
 static void *ossCallbackHandler(void * ptr);
 

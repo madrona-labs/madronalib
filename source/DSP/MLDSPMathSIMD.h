@@ -16,11 +16,6 @@ constexpr size_t kSIMDVectorElems{4};
 #include "MLDSPMathSSE.h" // SSE 4.1
 #endif
 
-#include "MLDSPMathApprox.h"
-#include "MLDSPMathScalar.h"
-
-float sin(float x) { return std::sinf(x); }
-
 // ----------------------------------------------------------------
 // Utilities
 
