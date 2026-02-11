@@ -114,12 +114,12 @@ inline float4 orBits(float4 a, float4 b) { return float4(_mm_or_ps(a, b)); }
 inline float4 xorBits(float4 a, float4 b) { return float4(_mm_xor_ps(a, b)); }
 
 // Float comparisons (return float4 masks)
-inline float4 compareEqual(float4 a, float4 b) { return float4(_mm_cmpeq_ps(a, b)); }
-inline float4 compareNotEqual(float4 a, float4 b) { return float4(_mm_cmpneq_ps(a, b)); }
-inline float4 compareGreaterThan(float4 a, float4 b) { return float4(_mm_cmpgt_ps(a, b)); }
-inline float4 compareGreaterThanOrEqual(float4 a, float4 b) { return float4(_mm_cmpge_ps(a, b)); }
-inline float4 compareLessThan(float4 a, float4 b) { return float4(_mm_cmplt_ps(a, b)); }
-inline float4 compareLessThanOrEqual(float4 a, float4 b) { return float4(_mm_cmple_ps(a, b)); }
+inline float4 operator==(float4 a, float4 b) { return float4(_mm_cmpeq_ps(a, b)); }
+inline float4 operator!=(float4 a, float4 b) { return float4(_mm_cmpneq_ps(a, b)); }
+inline float4 operator>(float4 a, float4 b) { return float4(_mm_cmpgt_ps(a, b)); }
+inline float4 operator>=(float4 a, float4 b) { return float4(_mm_cmpge_ps(a, b)); }
+inline float4 operator<(float4 a, float4 b) { return float4(_mm_cmplt_ps(a, b)); }
+inline float4 operator<=(float4 a, float4 b) { return float4(_mm_cmple_ps(a, b)); }
 
 // Float special
 inline float4 setZero() { return float4(_mm_setzero_ps()); }

@@ -11,6 +11,8 @@
 //#include <cmath>
 //#include <limits>
 
+using namespace ml;
+
 namespace {
 
 // Equality check for float4 (for use in REQUIRE)
@@ -307,12 +309,12 @@ TEST_CASE("madronalib/dsp_math/float4_comparisons", "[dsp_math]")
   float4 a(1.0f, 2.0f, 3.0f, 4.0f);
   float4 b(2.0f, 2.0f, 2.0f, 2.0f);
 
-  SECTION("compareEqual")              { REQUIRE(eq(castFloatToInt(compareEqual(a, b)), int4(0, -1, 0, 0))); }
-  SECTION("compareNotEqual")           { REQUIRE(eq(castFloatToInt(compareNotEqual(a, b)), int4(-1, 0, -1, -1))); }
-  SECTION("compareLessThan")           { REQUIRE(eq(castFloatToInt(compareLessThan(a, b)), int4(-1, 0, 0, 0))); }
-  SECTION("compareLessThanOrEqual")    { REQUIRE(eq(castFloatToInt(compareLessThanOrEqual(a, b)), int4(-1, -1, 0, 0))); }
-  SECTION("compareGreaterThan")        { REQUIRE(eq(castFloatToInt(compareGreaterThan(a, b)), int4(0, 0, -1, -1))); }
-  SECTION("compareGreaterThanOrEqual") { REQUIRE(eq(castFloatToInt(compareGreaterThanOrEqual(a, b)), int4(0, -1, -1, -1))); }
+  SECTION("compareEqual")              { REQUIRE(eq(castFloatToInt((a == b)), int4(0, -1, 0, 0))); }
+  SECTION("compareNotEqual")           { REQUIRE(eq(castFloatToInt((a != b)), int4(-1, 0, -1, -1))); }
+  SECTION("compareLessThan")           { REQUIRE(eq(castFloatToInt((a < b)), int4(-1, 0, 0, 0))); }
+  SECTION("compareLessThanOrEqual")    { REQUIRE(eq(castFloatToInt((a <= b)), int4(-1, -1, 0, 0))); }
+  SECTION("compareGreaterThan")        { REQUIRE(eq(castFloatToInt((a > b)), int4(0, 0, -1, -1))); }
+  SECTION("compareGreaterThanOrEqual") { REQUIRE(eq(castFloatToInt((a >= b)), int4(0, -1, -1, -1))); }
 }
 
 TEST_CASE("madronalib/dsp_math/int4_comparisons", "[dsp_math]")
@@ -396,14 +398,14 @@ TEST_CASE("madronalib/dsp_math/conversions", "[dsp_math]")
     REQUIRE(eq(castIntToFloat(castFloatToInt(a)), a));
   }
 
-  SECTION("vecIntPart")
+  SECTION("intPart")
   {
-    REQUIRE(eq(vecIntPart(float4(1.7f, -1.7f, 2.3f, -2.3f)), float4(1.0f, -1.0f, 2.0f, -2.0f)));
+    REQUIRE(eq(intPart(float4(1.7f, -1.7f, 2.3f, -2.3f)), float4(1.0f, -1.0f, 2.0f, -2.0f)));
   }
 
   SECTION("vecFracPart")
   {
-    REQUIRE(nearlyEqual(vecFracPart(float4(1.25f, -1.25f, 2.75f, -2.75f)),
+    REQUIRE(nearlyEqual(fracPart(float4(1.25f, -1.25f, 2.75f, -2.75f)),
                         float4(0.25f, -0.25f, 0.75f, -0.75f)));
   }
 }
@@ -498,13 +500,13 @@ TEST_CASE("madronalib/dsp_math/approx_functions", "[dsp_math]")
 {
   SECTION("vecLog")
   {
-    REQUIRE(nearlyEqual(vecLog(float4(1.0f, 2.0f, 4.0f, 8.0f)),
+    REQUIRE(nearlyEqual(log(float4(1.0f, 2.0f, 4.0f, 8.0f)),
             float4(std::log(1.0f), std::log(2.0f), std::log(4.0f), std::log(8.0f)), 1e-5f));
   }
 
-  SECTION("vecExp")
+  SECTION("exp")
   {
-    REQUIRE(nearlyEqual(vecExp(float4(0.0f, 1.0f, 2.0f, -1.0f)),
+    REQUIRE(nearlyEqual(exp(float4(0.0f, 1.0f, 2.0f, -1.0f)),
             float4(std::exp(0.0f), std::exp(1.0f), std::exp(2.0f), std::exp(-1.0f)), 1e-4f));
   }
 
@@ -514,9 +516,9 @@ TEST_CASE("madronalib/dsp_math/approx_functions", "[dsp_math]")
             float4(std::sin(0.0f), std::sin(0.5f), std::sin(1.0f), std::sin(1.5f)), 1e-5f));
   }
 
-  SECTION("vecCos")
+  SECTION("cos")
   {
-    REQUIRE(nearlyEqual(vecCos(float4(0.0f, 0.5f, 1.0f, 1.5f)),
+    REQUIRE(nearlyEqual(cos(float4(0.0f, 0.5f, 1.0f, 1.5f)),
             float4(std::cos(0.0f), std::cos(0.5f), std::cos(1.0f), std::cos(1.5f)), 1e-5f));
   }
 
@@ -524,41 +526,41 @@ TEST_CASE("madronalib/dsp_math/approx_functions", "[dsp_math]")
   {
     float4 a(0.0f, 0.5f, 1.0f, 1.5f);
     float4 s, c;
-    vecSinCos(a, &s, &c);
-    REQUIRE(nearlyEqual(s, float4(std::sin(0.0f), std::sin(0.5f), std::sin(1.0f), std::sin(1.5f)), 1e-5f));
-    REQUIRE(nearlyEqual(c, float4(std::cos(0.0f), std::cos(0.5f), std::cos(1.0f), std::cos(1.5f)), 1e-5f));
+    auto sincospair = sincos(a);
+    REQUIRE(nearlyEqual(sincospair.first, float4(std::sin(0.0f), std::sin(0.5f), std::sin(1.0f), std::sin(1.5f)), 1e-5f));
+    REQUIRE(nearlyEqual(sincospair.second, float4(std::cos(0.0f), std::cos(0.5f), std::cos(1.0f), std::cos(1.5f)), 1e-5f));
   }
 }
 
 TEST_CASE("madronalib/dsp_math/fast_approx_functions", "[dsp_math]")
 {
-  SECTION("vecSinApprox")
+  SECTION("sinApprox")
   {
-    REQUIRE(nearlyEqual(vecSinApprox(float4(0.0f, 0.5f, 1.0f, -0.5f)),
+    REQUIRE(nearlyEqual(sinApprox(float4(0.0f, 0.5f, 1.0f, -0.5f)),
             float4(std::sin(0.0f), std::sin(0.5f), std::sin(1.0f), std::sin(-0.5f)), 1e-4f));
   }
 
-  SECTION("vecCosApprox")
+  SECTION("cosApprox")
   {
-    REQUIRE(nearlyEqual(vecCosApprox(float4(0.0f, 0.5f, 1.0f, -0.5f)),
+    REQUIRE(nearlyEqual(cosApprox(float4(0.0f, 0.5f, 1.0f, -0.5f)),
             float4(std::cos(0.0f), std::cos(0.5f), std::cos(1.0f), std::cos(-0.5f)), 1e-4f));
   }
 
-  SECTION("vecExpApprox")
+  SECTION("expApprox")
   {
-    REQUIRE(nearlyEqual(vecExpApprox(float4(0.0f, 1.0f, 2.0f, -1.0f)),
+    REQUIRE(nearlyEqual(expApprox(float4(0.0f, 1.0f, 2.0f, -1.0f)),
             float4(std::exp(0.0f), std::exp(1.0f), std::exp(2.0f), std::exp(-1.0f)), 0.15f));
   }
 
-  SECTION("vecLogApprox")
+  SECTION("logApprox")
   {
-    REQUIRE(nearlyEqual(vecLogApprox(float4(1.0f, 2.0f, 4.0f, 8.0f)),
+    REQUIRE(nearlyEqual(logApprox(float4(1.0f, 2.0f, 4.0f, 8.0f)),
             float4(std::log(1.0f), std::log(2.0f), std::log(4.0f), std::log(8.0f)), 0.01f));
   }
 
-  SECTION("vecTanhApprox")
+  SECTION("tanhApprox")
   {
-    REQUIRE(nearlyEqual(vecTanhApprox(float4(0.0f, 0.5f, 1.0f, -0.5f)),
+    REQUIRE(nearlyEqual(tanhApprox(float4(0.0f, 0.5f, 1.0f, -0.5f)),
             float4(std::tanh(0.0f), std::tanh(0.5f), std::tanh(1.0f), std::tanh(-0.5f)), 0.02f));
   }
 }

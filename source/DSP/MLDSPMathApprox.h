@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "MLDSPMath.h"
+#include "MLDSPMathSIMD.h"
 
 // cephes-derived approximate math functions adapted from code by Julien Pommier
 // Copyright (C) 2007 Julien Pommier and licensed under the zlib license
@@ -61,47 +61,13 @@ static const int4 _pi32_2(2);
 static const int4 _pi32_4(4);
 static const int4 _pi32_0x7f(0x7f);
 
-// polynomial approximation constants
-
-static const float4 kSinC1Vec(0.99997937679290771484375f);
-static const float4 kSinC2Vec(-0.166624367237091064453125f);
-static const float4 kSinC3Vec(8.30897875130176544189453125e-3f);
-static const float4 kSinC4Vec(-1.92649182281456887722015380859375e-4f);
-static const float4 kSinC5Vec(2.147840177713078446686267852783203125e-6f);
-
-static const float4 kCosC1Vec(0.999959766864776611328125f);
-static const float4 kCosC2Vec(-0.4997930824756622314453125f);
-static const float4 kCosC3Vec(4.1496001183986663818359375e-2f);
-static const float4 kCosC4Vec(-1.33926304988563060760498046875e-3f);
-static const float4 kCosC5Vec(1.8791708498611114919185638427734375e-5f);
-
-static const float4 kExpC1Vec(2139095040.f);
-static const float4 kExpC2Vec(12102203.1615614f);
-static const float4 kExpC3Vec(1065353216.f);
-static const float4 kExpC4Vec(0.510397365625862338668154f);
-static const float4 kExpC5Vec(0.310670891004095530771135f);
-static const float4 kExpC6Vec(0.168143436463395944830000f);
-static const float4 kExpC7Vec(-2.88093587581985443087955e-3f);
-static const float4 kExpC8Vec(1.3671023382430374383648148e-2f);
-
-static const float4 kLogC1Vec(-89.970756366f);
-static const float4 kLogC2Vec(3.529304993f);
-static const float4 kLogC3Vec(-2.461222105f);
-static const float4 kLogC4Vec(1.130626167f);
-static const float4 kLogC5Vec(-0.288739945f);
-static const float4 kLogC6Vec(3.110401639e-2f);
-static const float4 kLogC7Vec(0.69314718055995f);
-
-static const float4 k9Vec(9.0f);
-static const float4 k27Vec(27.0f);
-
 // ----------------------------------------------------------------
 // vecLog - natural logarithm
 
-inline float4 vecLog(float4 x) {
+inline float4 log(float4 x) {
   int4 emm0;
   float4 one = _ps_1;
-  float4 invalid_mask = compareLessThanOrEqual(x, setZero());
+  float4 invalid_mask = (x <= setZero());
   
   x = max(x, castIntToFloat(_pi32_min_norm_pos));
   
@@ -115,7 +81,7 @@ inline float4 vecLog(float4 x) {
   
   e = e + one;
   
-  float4 mask = compareLessThan(x, _ps_cephes_SQRTHF);
+  float4 mask = (x < _ps_cephes_SQRTHF);
   float4 tmp = andBits(x, mask);
   x = x - one;
   e = e - andBits(one, mask);
@@ -158,9 +124,9 @@ inline float4 vecLog(float4 x) {
 }
 
 // ----------------------------------------------------------------
-// vecExp - exponential
+// exp - exponential
 
-inline float4 vecExp(float4 x) {
+inline float4 exp(float4 x) {
   float4 tmp = setZero(), fx;
   int4 emm0;
   float4 one = _ps_1;
@@ -174,7 +140,7 @@ inline float4 vecExp(float4 x) {
   emm0 = floatToIntTruncate(fx);
   tmp = intToFloat(emm0);
   
-  float4 mask = compareGreaterThan(tmp, fx);
+  float4 mask = (tmp > fx);
   mask = andBits(mask, one);
   fx = tmp - mask;
   
@@ -277,9 +243,9 @@ inline float4 sin(float4 x) {
 }
 
 // ----------------------------------------------------------------
-// vecCos - cosine
+// cos - cosine
 
-inline float4 vecCos(float4 x) {
+inline float4 cos(float4 x) {
   float4 xmm1, xmm2 = setZero(), xmm3, y;
   int4 emm0, emm2;
   
@@ -346,7 +312,7 @@ inline float4 vecCos(float4 x) {
 // ----------------------------------------------------------------
 // vecSinCos - simultaneous sine and cosine
 
-inline void vecSinCos(float4 x, float4* s, float4* c) {
+inline std::pair<float4, float4> sincos(float4 x) {
   float4 xmm1, xmm2, xmm3 = setZero(), sign_bit_sin, y;
   int4 emm0, emm2, emm4;
   
@@ -420,61 +386,127 @@ inline void vecSinCos(float4 x, float4* s, float4* c) {
   xmm1 = ysin1 + ysin2;
   xmm2 = y + y2;
   
-  *s = xorBits(xmm1, sign_bit_sin);
-  *c = xorBits(xmm2, sign_bit_cos);
+  float4 s = xorBits(xmm1, sign_bit_sin);
+  float4 c = xorBits(xmm2, sign_bit_cos);
+  return {s, c};
 }
 
 // ----------------------------------------------------------------
 // Fast polynomial approximations
 
-inline float4 vecSinApprox(float4 x) {
-  float4 x2 = x * x;
-  return x * (kSinC1Vec + (x2 * (kSinC2Vec + (x2 * (kSinC3Vec + (x2 * (kSinC4Vec + (x2 * kSinC5Vec))))))));
+
+constexpr float kSinC1 = 0.99997937679290771484375f;
+constexpr float kSinC2 = -0.166624367237091064453125f;
+constexpr float kSinC3 = 8.30897875130176544189453125e-3f;
+constexpr float kSinC4 = -1.92649182281456887722015380859375e-4f;
+constexpr float kSinC5 = 2.147840177713078446686267852783203125e-6f;
+
+constexpr float kCosC1 = 0.999959766864776611328125f;
+constexpr float kCosC2 = -0.4997930824756622314453125f;
+constexpr float kCosC3 = 4.1496001183986663818359375e-2f;
+constexpr float kCosC4 = -1.33926304988563060760498046875e-3f;
+constexpr float kCosC5 = 1.8791708498611114919185638427734375e-5f;
+
+constexpr float kTanhN = 27.0f;
+constexpr float kTanhD = 9.0f;
+
+// ----------------------------------------------------------------
+// Pure polynomial approximations — template directly
+
+template<typename T>
+inline T sinApprox(T x) {
+  T x2 = x * x;
+  return x * (T{kSinC1} + (x2 * (T{kSinC2} + (x2 * (T{kSinC3} + (x2 * (T{kSinC4} + (x2 * T{kSinC5}))))))));
 }
 
-inline float4 vecCosApprox(float4 x) {
-  float4 x2 = x * x;
-  return (kCosC1Vec + (x2 * (kCosC2Vec + (x2 * (kCosC3Vec + (x2 * (kCosC4Vec + (x2 * kCosC5Vec))))))));
+template<typename T>
+inline T cosApprox(T x) {
+  T x2 = x * x;
+  return T{kCosC1} + (x2 * (T{kCosC2} + (x2 * (T{kCosC3} + (x2 * (T{kCosC4} + (x2 * T{kCosC5})))))));
 }
 
-inline float4 vecExpApprox(float4 x) {
-  const float4 kZeroVec = setZero();
-  
-  float4 val2, val3, val4;
-  int4 val4i;
-  
-  val2 = (x * kExpC2Vec) + kExpC3Vec;
-  val3 = min(val2, kExpC1Vec);
-  val4 = max(val3, kZeroVec);
-  val4i = floatToIntTruncate(val4);
-  
-  float4 xu = andBits(castIntToFloat(val4i), castIntToFloat(set1Int(0x7F800000)));
-  float4 b = orBits(andBits(castIntToFloat(val4i), castIntToFloat(set1Int(0x7FFFFF))),
-                    castIntToFloat(set1Int(0x3F800000)));
-  
-  return xu * (kExpC4Vec + (b * (kExpC5Vec + (b * (kExpC6Vec + (b * (kExpC7Vec + (b * kExpC8Vec))))))));
+template<typename T>
+inline T tanhApprox(T x) {
+  T x2 = x * x;
+  return x * (T{kTanhN} + x2) / (T{kTanhN} + T{kTanhD} * x2);
 }
 
-inline float4 vecLogApprox(float4 val) {
-  int4 vZero = setZeroInt();
-  int4 valAsInt = castFloatToInt(val);
-  int4 expi = shiftRightElements(valAsInt, 23);
-  float4 addcst = vecSelectFFI(kLogC1Vec, set1Float(FLT_MIN),
-                               castFloatToInt(compareGreaterThan(val, castIntToFloat(vZero))));
-  int4 valAsIntMasked =
-  castFloatToInt(orBits(andBits(castIntToFloat(valAsInt), castIntToFloat(set1Int(0x7FFFFF))),
-                        castIntToFloat(set1Int(0x3F800000))));
-  float4 x = castIntToFloat(valAsIntMasked);
-  
-  float4 poly = x * (kLogC2Vec + (x * (kLogC3Vec + (x * (kLogC4Vec + (x * (kLogC5Vec + (x * kLogC6Vec))))))));
-  
-  float4 addCstResult = addcst + (kLogC7Vec * intToFloat(expi));
-  return poly + addCstResult;
+// ----------------------------------------------------------------
+// Scalar bit-manipulation primitives (match the float4/int4 versions)
+
+inline int32_t castFloatToInt(float x) {
+  int32_t i; std::memcpy(&i, &x, 4); return i;
 }
 
-inline float4 vecTanhApprox(float4 x) {
-  float4 x2 = x * x;
-  float4 denom = k27Vec + (k9Vec * x2);
-  float4 frac = (k27Vec + x2) / denom;
-  return x * frac;
+inline float castIntToFloat(int32_t i) {
+  float x; std::memcpy(&x, &i, 4); return x;
+}
+
+inline int32_t floatToIntTruncate(float x) { return static_cast<int32_t>(x); }
+inline float intToFloat(int32_t x) { return static_cast<float>(x); }
+
+inline int32_t shiftRightElements(int32_t a, int count) { return static_cast<int32_t>(static_cast<uint32_t>(a) >> count); }
+inline int32_t shiftLeftElements(int32_t a, int count) { return a << count; }
+
+inline int32_t andBits(int32_t a, int32_t b) { return a & b; }
+inline int32_t orBits(int32_t a, int32_t b) { return a | b; }
+inline float andBits(float a, float b) { return castIntToFloat(castFloatToInt(a) & castFloatToInt(b)); }
+inline float orBits(float a, float b) { return castIntToFloat(castFloatToInt(a) | castFloatToInt(b)); }
+
+constexpr float kExpC1 = 2139095040.f;
+constexpr float kExpC2 = 12102203.1615614f;
+constexpr float kExpC3 = 1065353216.f;
+constexpr float kExpC4 = 0.510397365625862338668154f;
+constexpr float kExpC5 = 0.310670891004095530771135f;
+constexpr float kExpC6 = 0.168143436463395944830000f;
+constexpr float kExpC7 = -2.88093587581985443087955e-3f;
+constexpr float kExpC8 = 1.3671023382430374383648148e-2f;
+
+constexpr float kLogC1 = -89.970756366f;
+constexpr float kLogC2 = 3.529304993f;
+constexpr float kLogC3 = -2.461222105f;
+constexpr float kLogC4 = 1.130626167f;
+constexpr float kLogC5 = -0.288739945f;
+constexpr float kLogC6 = 3.110401639e-2f;
+constexpr float kLogC7 = 0.69314718055995f;
+
+template<typename T>
+inline T expApprox(T x) {
+  using I = std::conditional_t<std::is_same_v<T, float>, int32_t, int4>;
+  
+  T val2 = x * T{kExpC2} + T{kExpC3};
+  T val3 = min(val2, T{kExpC1});
+  T val4 = max(val3, T{0.0f});
+  I val4i = floatToIntTruncate(val4);
+  
+  T xu = castIntToFloat(andBits(val4i, I{0x7F800000}));
+  T b = castIntToFloat(orBits(andBits(val4i, I{0x7FFFFF}), I{0x3F800000}));
+  
+  return xu * (T{kExpC4} + (b * (T{kExpC5} + (b * (T{kExpC6} + (b * (T{kExpC7} + (b * T{kExpC8}))))))));
+}
+
+template<typename T>
+inline T logApprox(T x) {
+  using I = std::conditional_t<std::is_same_v<T, float>, int32_t, int4>;
+  
+  I valAsInt = castFloatToInt(x);
+  I expi = shiftRightElements(valAsInt, 23);
+  
+  I valMasked = orBits(andBits(valAsInt, I{0x7FFFFF}), I{0x3F800000});
+  T xm = castIntToFloat(valMasked);
+  
+  T poly = xm * (T{kLogC2} + (xm * (T{kLogC3} + (xm * (T{kLogC4} + (xm * (T{kLogC5} + (xm * T{kLogC6}))))))));
+  
+  T addcst;
+  if constexpr (std::is_same_v<T, float>)
+  {
+    addcst = x > 0.0f ? kLogC1 : FLT_MIN;
+  }
+  else
+  {
+    addcst = vecSelectFFI(T{kLogC1}, T{FLT_MIN},
+                          castFloatToInt((x > T{0.0f})));
+  }
+  
+  return poly + addcst + T{kLogC7} * intToFloat(expi);
 }
