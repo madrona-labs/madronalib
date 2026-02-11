@@ -9,13 +9,13 @@
 #include <iomanip>
 #include <sstream>
 #include <array>
-#include <cmath>
+//#include <cmath>
 
 #include <algorithm>
 #include <cctype>
 #include <locale>
 
-#include "MLDSPScalarMath.h"
+#include "MLDSPMathScalar.h"
 
 namespace ml
 {

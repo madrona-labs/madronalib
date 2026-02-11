@@ -7,7 +7,7 @@
 #include <cstring>
 #include <cmath>
 
-#include "MLDSPScalarMath.h"
+#include "MLDSPMathScalar.h"
 #include "MLMemoryUtils.h"
 #include "aes256.h"
 #include "utf.hpp"

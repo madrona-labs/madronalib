@@ -8,8 +8,8 @@
 #include "MLDSPMath.h"
 #include "MLDSPMathApprox.h"
 
-#include <cmath>
-#include <limits>
+//#include <cmath>
+//#include <limits>
 
 namespace {
 
@@ -510,7 +510,7 @@ TEST_CASE("madronalib/dsp_math/approx_functions", "[dsp_math]")
 
   SECTION("vecSin")
   {
-    REQUIRE(nearlyEqual(vecSin(float4(0.0f, 0.5f, 1.0f, 1.5f)),
+    REQUIRE(nearlyEqual(sin(float4(0.0f, 0.5f, 1.0f, 1.5f)),
             float4(std::sin(0.0f), std::sin(0.5f), std::sin(1.0f), std::sin(1.5f)), 1e-5f));
   }
 

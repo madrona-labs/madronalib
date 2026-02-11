@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <cmath>
+//#include <cmath>
 #include <stdint.h>
 #include <stdlib.h>
 

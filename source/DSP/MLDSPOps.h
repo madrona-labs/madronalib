@@ -23,13 +23,13 @@
 #endif
 
 #include <array>
-#include <cstddef>
-#include <functional>
+//#include <cstddef>
+//#include <functional>
 #include <iostream>
-#include <iterator>
-#include <type_traits>
-#include <vector>
-#include <utility>
+//#include <iterator>
+//#include <type_traits>
+//#include <vector>
+//#include <utility>
 
 #include "MLDSPMath.h"
 #include "MLDSPMathApprox.h"
@@ -403,13 +403,10 @@ DEFINE_OP_F2F(sign, andBits(orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)
 DEFINE_OP_F2F(signBit, orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)))
 
 // Trig, log and exp, using accurate cephes-derived library
-DEFINE_OP_F2F(sin, vecSin(x))
+DEFINE_OP_F2F(sin, sin(x))
 DEFINE_OP_F2F(cos, vecCos(x))
 DEFINE_OP_F2F(log, vecLog(x))
 DEFINE_OP_F2F(exp, vecExp(x))
-
-// TEMP add these somewhere else!
-inline float sin(float x) { return std::sin(x); }
 
 // Lazy log2 and exp2 from natural log / exp
 static const float4 kLogTwoVec{0.69314718055994529f};

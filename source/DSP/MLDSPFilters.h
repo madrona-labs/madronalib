@@ -15,9 +15,7 @@
 #include <vector>
 
 #include "MLDSPOps.h"
-#include "MLDSPScalarMath.h"
-#include <cmath>
-
+#include "MLDSPMath.h"
 
 namespace ml
 {
@@ -80,8 +78,6 @@ struct Lopass : CoeffFilter<T, Lopass<T>>
   
   Coeffs coeffs{};
   State state{};
-  
-  
   
   void clear() {
     const Params kDefaultParams{0.f, 0.5f};

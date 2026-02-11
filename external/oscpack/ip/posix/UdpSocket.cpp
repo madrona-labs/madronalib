@@ -38,7 +38,7 @@
 #include "UdpSocket.h"
 
 #include <errno.h>
-#include <math.h>
+//#include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>  // for sockaddr_in
 #include <pthread.h>

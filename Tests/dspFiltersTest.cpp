@@ -6,10 +6,10 @@
 
 #include "catch.hpp"
 #include "MLTestUtils.h"
-#include "MLDSPFilters.h"
 #include "MLDSPSample.h"
 #include "MLDSPGens.h"
 #include "MLDSPFilters.h"
+#include "MLDSPMath.h"
 
 using namespace ml;
 

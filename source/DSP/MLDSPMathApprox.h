@@ -211,7 +211,7 @@ inline float4 vecExp(float4 x) {
 // ----------------------------------------------------------------
 // vecSin - sine
 
-inline float4 vecSin(float4 x) {
+inline float4 sin(float4 x) {
   float4 xmm1, xmm2 = setZero(), xmm3, sign_bit, y;
   int4 emm0, emm2;
   
