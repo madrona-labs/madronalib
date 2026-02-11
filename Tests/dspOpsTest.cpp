@@ -222,7 +222,9 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
       return v;
     });
     auto logP = ([&]() { return log(a); });
-    auto logA = ([&]() { return logApprox(a); });
+    
+    // TODO we had logApprox overloaded but it was not working - why?
+    auto logA = ([&]() { return logApproxArray(a); });
     
     SignalBlock native = logN();
     SignalBlock precise = logP();

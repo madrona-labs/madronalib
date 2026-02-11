@@ -90,7 +90,7 @@ struct TickGen : Gen1<T, TickGen<T>>
     else
     {
       float4 ones(1.0f);
-      float4 mask = compareGreaterThanOrEqual(omega_, ones);
+      float4 mask = (omega_ >= ones);
       omega_ = omega_ - andBits(mask, ones);
       return andBits(mask, ones);
     }

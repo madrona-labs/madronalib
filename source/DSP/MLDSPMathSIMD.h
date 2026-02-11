@@ -7,9 +7,7 @@
 // Load definitions for low-level SIMD math.
 // These define float4, int4, and a bunch of operations on them.
 // We are currently only using 4-element vectors on both SSE and NEON.
-
 constexpr size_t kSIMDVectorElems{4};
-
 #if (defined __ARM_NEON) || (defined __ARM_NEON__)
 #include "MLDSPMathNEON.h" // NEON
 #else
@@ -17,32 +15,19 @@ constexpr size_t kSIMDVectorElems{4};
 #endif
 
 // ----------------------------------------------------------------
-// Utilities
+// SIMD Utilities
 
 inline float4 clamp(float4 a, float4 b, float4 c) { return min(max(a, b), c); }
-
-inline std::ostream& operator<<(std::ostream& out, float4 x) {
-  out << "[";
-  out << getFloat4Lane(x, 0);
-  out << ", ";
-  out << getFloat4Lane(x, 1);
-  out << ", ";
-  out << getFloat4Lane(x, 2);
-  out << ", ";
-  out << getFloat4Lane(x, 3);
-  out << "]";
-  return out;
-}
 
 // ----------------------------------------------------------------
 // Conversions
 
-inline float4 vecIntPart(float4 val) {
+inline float4 intPart(float4 val) {
   return intToFloat(floatToIntTruncate(val));
 }
 
-inline float4 vecFracPart(float4 val) {
-  return val - vecIntPart(val);
+inline float4 fracPart(float4 val) {
+  return val - intPart(val);
 }
 
 // ----------------------------------------------------------------
@@ -117,4 +102,20 @@ inline void transpose4x4AndSwap(float4* ptrA, float4* ptrB) {
   ptrA[1] = tb1;
   ptrA[2] = tb2;
   ptrA[3] = tb3;
+}
+
+// ----------------------------------------------------------------
+// debug
+
+inline std::ostream& operator<<(std::ostream& out, float4 x) {
+  out << "[";
+  out << getFloat4Lane(x, 0);
+  out << ", ";
+  out << getFloat4Lane(x, 1);
+  out << ", ";
+  out << getFloat4Lane(x, 2);
+  out << ", ";
+  out << getFloat4Lane(x, 3);
+  out << "]";
+  return out;
 }

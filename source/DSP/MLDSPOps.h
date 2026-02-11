@@ -397,35 +397,35 @@ DEFINE_OP_F2F(abs, andNotBits(set1Float(-0.0f), x))
 
 // float sign: -1, 0, or 1
 DEFINE_OP_F2F(sign, andBits(orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)),
-                            compareNotEqual(set1Float(-0.0f), x)))
+                            (set1Float(-0.0f) != x)))
 
 // up/down sign: -1 or 1
 DEFINE_OP_F2F(signBit, orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)))
 
 // Trig, log and exp, using accurate cephes-derived library
 DEFINE_OP_F2F(sin, sin(x))
-DEFINE_OP_F2F(cos, vecCos(x))
-DEFINE_OP_F2F(log, vecLog(x))
-DEFINE_OP_F2F(exp, vecExp(x))
+DEFINE_OP_F2F(cos, cos(x))
+DEFINE_OP_F2F(log, log(x))
+DEFINE_OP_F2F(exp, exp(x))
 
 // Lazy log2 and exp2 from natural log / exp
 static const float4 kLogTwoVec{0.69314718055994529f};
 static const float4 kLogTwoRVec{1.4426950408889634f};
-DEFINE_OP_F2F(log2, vecLog(x) * kLogTwoRVec)
-DEFINE_OP_F2F(exp2, vecExp(kLogTwoVec * x))
+DEFINE_OP_F2F(log2, log(x) * kLogTwoRVec)
+DEFINE_OP_F2F(exp2, exp(kLogTwoVec * x))
 
 // Trig, log and exp, using polynomial approximations
-DEFINE_OP_F2F(sinApprox, vecSinApprox(x))
-DEFINE_OP_F2F(cosApprox, vecCosApprox(x))
-DEFINE_OP_F2F(expApprox, vecExpApprox(x))
-DEFINE_OP_F2F(logApprox, vecLogApprox(x))
+DEFINE_OP_F2F(sinApprox, sinApprox(x))
+DEFINE_OP_F2F(cosApprox, cosApprox(x))
+DEFINE_OP_F2F(expApprox, expApprox(x))
+DEFINE_OP_F2F(logApproxArray, logApprox(x))
 
 // Lazy log2 and exp2 approximations
-DEFINE_OP_F2F(log2Approx, vecLogApprox(x) * kLogTwoRVec)
-DEFINE_OP_F2F(exp2Approx, vecExpApprox(kLogTwoVec * x))
+DEFINE_OP_F2F(log2Approx, logApprox(x) * kLogTwoRVec)
+DEFINE_OP_F2F(exp2Approx, expApprox(kLogTwoVec * x))
 
 // Cubic tanh approx
-DEFINE_OP_F2F(tanhApprox, vecTanhApprox(x))
+DEFINE_OP_F2F(tanhApprox, tanhApprox(x))
 
 // Fractional part
 DEFINE_OP_F2F(fractionalPart, x - intToFloat(floatToIntTruncate(x)))
@@ -461,8 +461,8 @@ DEFINE_OP_FF2F(multiply, x * y)
 DEFINE_OP_FF2F(divide, x / y)
 
 DEFINE_OP_FF2F(divideApprox, x * rcp(y))
-DEFINE_OP_FF2F(pow, vecExp(vecLog(x) * y))
-DEFINE_OP_FF2F(powApprox, vecExpApprox(vecLogApprox(x) * y))
+DEFINE_OP_FF2F(pow, exp(log(x) * y))
+DEFINE_OP_FF2F(powApprox, expApprox(logApprox(x) * y))
 DEFINE_OP_FF2F(min, min(x, y))
 DEFINE_OP_FF2F(max, max(x, y))
 
@@ -497,7 +497,7 @@ return OpFFF2F(a, b, c, [](float4 x, float4 y, float4 z) { return (expr); }); \
 DEFINE_OP_FFF2F(lerp, x + (z * (y - x)))        // x = lerp(a, b, mix)
 DEFINE_OP_FFF2F(inverseLerp, (z - x) / (y - x)) // mix = inverseLerp(a, b, x)
 DEFINE_OP_FFF2F(clamp, min(max(x, y), z))       // clamp(x, minBound, maxBound)
-DEFINE_OP_FFF2F(within, andBits(compareGreaterThanOrEqual(x, y), compareLessThan(x, z))) // is x in [y, z)?
+DEFINE_OP_FFF2F(within, andBits((x >= y), (x < z))) // is x in [y, z)?
 
 // ----------------------------------------------------------------
 // Binary operation, (int32, int32) -> int32
@@ -555,8 +555,8 @@ DEFINE_OP_FF2F_MS(subtract1, x - y)
 DEFINE_OP_FF2F_MS(multiply1, x * y)
 DEFINE_OP_FF2F_MS(divide1, x / y)
 DEFINE_OP_FF2F_MS(divideApprox1, x * rcp(y))
-DEFINE_OP_FF2F_MS(pow1, vecExp(vecLog(x) * y))
-DEFINE_OP_FF2F_MS(powApprox1, vecExpApprox(vecLogApprox(x) * y))
+DEFINE_OP_FF2F_MS(pow1, exp(log(x) * y))
+DEFINE_OP_FF2F_MS(powApprox1, expApprox(logApprox(x) * y))
 DEFINE_OP_FF2F_MS(min1, min(x, y))
 DEFINE_OP_FF2F_MS(max1, max(x, y))
 
@@ -639,12 +639,12 @@ inline AlignedArray<int32_t, N> name(const AlignedArray<T, N>& a, const AlignedA
 return OpFF2I(a, b, [](float4 x, float4 y) { return castFloatToInt(expr); }); \
 }
 
-DEFINE_OP_FF2I(equal, compareEqual(x, y))
-DEFINE_OP_FF2I(notEqual, compareNotEqual(x, y))
-DEFINE_OP_FF2I(greaterThan, compareGreaterThan(x, y))
-DEFINE_OP_FF2I(greaterThanOrEqual, compareGreaterThanOrEqual(x, y))
-DEFINE_OP_FF2I(lessThan, compareLessThan(x, y))
-DEFINE_OP_FF2I(lessThanOrEqual, compareLessThanOrEqual(x, y))
+DEFINE_OP_FF2I(equal, operator==(x, y))
+DEFINE_OP_FF2I(notEqual, operator!=(x, y))
+DEFINE_OP_FF2I(greaterThan, operator>(x, y))
+DEFINE_OP_FF2I(greaterThanOrEqual, operator>=(x, y))
+DEFINE_OP_FF2I(lessThan, operator<(x, y))
+DEFINE_OP_FF2I(lessThanOrEqual, operator<=(x, y))
 
 
 // ----------------------------------------------------------------

@@ -148,22 +148,22 @@ inline float4 xorBits(float4 a, float4 b) {
 }
 
 // Float comparisons (return float4 masks)
-inline float4 compareEqual(float4 a, float4 b) {
+inline float4 operator==(float4 a, float4 b) {
   return float4(vreinterpretq_f32_u32(vceqq_f32(a.v, b.v)));
 }
-inline float4 compareNotEqual(float4 a, float4 b) {
+inline float4 operator!=(float4 a, float4 b) {
   return float4(vreinterpretq_f32_u32(vmvnq_u32(vceqq_f32(a.v, b.v))));
 }
-inline float4 compareGreaterThan(float4 a, float4 b) {
+inline float4 operator>(float4 a, float4 b) {
   return float4(vreinterpretq_f32_u32(vcgtq_f32(a.v, b.v)));
 }
-inline float4 compareGreaterThanOrEqual(float4 a, float4 b) {
+inline float4 operator>=(float4 a, float4 b) {
   return float4(vreinterpretq_f32_u32(vcgeq_f32(a.v, b.v)));
 }
-inline float4 compareLessThan(float4 a, float4 b) {
+inline float4 operator<(float4 a, float4 b) {
   return float4(vreinterpretq_f32_u32(vcltq_f32(a.v, b.v)));
 }
-inline float4 compareLessThanOrEqual(float4 a, float4 b) {
+inline float4 operator<=(float4 a, float4 b) {
   return float4(vreinterpretq_f32_u32(vcleq_f32(a.v, b.v)));
 }
 
