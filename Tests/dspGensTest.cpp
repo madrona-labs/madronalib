@@ -42,13 +42,21 @@ TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
   // validate element order and horizontal <-> vertical transforms
   Counter<float> cf;
   SignalBlock cfOut = cf();
+    
   auto cfh = repeatRows<4>(cfOut);
   
   Counter<float4> cg;
   SignalBlock4 cgOut = cg();
   auto cgh = verticalToHorizontal(cgOut);
-  
   REQUIRE(cfh == cgh);
+    
+  // ticks
+  TickGen<float4> ticker;
+  Block<float4> freqs(float4(0.1, 0.2, 0.333, 0.50));
+  auto t1 = ticker(freqs);
+  auto th = verticalToHorizontal(t1);
+  // neat! std::cout << th << "\n";
+    
 }
 
 

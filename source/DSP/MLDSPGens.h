@@ -17,75 +17,83 @@ namespace ml
 {
 
 // ----------------------------------------------------------------
-// Time-ordered block processing, used by Gens and Filters
+// Block generation objects, used by Gens
 
-
-template<typename T, typename FN>
-inline SignalBlockArrayBase<T, 1> processBlock(const SignalBlockArrayBase<T, 1>& input, FN stepFn)
+template<typename T, typename Derived>
+struct Gen0
 {
-  SignalBlockArrayBase<T, 1> output;
-  for (size_t t = 0; t < kFramesPerBlock; ++t)
+  Block<T> operator()()
   {
-    output[t] = stepFn(input[t]);
+    Block<T> output;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      output[t] = static_cast<Derived*>(this)->nextFrame();
+    }
+    return output;
   }
-  return output;
-}
+};
 
-// no input
-template<typename T, typename FN>
-inline SignalBlockArrayBase<T, 1> processBlock(FN stepFn)
+template<typename T, typename Derived>
+struct Gen1
 {
-  SignalBlockArrayBase<T, 1> output;
-  for (size_t t = 0; t < kFramesPerBlock; ++t)
+  Block<T> operator()(const Block<T>& params)
   {
-    output[t] = stepFn();
+    Block<T> output;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      output[t] = static_cast<Derived*>(this)->nextFrame(params[t]);
+    }
+    return output;
   }
-  return output;
-}
+};
 
+// ----------------------------------------------------------------
+// Frame counter generator
 
 template<typename T>
-struct Counter
+struct Counter : Gen0<T, Counter<T>>
 {
   T state_{0.f};
   
-  T step()
-  {
+  void clear() { state_ = T{0.f}; }
+  
+  T nextFrame() {
     T currentValue = state_;
     state_ += T{1.0f};
     return currentValue;
   }
-  
-  SignalBlockArrayBase<T, 1> operator()()
-  {
-    return processBlock<T>([this]() { return step(); });
-  }
 };
 
-
+// ----------------------------------------------------------------
+// TickGen
 // generate a single-sample tick, repeating at a frequency given by the input.
-class TickGen
+
+template<typename T>
+struct TickGen : Gen1<T, TickGen<T>>
 {
-  float mOmega{0};
-
- public:
-  inline SignalBlock operator()(const SignalBlock cyclesPerSample)
+  T omega_{0.f};
+  
+  void clear() { omega_ = T{0.f}; }
+  
+  T nextFrame(T freq)
   {
-    // calculate counter delta per sample
-    SignalBlock stepsPerSampleV = cyclesPerSample;
-
-    // accumulate phase and wrap to generate ticks
-    SignalBlock vy{0.f};
-    for (int n = 0; n < kFramesPerBlock; ++n)
+    omega_ += freq;
+    if constexpr (std::is_same_v<T, float>)
     {
-      mOmega += stepsPerSampleV[n];
-      if (mOmega > 1.0f)
+      if (omega_ >= 1.0f)
       {
-        mOmega -= 1.0f;
-        vy[n] = 1.0f;
+        omega_ -= 1.0f;
+        return 1.0f;
       }
+      return 0.0f;
     }
-    return vy;
+    else
+    {
+      float4 ones(1.0f);
+      float4 mask = compareGreaterThanOrEqual(omega_, ones);
+      omega_ = omega_ - andBits(mask, ones);
+      return andBits(mask, ones);
+    }
   }
 };
 

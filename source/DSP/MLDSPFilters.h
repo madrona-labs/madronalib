@@ -2,9 +2,7 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
-// DSP filters: functor objects implementing an operator()(SignalBlock input, ...).
-// All these filters have some state, otherwise they would be DSPOps.
-// All these filterstake some input, otherwise they would be DSPGens.
+// DSP filters: functor objects implementing an operator()(Block<T> input, ...).
 //
 // Filter cutoffs are set by a parameter omega, equal to frequency / sample
 // rate. This lets filter objects be unaware of the sample rate, resulting in
@@ -20,123 +18,101 @@
 #include "MLDSPScalarMath.h"
 #include <cmath>
 
+
 namespace ml
 {
 // use this, not dBToAmp for calculating filter gain parameter A.
 inline float dBToGain(float dB) { return powf(10.f, dB / 40.f); }
 
-// from a coefficients start array and a coefficients end array, make a
-// SignalBlockArray with each coefficient interpolated over time.
-template <size_t COEFFS_SIZE>
-SignalBlockArray<COEFFS_SIZE> interpolateCoeffsLinear(const std::array<float, COEFFS_SIZE> c0,
-                                                    const std::array<float, COEFFS_SIZE> c1)
+template<typename T, size_t COEFFS_SIZE>
+SignalBlockArrayBase<T, COEFFS_SIZE> interpolateCoeffsLinear(
+                                                             const std::array<T, COEFFS_SIZE>& c0,
+                                                             const std::array<T, COEFFS_SIZE>& c1)
 {
-  SignalBlockArray<COEFFS_SIZE> vy;
-  for (int i = 0; i < COEFFS_SIZE; ++i)
+  SignalBlockArrayBase<T, COEFFS_SIZE> vy;
+  for (size_t i = 0; i < COEFFS_SIZE; ++i)
   {
     vy.setRow(i, interpolateBlockLinear(c0[i], c1[i]));
   }
   return vy;
 }
 
+template<typename T, typename Derived>
+struct CoeffFilter
+{
+  template<typename Params>
+  Block<T> operator()(const Block<T>& input, Params nextParams)
+  {
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    
+    auto nextCoeffs = Derived::makeCoeffs(nextParams);
+    auto coeffsBlock = interpolateCoeffsLinear(self.coeffs, nextCoeffs);
+    self.coeffs = nextCoeffs;
+    
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      typename Derived::Coeffs c;
+      for (size_t i = 0; i < Derived::nCoeffs; ++i)
+      {
+        c[i] = coeffsBlock.rowPtr(i)[t];
+      }
+      output[t] = self.nextFrame(input[t], c);
+    }
+    return output;
+  }
+};
 
 // --------------------------------------------------------------------------------
 // utility filters implemented as SVF variations
 // Thanks to Andrew Simper [www.cytomic.com] for sharing his work over the years.
 
-struct Lopass
+template<typename T>
+struct Lopass : CoeffFilter<T, Lopass<T>>
 {
-  enum coeffNames {g0, g1, g2, nCoeffs};
-  enum paramNames {omega, k, nParams};
-  enum stateNames {ic1eq, ic2eq, nStateVars};
+  enum { omega, k, nParams };
+  enum { g0, g1, g2, nCoeffs };
+  enum { ic1eq, ic2eq, nStateVars };
   
-  typedef std::array<float, nCoeffs> Coeffs;
-  typedef SignalBlockArray<nCoeffs> CoeffsVec;
-  typedef std::array<float, nParams> Params;
-  typedef std::array<float, nStateVars> State;
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  using State = std::array<T, nStateVars>;
   
   Coeffs coeffs{};
   State state{};
-
-  inline void clear() { state.fill(0.f); }
-
-  // TODO: add something like
-  // template<typename T> T lopassCalc(T x)
-  // this will do x1 (float) and x4 (SIMD, vertical) versions
   
-  // get internal coefficients for a given omega and k.
+  
+  
+  void clear() {
+    const Params kDefaultParams{0.f, 0.5f};
+    coeffs = makeCoeffs(kDefaultParams);
+    state.fill(T{0.f});
+  }
+  
+  // get internal coefficients for given params omega and k.
   // omega: the frequency divided by the sample rate.
   // k: 1/Q, where k=0 is maximum resonance.
+  static Coeffs makeCoeffs(Params p)
+  {
+    T piOmega = T{kPi} * p[omega];
+    T s1 = sin(piOmega);
+    T s2 = sin(T{2.0f} * piOmega);
+    T nrm = T{1.0f} / (T{2.f} + p[k] * s2);
+    T cg0 = s2 * nrm;
+    T cg1 = (T{-2.f} * s1 * s1 - p[k] * s2) * nrm;
+    T cg2 = (T{2.0f} * s1 * s1) * nrm;
+    return {cg0, cg1, cg2};
+  }
   
-  static Coeffs makeCoeffs(float omega, float k)
+  T nextFrame(T x, Coeffs c)
   {
-    float piOmega = kPi * omega;
-    float s1 = sinf(piOmega);
-    float s2 = sinf(2.0f * piOmega);
-    float nrm = 1.0f / (2.f + k * s2);
-    float g0 = s2 * nrm;
-    float g1 = (-2.f * s1 * s1 - k * s2) * nrm;
-    float g2 = (2.0f * s1 * s1) * nrm;
-    return {g0, g1, g2};
-  }
-
-  // TODO const SignalBlockArray< nParams > params
-  static CoeffsVec makeCoeffsVec(SignalBlock omega, SignalBlock k)
-  {
-    CoeffsVec vy;
-    // TODO SIMD
-    omega = min(omega, SignalBlock(0.5f));
-    k = max(k, SignalBlock(0.01f));
-
-    for (int n = 0; n < kFramesPerBlock; ++n)
-    {
-      float piOmega = kPi * omega[n];
-      float s1 = sinf(piOmega);
-      float s2 = sinf(2.0f * piOmega);
-      float nrm = 1.0f / (2.f + k[n] * s2);
-      vy.rowPtr(g0)[n] = s2 * nrm;
-      vy.rowPtr(g1)[n] = (-2.f * s1 * s1 - k[n] * s2) * nrm;
-      vy.rowPtr(g2)[n] = (2.0f * s1 * s1) * nrm;
-    }
-    return vy;
-  }
-
-  // filter the input vector vx with the stored coefficients.
-  SignalBlock operator()(const SignalBlock vx)
-  {
-    SignalBlock vy;
-    for (int n = 0; n < kFramesPerBlock; ++n)
-    {
-      float v0 = vx[n];
-      float t0 = v0 - state[ic2eq];
-      float t1 = coeffs[g0] * t0 + coeffs[g1] * state[ic1eq];
-      float t2 = coeffs[g2] * t0 + coeffs[g0] * state[ic1eq];
-      float v2 = t2 + state[ic2eq];
-      state[ic1eq] += 2.0f * t1;
-      state[ic2eq] += 2.0f * t2;
-      vy[n] = v2;
-    }
-    return vy;
-  }
-
-  // filter the input vector vx with the coefficients generated from parameters omega and k.
-  // TODO const SignalBlockArray< nCoeffs >
-  SignalBlock operator()(const SignalBlock vx, const SignalBlock omega, const SignalBlock k)
-  {
-    SignalBlock vy;
-    auto vc = makeCoeffsVec(omega, k);
-    for (int n = 0; n < kFramesPerBlock; ++n)
-    {
-      float v0 = vx[n];
-      float t0 = v0 - state[ic2eq];
-      float t1 = vc.rowPtr(g0)[n] * t0 + vc.rowPtr(g1)[n] * state[ic1eq];
-      float t2 = vc.rowPtr(g2)[n] * t0 + vc.rowPtr(g0)[n] * state[ic1eq];
-      float v2 = t2 + state[ic2eq];
-      state[ic1eq] += 2.0f * t1;
-      state[ic2eq] += 2.0f * t2;
-      vy[n] = v2;
-    }
-    return vy;
+    T t0 = x - state[ic2eq];
+    T t1 = c[g0] * t0 + c[g1] * state[ic1eq];
+    T t2 = c[g2] * t0 + c[g0] * state[ic1eq];
+    T v2 = t2 + state[ic2eq];
+    state[ic1eq] += T{2.0f} * t1;
+    state[ic2eq] += T{2.0f} * t2;
+    return v2;
   }
 };
 

@@ -250,6 +250,11 @@ using SignalBlockInt = SignalBlockArrayBase<int32_t, 1>;
 template<size_t ROWS>
 using SignalBlockIntArray = SignalBlockArrayBase<int32_t, ROWS>;
 
+// Block, where Block<float> = SignalBlock and Block<float4> = SignalBlock4.
+// This lets us write Block<T> in templates
+template<typename T>
+using Block = SignalBlockArrayBase<T, 1>;
+
 
 // ----------------------------------------------------------------
 // SignalBlock4Array<ROWS>
@@ -402,6 +407,9 @@ DEFINE_OP_F2F(sin, vecSin(x))
 DEFINE_OP_F2F(cos, vecCos(x))
 DEFINE_OP_F2F(log, vecLog(x))
 DEFINE_OP_F2F(exp, vecExp(x))
+
+// TEMP add these somewhere else!
+inline float sin(float x) { return std::sin(x); }
 
 // Lazy log2 and exp2 from natural log / exp
 static const float4 kLogTwoVec{0.69314718055994529f};

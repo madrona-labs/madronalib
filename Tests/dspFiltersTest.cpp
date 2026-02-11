@@ -8,56 +8,21 @@
 #include "MLTestUtils.h"
 #include "MLDSPFilters.h"
 #include "MLDSPSample.h"
+#include "MLDSPGens.h"
+#include "MLDSPFilters.h"
 
-#if 0 // TEMP
 using namespace ml;
 
 TEST_CASE("madronalib/core/dsp_filters", "[dsp_filters]")
 {
-  constexpr int kOctaves{3};
-  Upsampler upper(kOctaves);
-  Downsampler downer(kOctaves);
-
-  const int kSamples{300};
-  Sample sine1;
-  Sample sine1Upsampled;
-  Sample sine2;
-
-  size_t framesToProcess{0};
-  if(!resize(sine1, kSamples)) return;
-  if(!resize(sine1Upsampled, kSamples << kOctaves)) return;
-
-  float dw = kTwoPi/2.0f/kFramesPerBlock;
-  float omega{0.f};
-  framesToProcess = getSize(sine1);
+  float freq1 = 0.13f;
+  SineGen s1gen;
+  float freq2(0.013f);
+  Lopass<float> filter1;
   
-  // TODO functional-style fill of Sample, and process loop
-  for(int i=0; i<framesToProcess; ++i)
+  for(int i=0; i<4; ++i)
   {
-    sine1[i] = sinf(omega);
-    omega += dw;
+    std::cout << filter1(s1gen(freq1), Lopass<float>::Params{freq2, 0.5f});
   }
-  
-  // process until we run out of whole SignalBlocks - there may be some frames left over
-  size_t frameIdx{0};
-  while(frameIdx + kFramesPerBlock <= framesToProcess)
-  {
-    SignalBlock vIn;
-    auto pSrc = getConstFramePtr(sine1, frameIdx);
-    load(vIn, pSrc);
-    
-    frameIdx += kFramesPerBlock;
 
-    upper.write(vIn);
-    
-    for(int i=0; i < (1 << kOctaves); ++i)
-    {
-      SignalBlock vOut = upper.read();
-      bool r = downer.write(vOut);
-    }
-    
-    // TODO real tests, measure delay?
-    SignalBlock sineOut = downer.read();
-  }
 }
-#endif
