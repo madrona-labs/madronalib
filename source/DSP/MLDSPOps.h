@@ -413,8 +413,8 @@ DEFINE_OP_F2F(exp2, exp(kLogTwoVec * x))
 // Trig, log and exp, using polynomial approximations
 DEFINE_OP_F2F(sinApprox, sinApprox(x))
 DEFINE_OP_F2F(cosApprox, cosApprox(x))
-DEFINE_OP_F2F(expApprox, expApprox(x))
-DEFINE_OP_F2F(logApproxArray, logApprox(x))
+DEFINE_OP_F2F(sigExpApprox, expApprox(x))
+DEFINE_OP_F2F(sigLogApprox, logApprox(x))
 
 // Lazy log2 and exp2 approximations
 DEFINE_OP_F2F(log2Approx, logApprox(x) * kLogTwoRVec)

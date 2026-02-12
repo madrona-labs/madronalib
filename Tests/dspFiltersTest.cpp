@@ -22,7 +22,7 @@ TEST_CASE("madronalib/core/dsp_filters", "[dsp_filters]")
   
   for(int i=0; i<4; ++i)
   {
-    std::cout << filter1(s1gen(freq1), Lopass<float>::Params{freq2, 0.5f});
+//    std::cout << filter1(s1gen(freq1), Lopass<float>::Params{freq2, 0.5f});
   }
 
 }
