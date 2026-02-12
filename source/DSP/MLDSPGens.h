@@ -234,7 +234,7 @@ class PhasorGen
  public:
   void clear(uint32_t omega = 0) { mOmega32 = omega; }
 
-  static constexpr float stepsPerCycle{static_cast<float>(const_math::pow(2., 32))};
+  static constexpr float stepsPerCycle{static_cast<float>(1UL << 32UL)};
   static constexpr float cyclesPerStep{1.f / stepsPerCycle};
 
   SignalBlock operator()(const SignalBlock cyclesPerSample)
@@ -285,7 +285,7 @@ class OneShotGen
     mGate = 1;
   }
 
-  static constexpr float stepsPerCycle{static_cast<float>(const_math::pow(2., 32))};
+  static constexpr float stepsPerCycle{static_cast<float>(1UL << 32UL)};
   static constexpr float cyclesPerStep{1.f / stepsPerCycle};
 
   SignalBlock operator()(const SignalBlock cyclesPerSample)
@@ -368,7 +368,7 @@ static SignalBlock polyBLEP(const SignalBlock phase, const SignalBlock freq)
 // harmonics only, with the 3rd harmonic at about -40dB.
 inline SignalBlock phasorToSine(SignalBlock phasorV)
 {
-  constexpr float sqrt2(static_cast<float>(const_math::sqrt(2.0f)));
+  constexpr float sqrt2 = 1.4142135623730950488f;
   constexpr float domain(sqrt2 * 4.f);
   SignalBlock domainScaleV(domain);
   SignalBlock domainOffsetV(-sqrt2);
