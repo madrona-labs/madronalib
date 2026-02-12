@@ -8,7 +8,7 @@
 #include <iostream>
 #include <vector>
 
-#include "MLDSPMathScalar.h"
+#include "MLDSPMath.h"
 
 namespace ml
 {
