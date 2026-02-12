@@ -12,15 +12,19 @@
 namespace ml {
 
 // operations we can use in kernels as either float4 or float:
-// from MathSIMD:
+//
+// from DSPMathSIMD:
 // +, -, *, /, +=, -=, *=, /=, unary-
 // min, max, sqrt, rsqrt, rcp
 // multiplyAdd
 // andBits, andNotBits, orBits, xorBits
+// clamp, intPart, fracPart
 //
 // from MathApprox:
 // log, exp, sin, cos, sincos, tan
 // sinApprox, cosApprox, expApprox, logApprox, tanhApprox
+
+
 
 
 // scalar definitions in ml namespace so that templates can compile as float and float4
