@@ -193,9 +193,9 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     auto sinP = ([&]() { return sin(a); });
     auto sinA = ([&]() { return sinApprox(a); });
     
-    SignalBlock native = sinN();
-    SignalBlock precise = sinP();
-    SignalBlock approx = sinA();
+    SignalBlock native(sinN());
+    SignalBlock precise(sinP());
+    SignalBlock approx(sinA());
     
     float preciseMaxDiff = max(abs(native - precise));
     float approxMaxDiff = max(abs(native - approx));
@@ -223,7 +223,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     auto logP = ([&]() { return log(a); });
     
     // TODO we had logApprox overloaded but it was not working - why?
-    auto logA = ([&]() { return logApproxArray(a); });
+    auto logA = ([&]() { return sigLogApprox(a); });
     
     SignalBlock native = logN();
     SignalBlock precise = logP();
@@ -547,6 +547,94 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   }
   
 #if DO_TIME_TESTS
+  SignalBlock a(rangeClosed(-kPi, kPi));
+  
+  auto sinN = ([&]() {
+    SignalBlock v;
+    for (int i = 0; i < kFramesPerBlock; ++i)
+    {
+      v[i] = sinf(a[i]);
+    }
+    return v;
+  });
+  auto sinP = ([&]() { return sin(a); });
+  auto sinA = ([&]() { return sinApprox(a); });
+  std::vector<std::function<SignalBlock(void)> > sinFunctions{sinN, sinP, sinA};
+  
+  auto cosN = ([&]() {
+    SignalBlock v;
+    for (int i = 0; i < kFramesPerBlock; ++i)
+    {
+      v[i] = cosf(a[i]);
+    }
+    return v;
+  });
+  auto cosP = ([&]() { return cos(a); });
+  auto cosA = ([&]() { return cosApprox(a); });
+  std::vector<std::function<SignalBlock(void)> > cosFunctions{cosN, cosP, cosA};
+  
+  auto logN = ([&]() {
+    SignalBlock v;
+    for (int i = 0; i < kFramesPerBlock; ++i)
+    {
+      v[i] = logf(a[i]);
+    }
+    return v;
+  });
+  auto logP = ([&]() { return log(a); });
+  auto logA = ([&]() { return sigLogApprox(a); });
+  std::vector<std::function<SignalBlock(void)> > logFunctions{logN, logP, logA};
+  
+  auto expN = ([&]() {
+    SignalBlock v;
+    for (int i = 0; i < kFramesPerBlock; ++i)
+    {
+      v[i] = expf(a[i]);
+    }
+    return v;
+  });
+  auto expP = ([&]() { return exp(a); });
+  auto expA = ([&]() { return sigExpApprox(a); });
+  std::vector<std::function<SignalBlock(void)> > expFunctions{expN, expP, expA};
+  
+  std::vector<
+  std::pair<std::string, std::vector<std::function<SignalBlock(void)> > > >
+  functionVectors{{"sin", sinFunctions},
+    {"cos", cosFunctions},
+    {"log", logFunctions},
+    {"exp", expFunctions}};
+  
+  SECTION("precision")
+  {
+    // test precision of sin, cos, log, exp and approximations.
+    // use native math as reference.
+    // NOTE this does not measure the maximum error accurately! It uses equally-spaced
+    // samples over the entire input range of the functions, just to provide a reference.
+    // std::cout << "max differences from reference:\n";
+    
+    for (auto fnVec : functionVectors)
+    {
+      SignalBlock native = fnVec.second[0]();
+      SignalBlock precise = fnVec.second[1]();
+      SignalBlock approx = fnVec.second[2]();
+      
+      float nativeMaxDiff = max(abs(native - native));
+      float preciseMaxDiff = max(abs(native - precise));
+      float approxMaxDiff = max(abs(native - approx));
+      
+      /*
+       std::cout << fnVec.first << " native: " << nativeMaxDiff
+       << ", precise: " << preciseMaxDiff
+       << ", approx: " << approxMaxDiff << " \n";
+       */
+      
+      // these differences are to accommodate the exp functions, the other ones
+      // are a lot more precise.
+      REQUIRE(preciseMaxDiff < 2e-6f);
+      REQUIRE(approxMaxDiff < 2e-4f);
+    }
+  }
+  
   SECTION("time")
   {
     // test speed of precise functions relative to native ones.
