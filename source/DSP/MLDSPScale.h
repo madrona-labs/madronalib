@@ -15,7 +15,7 @@
 #include <cctype>
 #include <locale>
 
-#include "MLDSPMathScalar.h"
+#include "MLDSPMath.h"
 
 namespace ml
 {

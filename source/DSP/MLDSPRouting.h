@@ -27,7 +27,7 @@
 #include <type_traits>
 
 #include "MLDSPMath.h"
-#include "MLDSPMathScalar.h"
+#include "MLDSPMath.h"
 
 namespace ml
 {

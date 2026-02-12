@@ -396,7 +396,7 @@ DEFINE_OP_F2F(sqrtApprox, x * rsqrt(x))
 DEFINE_OP_F2F(abs, andNotBits(set1Float(-0.0f), x))
 
 // up/down sign: -1 or 1
-DEFINE_OP_F2F(sign, orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)))
+DEFINE_OP_F2F(sign, sign(x))
 
 // Trig, log and exp, using accurate cephes-derived library
 DEFINE_OP_F2F(sin, sin(x))
@@ -496,13 +496,11 @@ const AlignedArray<T, N>& c) { \
 return OpFFF2F(a, b, c, [](float4 x, float4 y, float4 z) { return (expr); }); \
 }
 
-DEFINE_OP_FFF2F(lerp, x + (z * (y - x)))        // x = lerp(a, b, mix)
+DEFINE_OP_FFF2F(lerp, lerp(x, y, z))        // x = lerp(a, b, mix)
 DEFINE_OP_FFF2F(inverseLerp, (z - x) / (y - x)) // mix = inverseLerp(a, b, x)
 DEFINE_OP_FFF2F(clamp, min(max(x, y), z))       // clamp(x, minBound, maxBound)
 DEFINE_OP_FFF2F(within, andBits((x >= y), (x < z))) // is x in [y, z)?
-
 DEFINE_OP_FFF2F(select, select(x, y, z))  // select(resultIfTrue, resultIfFalse, conditionMask)
-
 
 // ----------------------------------------------------------------
 // Binary operation, (int32, int32) -> int32
