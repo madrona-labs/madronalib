@@ -174,6 +174,9 @@ file(GLOB RTAUDIO_HEADERS "external/rtaudio/*.h")
 file(GLOB RTMIDI_SOURCES "external/rtmidi/*.cpp")
 file(GLOB RTMIDI_HEADERS "external/rtmidi/*.h")
 
+file(GLOB EXTERNAL_HEADERS "include/*.h")
+
+
 if(APPLE)
     file(GLOB OSC_SOURCES_NATIVE "external/oscpack/ip/posix/*.cpp")
 else()
@@ -194,6 +197,7 @@ set(OSC_HEADERS
 # navigable within IDEs
 
 set(madronalib_SOURCES
+    ${EXTERNAL_HEADERS}
     ${APP_SOURCES}
     ${APP_HEADERS}
     ${RTAUDIO_SOURCES}

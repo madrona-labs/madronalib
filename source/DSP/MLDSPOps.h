@@ -236,9 +236,6 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
 // ----------------------------------------------------------------
 // SignalBlockArray<ROWS> and int version
 // ROWS rows of kFramesPerBlock floats, time -> horizontal
-// T::scalar_type will let us write templates on SignalBlock, SignalBlock4, ...
-// and T::time_step or similar for writing filter functions
-// we can also add things like using upsampler_type = Upsampler, and so on
 
 using SignalBlock = SignalBlockArrayBase<float, 1>;
 
@@ -258,16 +255,18 @@ using Block = SignalBlockArrayBase<T, 1>;
 
 // ----------------------------------------------------------------
 // SignalBlock4Array<ROWS>
-// ROWS big "rows" of kFramesPerBlock/4 4x4 blocks of samples containing float4 signals.
-// time -> vertical within each 4x4 block, then to next block every 4 frames.
+// ROWS rows of kFramesPerBlock/4 float4 frames.
+// In memory the float4 frames are in sequential order. Because the 4x4 transpose
+// is fundamental, we sometimes think of the frames as being arranged in 4x4 blocks:
+//
 // A0 B0 C0 D0   A4 B4 C4 D4 ...
 // A1 B1 C1 D1   A5 B5 C5 D5
 // A2 B2 C2 D2   A6 B6 C6 D6
 // A3 B3 C3 D3   A7 B7 C7 D7
 //
-// the data are arranged like this so that transposing each 4x4 block gives
-// us four SignalBlocks, and vice versa.
+// With time being vertical within each block.
 //
+// Transposing each 4x4 block and shuffling gives us four SignalBlocks.
 
 using SignalBlock4 = SignalBlockArrayBase<float4, 1>;
 

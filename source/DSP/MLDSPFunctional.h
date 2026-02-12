@@ -13,6 +13,8 @@
 
 #include "MLDSPOps.h"
 #include "MLDSPFilters.h"
+#include "MLDSPDelays.h"
+#include "MLDSPResampling.h"
 
 namespace ml
 {

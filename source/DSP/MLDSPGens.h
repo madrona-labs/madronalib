@@ -454,6 +454,18 @@ class SawGen
   SignalBlock operator()(const SignalBlock freq) { return phasorToSaw(_phasor(freq), freq); }
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
 // ----------------------------------------------------------------
 // Interpolator1
 
