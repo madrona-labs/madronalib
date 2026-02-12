@@ -395,12 +395,8 @@ DEFINE_OP_F2F(sqrt, sqrt(x))
 DEFINE_OP_F2F(sqrtApprox, x * rsqrt(x))
 DEFINE_OP_F2F(abs, andNotBits(set1Float(-0.0f), x))
 
-// float sign: -1, 0, or 1
-DEFINE_OP_F2F(sign, andBits(orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)),
-                            (set1Float(-0.0f) != x)))
-
 // up/down sign: -1 or 1
-DEFINE_OP_F2F(signBit, orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)))
+DEFINE_OP_F2F(sign, orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)))
 
 // Trig, log and exp, using accurate cephes-derived library
 DEFINE_OP_F2F(sin, sin(x))
@@ -466,6 +462,12 @@ DEFINE_OP_FF2F(powApprox, expApprox(logApprox(x) * y))
 DEFINE_OP_FF2F(min, min(x, y))
 DEFINE_OP_FF2F(max, max(x, y))
 
+DEFINE_OP_FF2F(equal, operator==(x, y))
+DEFINE_OP_FF2F(notEqual, operator!=(x, y))
+DEFINE_OP_FF2F(greaterThan, operator>(x, y))
+DEFINE_OP_FF2F(greaterThanOrEqual, operator>=(x, y))
+DEFINE_OP_FF2F(lessThan, operator<(x, y))
+DEFINE_OP_FF2F(lessThanOrEqual, operator<=(x, y))
 
 // ----------------------------------------------------------------
 // Ternary operation, (float, float, float) -> float
@@ -498,6 +500,9 @@ DEFINE_OP_FFF2F(lerp, x + (z * (y - x)))        // x = lerp(a, b, mix)
 DEFINE_OP_FFF2F(inverseLerp, (z - x) / (y - x)) // mix = inverseLerp(a, b, x)
 DEFINE_OP_FFF2F(clamp, min(max(x, y), z))       // clamp(x, minBound, maxBound)
 DEFINE_OP_FFF2F(within, andBits((x >= y), (x < z))) // is x in [y, z)?
+
+DEFINE_OP_FFF2F(select, select(x, y, z))  // select(resultIfTrue, resultIfFalse, conditionMask)
+
 
 // ----------------------------------------------------------------
 // Binary operation, (int32, int32) -> int32
@@ -613,98 +618,6 @@ return OpI2F(a, [](int4 x) { return (expr); }); \
 
 DEFINE_OP_I2F(intToFloat, intToFloat(x))
 DEFINE_OP_I2F(unsignedIntToFloat, unsignedIntToFloat(x))
-
-
-// ----------------------------------------------------------------
-// Binary operation, (float, float) -> int
-
-template<typename T, size_t N, typename OP_FF2I>
-inline AlignedArray<int32_t, N> OpFF2I(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, OP_FF2I op) {
-  AlignedArray<int32_t, N> result;
-  
-  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
-  const float4* a4 = reinterpret_cast<const float4*>(a.data());
-  const float4* b4 = reinterpret_cast<const float4*>(b.data());
-  int4* r4 = reinterpret_cast<int4*>(result.data());
-  
-  for (size_t i = 0; i < numFloat4s; ++i) {
-    r4[i] = op(a4[i], b4[i]);
-  }
-  return result;
-}
-
-#define DEFINE_OP_FF2I(name, expr) \
-template<typename T, size_t N> \
-inline AlignedArray<int32_t, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b) { \
-return OpFF2I(a, b, [](float4 x, float4 y) { return castFloatToInt(expr); }); \
-}
-
-DEFINE_OP_FF2I(equal, operator==(x, y))
-DEFINE_OP_FF2I(notEqual, operator!=(x, y))
-DEFINE_OP_FF2I(greaterThan, operator>(x, y))
-DEFINE_OP_FF2I(greaterThanOrEqual, operator>=(x, y))
-DEFINE_OP_FF2I(lessThan, operator<(x, y))
-DEFINE_OP_FF2I(lessThanOrEqual, operator<=(x, y))
-
-
-// ----------------------------------------------------------------
-// Ternary operation, (float, float, int) -> float
-
-template<typename T, size_t N, typename OP_FFI2F>
-inline AlignedArray<float, N> OpFFI2F(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b,
-                                      const AlignedArray<int32_t, N>& c, OP_FFI2F op) {
-  AlignedArray<float, N> result;
-  
-  constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
-  const float4* a4 = reinterpret_cast<const float4*>(a.data());
-  const float4* b4 = reinterpret_cast<const float4*>(b.data());
-  const int4* c4 = reinterpret_cast<const int4*>(c.data());
-  float4* r4 = reinterpret_cast<float4*>(result.data());
-  
-  for (size_t i = 0; i < numFloat4s; ++i) {
-    r4[i] = op(a4[i], b4[i], c4[i]);
-  }
-  return result;
-}
-
-#define DEFINE_OP_FFI2F(name, expr) \
-template<typename T, size_t N> \
-inline AlignedArray<float, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, \
-const AlignedArray<int32_t, N>& c) { \
-return OpFFI2F(a, b, c, [](float4 x, float4 y, int4 z) { return (expr); }); \
-}
-
-DEFINE_OP_FFI2F(select, vecSelectFFI(x, y, z))  // select(resultIfTrue, resultIfFalse, conditionMask)
-
-
-// ----------------------------------------------------------------
-// Ternary operation, (int, int, int) -> int
-
-template<typename T, size_t N, typename OP_III2I>
-inline AlignedArray<int32_t, N> OpIII2I(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b,
-                                        const AlignedArray<T, N>& c, OP_III2I op) {
-  AlignedArray<int32_t, N> result;
-  
-  constexpr size_t numInt4s = sizeof(AlignedArray<T, N>) / sizeof(int4);
-  const int4* a4 = reinterpret_cast<const int4*>(a.data());
-  const int4* b4 = reinterpret_cast<const int4*>(b.data());
-  const int4* c4 = reinterpret_cast<const int4*>(c.data());
-  int4* r4 = reinterpret_cast<int4*>(result.data());
-  
-  for (size_t i = 0; i < numInt4s; ++i) {
-    r4[i] = op(a4[i], b4[i], c4[i]);
-  }
-  return result;
-}
-
-#define DEFINE_OP_III2I(name, expr) \
-template<typename T, size_t N> \
-inline AlignedArray<int32_t, N> name(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, \
-const AlignedArray<T, N>& c) { \
-return OpIII2I(a, b, c, [](int4 x, int4 y, int4 z) { return (expr); }); \
-}
-
-DEFINE_OP_III2I(selectInt, vecSelectIII(x, y, z))  // select(resultIfTrue, resultIfFalse, conditionMask)
 
 
 // ----------------------------------------------------------------

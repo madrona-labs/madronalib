@@ -449,9 +449,7 @@ TEST_CASE("madronalib/dsp_math/select_functions", "[dsp_math]")
   float4 b(10.0f, 20.0f, 30.0f, 40.0f);
   int4 mask(0, -1, 0, -1);
 
-  SECTION("vecSelectFFI") { REQUIRE(eq(vecSelectFFI(a, b, mask), float4(10.0f, 2.0f, 30.0f, 4.0f))); }
-  SECTION("vecSelectFFF") { REQUIRE(eq(vecSelectFFF(a, b, castIntToFloat(mask)), float4(10.0f, 2.0f, 30.0f, 4.0f))); }
-  SECTION("vecSelectIII") { REQUIRE(eq(vecSelectIII(int4(1, 2, 3, 4), int4(10, 20, 30, 40), mask), int4(10, 2, 30, 4))); }
+  SECTION("select") { REQUIRE(eq(select(a, b, castIntToFloat(mask)), float4(10.0f, 2.0f, 30.0f, 4.0f))); }
 }
 
 // ================================================================

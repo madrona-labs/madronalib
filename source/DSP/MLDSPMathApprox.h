@@ -504,8 +504,7 @@ inline T logApprox(T x) {
   }
   else
   {
-    addcst = vecSelectFFI(T{kLogC1}, T{FLT_MIN},
-                          castFloatToInt((x > T{0.0f})));
+    addcst = select(T{kLogC1}, T{FLT_MIN}, (x > T{0.0f}));
   }
   
   return poly + addcst + T{kLogC7} * intToFloat(expi);

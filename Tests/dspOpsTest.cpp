@@ -128,10 +128,9 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     SignalBlock b(-3.5f);
     REQUIRE(allEqual(abs(b), 3.5f));
     REQUIRE(allEqual(sign(b), -1.0f));
-    REQUIRE(allEqual(signBit(b), -1.0f));
     
-    SignalBlock c(0.0f);
-    REQUIRE(allEqual(sign(c), 0.0f));
+    SignalBlock c(3.5f);
+    REQUIRE(eq(sign(c), 1.0f));
   }
   
   SECTION("min/max")
