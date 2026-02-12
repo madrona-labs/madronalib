@@ -169,16 +169,6 @@ inline float lerpBipolar(const float a, const float b, const float c, const floa
   return (b + (q - b) * absm);
 }
 
-inline float herp(const float* t, float phase)
-{
-  // 4-point, 3rd-order Hermite interpolation
-  const float c = (t[2] - t[0]) * 0.5f;
-  const float v = t[1] - t[2];
-  const float w = c + v;
-  const float a = w + v + (t[3] - t[1]) * 0.5f;
-  const float b = w + a;
-  return (((a * phase) - b) * phase + c) * phase + t[1];
-}
 
 // amp <-> dB conversions, where ratio of the given amplitude is to 1.
 inline float ampTodB(float a) { return 20.f * log10f(a); }

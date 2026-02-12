@@ -42,9 +42,8 @@ struct int4 {
   operator int32x4_t() const { return v; }
 };
 
-
 // ----------------------------------------------------------------
-// Arithmetic operators for float4
+// float4 math functions that have scalar equivalents
 
 inline float4 operator+(float4 a, float4 b) { return float4(vaddq_f32(a.v, b.v)); }
 inline float4 operator-(float4 a, float4 b) { return float4(vsubq_f32(a.v, b.v)); }
@@ -59,22 +58,6 @@ inline float4& operator/=(float4& a, float4 b) { a = a / b; return a; }
 inline float4 operator-(float4 a) {
   return float4(vnegq_f32(a.v));
 }
-
-// ----------------------------------------------------------------
-// Arithmetic operators for int4
-
-inline int4 operator+(int4 a, int4 b) { return int4(vaddq_s32(a.v, b.v)); }
-inline int4 operator-(int4 a, int4 b) { return int4(vsubq_s32(a.v, b.v)); }
-
-inline int4& operator+=(int4& a, int4 b) { a = a + b; return a; }
-inline int4& operator-=(int4& a, int4 b) { a = a - b; return a; }
-
-inline int4 operator-(int4 a) {
-  return int4(vnegq_s32(a.v));
-}
-
-// ----------------------------------------------------------------
-// Math functions
 
 inline float4 min(float4 a, float4 b) { return float4(vminq_f32(a.v, b.v)); }
 inline float4 max(float4 a, float4 b) { return float4(vmaxq_f32(a.v, b.v)); }
@@ -136,7 +119,18 @@ inline float4 operator<=(float4 a, float4 b) {
   return float4(vreinterpretq_f32_u32(vcleq_f32(a.v, b.v)));
 }
 
-// Float special
+// select using float4 mask
+inline float4 select(float4 whenTrue, float4 whenFalse, float4 conditionMask) {
+  return float4(vreinterpretq_f32_u32(vbslq_u32(
+                                                vreinterpretq_u32_f32(conditionMask.v),
+                                                vreinterpretq_u32_f32(whenTrue.v),
+                                                vreinterpretq_u32_f32(whenFalse.v)
+                                                )));
+}
+
+// ----------------------------------------------------------------
+// float4 multi-lane
+
 inline float4 setZero() { return float4(vdupq_n_f32(0.0f)); }
 inline float4 set1Float(float a) { return float4(vdupq_n_f32(a)); }
 inline float4 setrFloat(float a, float b, float c, float d) { return float4(a, b, c, d); }
@@ -166,7 +160,19 @@ inline float4 minScalar(float4 a, float4 b) {
 }
 inline float extractScalar(float4 a) { return vgetq_lane_f32(a.v, 0); }
 
-// Integer arithmetic
+// ----------------------------------------------------------------
+// int4 math
+
+inline int4 operator+(int4 a, int4 b) { return int4(vaddq_s32(a.v, b.v)); }
+inline int4 operator-(int4 a, int4 b) { return int4(vsubq_s32(a.v, b.v)); }
+
+inline int4& operator+=(int4& a, int4 b) { a = a + b; return a; }
+inline int4& operator-=(int4& a, int4 b) { a = a - b; return a; }
+
+inline int4 operator-(int4 a) {
+  return int4(vnegq_s32(a.v));
+}
+
 inline int4 multiplyUnsigned(int4 a, int4 b) { return int4(vmulq_s32(a.v, b.v)); }
 
 // Integer logical
@@ -230,19 +236,9 @@ inline float4 unsignedIntToFloat(int4 v) {
 inline int4 castFloatToInt(float4 a) { return int4(vreinterpretq_s32_f32(a.v)); }
 inline float4 castIntToFloat(int4 a) { return float4(vreinterpretq_f32_s32(a.v)); }
 
-// ----------------------------------------------------------------
-// select
-
-inline float4 select(float4 a, float4 b, float4 conditionMask) {
-  return float4(vreinterpretq_f32_u32(vbslq_u32(
-    vreinterpretq_u32_f32(conditionMask.v),
-    vreinterpretq_u32_f32(a.v),
-    vreinterpretq_u32_f32(b.v)
-  )));
-}
 
 // ----------------------------------------------------------------
-// Horizontal operations — native pairwise ops
+// float4 horizontal operations
 
 inline float vecSumH(float4 v) {
   float32x2_t lo = vget_low_f32(v.v);
