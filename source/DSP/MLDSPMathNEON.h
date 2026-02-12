@@ -44,37 +44,6 @@ struct int4 {
 
 
 // ----------------------------------------------------------------
-// Load/store functions
-
-inline float4 loadFloat4(const float* ptr) { return float4(vld1q_f32(ptr)); }
-inline void storeFloat4(float* ptr, float4 v) { vst1q_f32(ptr, v.v); }
-inline int4 loadInt4(const int32_t* ptr) { return int4(vld1q_s32(ptr)); }
-inline void storeInt4(int32_t* ptr, int4 v) { vst1q_s32(ptr, v.v); }
-
-// ----------------------------------------------------------------
-// Lane access (slow - avoid!)
-
-inline float getFloat4Lane(float4 v, size_t lane) {
-  assert(lane < 4);
-  switch(lane) {
-    case 0: return vgetq_lane_f32(v.v, 0);
-    case 1: return vgetq_lane_f32(v.v, 1);
-    case 2: return vgetq_lane_f32(v.v, 2);
-    default: return vgetq_lane_f32(v.v, 3);
-  }
-}
-
-inline void setFloat4Lane(float4& v, size_t lane, float val) {
-  assert(lane < 4);
-  switch(lane) {
-    case 0: v = float4(vsetq_lane_f32(val, v.v, 0)); break;
-    case 1: v = float4(vsetq_lane_f32(val, v.v, 1)); break;
-    case 2: v = float4(vsetq_lane_f32(val, v.v, 2)); break;
-    default: v = float4(vsetq_lane_f32(val, v.v, 3)); break;
-  }
-}
-
-// ----------------------------------------------------------------
 // Arithmetic operators for float4
 
 inline float4 operator+(float4 a, float4 b) { return float4(vaddq_f32(a.v, b.v)); }
@@ -262,29 +231,13 @@ inline int4 castFloatToInt(float4 a) { return int4(vreinterpretq_s32_f32(a.v)); 
 inline float4 castIntToFloat(int4 a) { return float4(vreinterpretq_f32_s32(a.v)); }
 
 // ----------------------------------------------------------------
-// select functions
+// select
 
-inline float4 vecSelectFFI(float4 a, float4 b, int4 conditionMask) {
-  return float4(vreinterpretq_f32_u32(vbslq_u32(
-    vreinterpretq_u32_s32(conditionMask.v),
-    vreinterpretq_u32_f32(a.v),
-    vreinterpretq_u32_f32(b.v)
-  )));
-}
-
-inline float4 vecSelectFFF(float4 a, float4 b, float4 conditionMask) {
+inline float4 select(float4 a, float4 b, float4 conditionMask) {
   return float4(vreinterpretq_f32_u32(vbslq_u32(
     vreinterpretq_u32_f32(conditionMask.v),
     vreinterpretq_u32_f32(a.v),
     vreinterpretq_u32_f32(b.v)
-  )));
-}
-
-inline int4 vecSelectIII(int4 a, int4 b, int4 conditionMask) {
-  return int4(vreinterpretq_s32_u32(vbslq_u32(
-    vreinterpretq_u32_s32(conditionMask.v),
-    vreinterpretq_u32_s32(a.v),
-    vreinterpretq_u32_s32(b.v)
   )));
 }
 
@@ -313,4 +266,35 @@ inline float vecMinH(float4 v) {
   float32x2_t m = vmin_f32(lo, hi);
   m = vpmin_f32(m, m);
   return vget_lane_f32(m, 0);
+}
+
+// ----------------------------------------------------------------
+// Load/store functions
+
+inline float4 loadFloat4(const float* ptr) { return float4(vld1q_f32(ptr)); }
+inline void storeFloat4(float* ptr, float4 v) { vst1q_f32(ptr, v.v); }
+inline int4 loadInt4(const int32_t* ptr) { return int4(vld1q_s32(ptr)); }
+inline void storeInt4(int32_t* ptr, int4 v) { vst1q_s32(ptr, v.v); }
+
+// ----------------------------------------------------------------
+// Lane access (slow - avoid!)
+
+inline float getFloat4Lane(float4 v, size_t lane) {
+  assert(lane < 4);
+  switch(lane) {
+    case 0: return vgetq_lane_f32(v.v, 0);
+    case 1: return vgetq_lane_f32(v.v, 1);
+    case 2: return vgetq_lane_f32(v.v, 2);
+    default: return vgetq_lane_f32(v.v, 3);
+  }
+}
+
+inline void setFloat4Lane(float4& v, size_t lane, float val) {
+  assert(lane < 4);
+  switch(lane) {
+    case 0: v = float4(vsetq_lane_f32(val, v.v, 0)); break;
+    case 1: v = float4(vsetq_lane_f32(val, v.v, 1)); break;
+    case 2: v = float4(vsetq_lane_f32(val, v.v, 2)); break;
+    default: v = float4(vsetq_lane_f32(val, v.v, 3)); break;
+  }
 }

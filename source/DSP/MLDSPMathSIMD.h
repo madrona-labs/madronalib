@@ -19,6 +19,9 @@ constexpr size_t kSIMDVectorElems{4};
 
 inline float4 clamp(float4 a, float4 b, float4 c) { return min(max(a, b), c); }
 
+// up/down sign: -1 or 1
+inline float4 sign(float4 x) { return orBits(andBits(set1Float(-0.0f), x), set1Float(1.0f)); }
+
 // ----------------------------------------------------------------
 // Conversions
 

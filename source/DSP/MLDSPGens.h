@@ -395,7 +395,7 @@ inline SignalBlock phasorToSine(SignalBlock phasorV)
 inline SignalBlock phasorToPulse(SignalBlock omegaV, SignalBlock freqV, SignalBlock pulseWidthV)
 {
   // get pulse selector mask
-  SignalBlockInt maskV = greaterThanOrEqual(omegaV, pulseWidthV);
+  SignalBlock maskV = greaterThanOrEqual(omegaV, pulseWidthV);
 
   // select -1 or 1 (could be a multiply instead?)
   SignalBlock pulseV = select(SignalBlock(-1.f), SignalBlock(1.f), maskV);

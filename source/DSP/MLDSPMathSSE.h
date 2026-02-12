@@ -40,33 +40,7 @@ struct int4 {
 
 
 // ----------------------------------------------------------------
-// Load/store functions
-inline float4 loadFloat4(const float* ptr) { return float4(_mm_load_ps(ptr)); }
-inline void storeFloat4(float* ptr, float4 v) { _mm_store_ps(ptr, v); }
-
-inline int4 loadInt4(const int32_t* ptr) { return int4(_mm_load_si128((const __m128i*)ptr)); }
-inline void storeInt4(int32_t* ptr, int4 v) { _mm_store_si128((__m128i*)ptr, v); }
-
-// ----------------------------------------------------------------
-// Lane access (slow - avoid!)
-
-inline float getFloat4Lane(float4 v, size_t lane) {
-  assert(lane < 4);
-  alignas(16) float tmp[4];
-  _mm_store_ps(tmp, v);
-  return tmp[lane];
-}
-
-inline void setFloat4Lane(float4& v, size_t lane, float val) {
-  assert(lane < 4);
-  alignas(16) float tmp[4];
-  _mm_store_ps(tmp, v);
-  tmp[lane] = val;
-  v = float4(_mm_load_ps(tmp));
-}
-
-// ----------------------------------------------------------------
-// Arithmetic operators for float4
+// float4 math functions
 
 inline float4 operator+(float4 a, float4 b) { return float4(_mm_add_ps(a, b)); }
 inline float4 operator-(float4 a, float4 b) { return float4(_mm_sub_ps(a, b)); }
@@ -81,22 +55,6 @@ inline float4& operator/=(float4& a, float4 b) { a = a / b; return a; }
 inline float4 operator-(float4 a) {
   return float4(_mm_xor_ps(a, _mm_set1_ps(-0.0f)));
 }
-
-// ----------------------------------------------------------------
-// Arithmetic operators for int4
-
-inline int4 operator+(int4 a, int4 b) { return int4(_mm_add_epi32(a, b)); }
-inline int4 operator-(int4 a, int4 b) { return int4(_mm_sub_epi32(a, b)); }
-
-inline int4& operator+=(int4& a, int4 b) { a = a + b; return a; }
-inline int4& operator-=(int4& a, int4 b) { a = a - b; return a; }
-
-inline int4 operator-(int4 a) {
-  return int4(_mm_sub_epi32(_mm_setzero_si128(), a));
-}
-
-// ----------------------------------------------------------------
-// Math functions
 
 inline float4 min(float4 a, float4 b) { return float4(_mm_min_ps(a, b)); }
 inline float4 max(float4 a, float4 b) { return float4(_mm_max_ps(a, b)); }
@@ -142,7 +100,23 @@ inline float4 maxScalar(float4 a, float4 b) { return float4(_mm_max_ss(a, b)); }
 inline float4 minScalar(float4 a, float4 b) { return float4(_mm_min_ss(a, b)); }
 inline float extractScalar(float4 a) { return _mm_cvtss_f32(a); }
 
-// Integer arithmetic
+
+// ----------------------------------------------------------------
+// Arithmetic operators for int4
+
+inline int4 operator+(int4 a, int4 b) { return int4(_mm_add_epi32(a, b)); }
+inline int4 operator-(int4 a, int4 b) { return int4(_mm_sub_epi32(a, b)); }
+
+inline int4& operator+=(int4& a, int4 b) { a = a + b; return a; }
+inline int4& operator-=(int4& a, int4 b) { a = a - b; return a; }
+
+inline int4 operator-(int4 a) {
+  return int4(_mm_sub_epi32(_mm_setzero_si128(), a));
+}
+
+// ----------------------------------------------------------------
+// int4 functions
+
 inline int4 multiplyUnsigned(int4 a, int4 b) { return int4(_mm_mullo_epi32(a, b)); }
 
 // Integer logical
@@ -194,22 +168,10 @@ inline float4 castIntToFloat(int4 a) { return float4(_mm_castsi128_ps(a)); }
 // ----------------------------------------------------------------
 // select functions
 
-inline float4 vecSelectFFI(float4 a, float4 b, int4 conditionMask) {
-  int4 ones = set1Int(-1);
-  return orBits(andBits(castIntToFloat(conditionMask), a),
-                andBits(xorBits(castIntToFloat(conditionMask), castIntToFloat(ones)), b));
-}
-
-inline float4 vecSelectFFF(float4 a, float4 b, float4 conditionMask) {
+inline float4 select(float4 a, float4 b, float4 conditionMask) {
   int4 ones = set1Int(-1);
   return orBits(andBits(conditionMask, a),
                 andBits(xorBits(conditionMask, castIntToFloat(ones)), b));
-}
-
-inline int4 vecSelectIII(int4 a, int4 b, int4 conditionMask) {
-  int4 ones = set1Int(-1);
-  return orBits(andBits(conditionMask, a),
-                andBits(xorBits(conditionMask, ones), b));
 }
 
 // ----------------------------------------------------------------
@@ -233,3 +195,29 @@ inline float vecMinH(float4 v) {
   return extractScalar(tmp1);
 }
 
+
+// ----------------------------------------------------------------
+// Load/store functions
+inline float4 loadFloat4(const float* ptr) { return float4(_mm_load_ps(ptr)); }
+inline void storeFloat4(float* ptr, float4 v) { _mm_store_ps(ptr, v); }
+
+inline int4 loadInt4(const int32_t* ptr) { return int4(_mm_load_si128((const __m128i*)ptr)); }
+inline void storeInt4(int32_t* ptr, int4 v) { _mm_store_si128((__m128i*)ptr, v); }
+
+// ----------------------------------------------------------------
+// Lane access (slow - avoid!)
+
+inline float getFloat4Lane(float4 v, size_t lane) {
+  assert(lane < 4);
+  alignas(16) float tmp[4];
+  _mm_store_ps(tmp, v);
+  return tmp[lane];
+}
+
+inline void setFloat4Lane(float4& v, size_t lane, float val) {
+  assert(lane < 4);
+  alignas(16) float tmp[4];
+  _mm_store_ps(tmp, v);
+  tmp[lane] = val;
+  v = float4(_mm_load_ps(tmp));
+}
