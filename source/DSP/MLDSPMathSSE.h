@@ -38,9 +38,8 @@ struct int4 {
   operator __m128i() const { return v; }
 };
 
-
 // ----------------------------------------------------------------
-// float4 math functions
+// float4 math functions that have scalar equivalents
 
 inline float4 operator+(float4 a, float4 b) { return float4(_mm_add_ps(a, b)); }
 inline float4 operator-(float4 a, float4 b) { return float4(_mm_sub_ps(a, b)); }
@@ -71,7 +70,7 @@ inline float4 andNotBits(float4 a, float4 b) { return float4(_mm_andnot_ps(a, b)
 inline float4 orBits(float4 a, float4 b) { return float4(_mm_or_ps(a, b)); }
 inline float4 xorBits(float4 a, float4 b) { return float4(_mm_xor_ps(a, b)); }
 
-// Float comparisons (return float4 masks)
+// Float comparisons (return float4 masks, all bits on or off)
 inline float4 operator==(float4 a, float4 b) { return float4(_mm_cmpeq_ps(a, b)); }
 inline float4 operator!=(float4 a, float4 b) { return float4(_mm_cmpneq_ps(a, b)); }
 inline float4 operator>(float4 a, float4 b) { return float4(_mm_cmpgt_ps(a, b)); }
@@ -79,7 +78,16 @@ inline float4 operator>=(float4 a, float4 b) { return float4(_mm_cmpge_ps(a, b))
 inline float4 operator<(float4 a, float4 b) { return float4(_mm_cmplt_ps(a, b)); }
 inline float4 operator<=(float4 a, float4 b) { return float4(_mm_cmple_ps(a, b)); }
 
-// Float special
+// select using float4 mask
+inline float4 select(float4 whenTrue, float4 whenFalse, float4 conditionMask) {
+  int4 ones = set1Int(-1);
+  return orBits(andBits(conditionMask, whenTrue),
+                andBits(xorBits(conditionMask, castIntToFloat(ones)), whenFalse));
+}
+
+// ----------------------------------------------------------------
+// float4 multi-lane
+
 inline float4 setZero() { return float4(_mm_setzero_ps()); }
 inline float4 set1Float(float a) { return float4(_mm_set1_ps(a)); }
 inline float4 setrFloat(float a, float b, float c, float d) { return float4(_mm_setr_ps(a, b, c, d)); }
@@ -102,7 +110,7 @@ inline float extractScalar(float4 a) { return _mm_cvtss_f32(a); }
 
 
 // ----------------------------------------------------------------
-// Arithmetic operators for int4
+// int4 math
 
 inline int4 operator+(int4 a, int4 b) { return int4(_mm_add_epi32(a, b)); }
 inline int4 operator-(int4 a, int4 b) { return int4(_mm_sub_epi32(a, b)); }
@@ -113,9 +121,6 @@ inline int4& operator-=(int4& a, int4 b) { a = a - b; return a; }
 inline int4 operator-(int4 a) {
   return int4(_mm_sub_epi32(_mm_setzero_si128(), a));
 }
-
-// ----------------------------------------------------------------
-// int4 functions
 
 inline int4 multiplyUnsigned(int4 a, int4 b) { return int4(_mm_mullo_epi32(a, b)); }
 
@@ -165,17 +170,9 @@ inline float4 unsignedIntToFloat(int4 v) {
 inline int4 castFloatToInt(float4 a) { return int4(_mm_castps_si128(a)); }
 inline float4 castIntToFloat(int4 a) { return float4(_mm_castsi128_ps(a)); }
 
-// ----------------------------------------------------------------
-// select functions
-
-inline float4 select(float4 a, float4 b, float4 conditionMask) {
-  int4 ones = set1Int(-1);
-  return orBits(andBits(conditionMask, a),
-                andBits(xorBits(conditionMask, castIntToFloat(ones)), b));
-}
 
 // ----------------------------------------------------------------
-// horizontal operations returning float
+// float4 horizontal operations
 
 inline float vecSumH(float4 v) {
   float4 tmp0 = v + moveHL(v, v);
@@ -195,12 +192,11 @@ inline float vecMinH(float4 v) {
   return extractScalar(tmp1);
 }
 
-
 // ----------------------------------------------------------------
 // Load/store functions
+
 inline float4 loadFloat4(const float* ptr) { return float4(_mm_load_ps(ptr)); }
 inline void storeFloat4(float* ptr, float4 v) { _mm_store_ps(ptr, v); }
-
 inline int4 loadInt4(const int32_t* ptr) { return int4(_mm_load_si128((const __m128i*)ptr)); }
 inline void storeInt4(int32_t* ptr, int4 v) { _mm_store_si128((__m128i*)ptr, v); }
 

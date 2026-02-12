@@ -18,12 +18,21 @@ namespace ml {
 // min, max, sqrt, rsqrt, rcp
 // multiplyAdd
 // andBits, andNotBits, orBits, xorBits
-// clamp, intPart, fracPart
-//
+// comparisons (==, !=, <, ...)
+// select
+// clamp, sign, intPart, fracPart
+
+
+inline float select(float a, float b, float x)
+{
+  return (x != 0.0f ? a : b);
+}
+
+
+
 // from MathApprox:
 // log, exp, sin, cos, sincos, tan
 // sinApprox, cosApprox, expApprox, logApprox, tanhApprox
-
 
 
 
