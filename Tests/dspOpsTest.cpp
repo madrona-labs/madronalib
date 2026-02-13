@@ -13,7 +13,7 @@
 #include <iostream>
 #include <iomanip>
 
-#define DO_TIME_TESTS 1
+#define DO_TIME_TESTS 0
 
 using namespace ml;
 using namespace testUtils;

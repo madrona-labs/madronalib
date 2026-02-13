@@ -2,11 +2,6 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
-// DSP generators: functor objects implementing an inline SignalBlock operator()
-// in order to make time-varying signals. Generators all have some state, for
-// example the frequency of an oscillator or the seed in a noise generator.
-// Otherwise they would be DSPOps.
-
 #pragma once
 
 #include "MLDSPFunctional.h"
@@ -46,6 +41,90 @@ struct Gen1
     return output;
   }
 };
+
+// ----------------------------------------------------------------
+// Frame-level waveform shaping helpers
+
+// bandlimited step correction
+template<typename T>
+T polyBLEPSample(T phase, T dt)
+{
+  if constexpr (std::is_same_v<T, float>)
+  {
+    float c{0.f};
+    if (phase < dt)
+    {
+      float t = phase / dt;
+      c = t + t - t * t - 1.0f;
+    }
+    else if (phase > 1.0f - dt)
+    {
+      float t = (phase - 1.0f) / dt;
+      c = t * t + t + t + 1.0f;
+    }
+    return c;
+  }
+  else
+  {
+    T rdt = rcp(dt);
+    
+    T t1 = phase * rdt;
+    T blep1 = t1 + t1 - t1 * t1 - T{1.0f};
+    T mask1 = (phase < dt);
+    
+    T t2 = (phase - T{1.0f}) * rdt;
+    T blep2 = t2 * t2 + t2 + t2 + T{1.0f};
+    T mask2 = (phase > T{1.0f} - dt);
+    
+    return andBits(mask1, blep1) + andBits(mask2, blep2);
+  }
+}
+
+// phasor on (0, 1) to sine approximation using folded cubic.
+// 3rd harmonic at about -40dB, odd harmonics only.
+template<typename T>
+T phasorToSineSample(T phasor)
+{
+  constexpr float sqrt2 = 1.4142135623730950488f;
+  constexpr float domain = sqrt2 * 4.f;
+  constexpr float range = sqrt2 - sqrt2 * sqrt2 * sqrt2 / 6.f;
+  
+  T omega = phasor * T{domain} - T{sqrt2};
+  T centered = omega - T{sqrt2};
+  T triangle = T{sqrt2} - max(centered, -centered);
+  return T{1.f / range} * triangle * (T{1.f} - triangle * triangle * T{1.f / 6.f});
+}
+
+// phasor on (0, 1) to antialiased pulse
+template<typename T>
+T phasorToPulseSample(T phase, T freq, T pulseWidth)
+{
+  if constexpr (std::is_same_v<T, float>)
+  {
+    float pulse = (phase >= pulseWidth) ? 1.0f : -1.0f;
+    pulse += polyBLEPSample<T>(phase, freq);
+    float downPhase = phase - pulseWidth + 1.0f;
+    downPhase = downPhase - intPart(downPhase);
+    pulse -= polyBLEPSample<T>(downPhase, freq);
+    return pulse;
+  }
+  else
+  {
+    T pulse = select(T{1.f}, T{-1.f}, phase >= pulseWidth);
+    pulse = pulse + polyBLEPSample<T>(phase, freq);
+    T downPhase = fracPart(phase - pulseWidth + T{1.0f});
+    pulse = pulse - polyBLEPSample<T>(downPhase, freq);
+    return pulse;
+  }
+}
+
+// phasor on (0, 1) to antialiased saw on (-1, 1)
+template<typename T>
+T phasorToSawSample(T phase, T freq)
+{
+  T saw = phase * T{2.f} - T{1.f};
+  return saw - polyBLEPSample<T>(phase, freq);
+}
 
 // ----------------------------------------------------------------
 // Frame counter generator
@@ -97,561 +176,294 @@ struct TickGen : Gen1<T, TickGen<T>>
   }
 };
 
-// generate an antialiased impulse, repeating at a frequency given by the input.
-// limitations to fix:
-//     frequency can't be higher than sr / table size.
-//     table output is only positioned to the nearest sample.
-class ImpulseGen
+// Bandlimited impulse train generator.
+// Uses a windowed sinc table with two readout voices for crossfading
+// when impulses overlap at high frequencies.
+
+template<typename T>
+struct ImpulseGen : Gen1<T, ImpulseGen<T>>
 {
-  // pick odd table size to get sample-centered sinc and window
-  static constexpr int kTableSize{17};
-  SignalBlock _table;
-  static_assert(kTableSize < kFramesPerBlock,
-                "ImpulseGen: table size must be < the DSP vector size.");
-
-  int _outputCounter{0};
-  float _omega{0.f};
-
- public:
-  ImpulseGen()
+  static constexpr int kSincHalfWidth = 8;
+  static constexpr int kOversample = 8;
+  static constexpr int kTableSize = kSincHalfWidth * 2 * kOversample + 1; // 129
+  static constexpr float kTableEnd = static_cast<float>(kTableSize - 1);  // 128.0
+  static constexpr float kTableStep = static_cast<float>(kOversample);    // 8.0
+  static constexpr float kSincOmega = 0.25f;
+  
+  static const std::array<float, kTableSize>& getTable()
   {
-    // make windowed sinc table
-    SignalBlock windowVec;
-    makeWindow(windowVec.data(), kTableSize, dspwindows::blackman);
-    const float omega = 0.25f;
-    auto sincFn{[&](int i)
-                {
-                  float pi_x = ml::kTwoPi * omega * i;
-                  return (i == 0) ? 1.f : sinf(pi_x) / pi_x;
-                }};
-    auto indexCentered = columnIndexInt() - SignalBlockInt((kTableSize - 1) / 2);
-    SignalBlock sincVec = map(sincFn, indexCentered);
-    SignalBlock windowedSinc = sincVec * windowVec;
-    _table = normalize(windowedSinc);
+    static const auto table = [] {
+      std::array<float, kTableSize> t{};
+      constexpr int center = kSincHalfWidth * kOversample;
+      float peak = 0.f;
+      for (int i = 0; i < kTableSize; ++i)
+      {
+        float x = static_cast<float>(i - center) / static_cast<float>(kOversample);
+        float w = 0.42f - 0.5f * cosf(kTwoPi * static_cast<float>(i) / static_cast<float>(kTableSize - 1))
+        + 0.08f * cosf(2.f * kTwoPi * static_cast<float>(i) / static_cast<float>(kTableSize - 1));
+        float pi_x = kTwoPi * kSincOmega * x;
+        float s = (i == center) ? 1.f : sinf(pi_x) / pi_x;
+        t[i] = s * w;
+        peak = std::max(peak, std::abs(t[i]));
+      }
+      for (auto& v : t) v /= peak;
+      return t;
+    }();
+    return table;
   }
-  ~ImpulseGen() {}
-
-  inline SignalBlock operator()(const SignalBlock cyclesPerSample)
+  
+  // State: two readout voices
+  T phase_{0.f};
+  T posA_{kTableEnd}, ampA_{0.f}, ampStepA_{0.f};
+  T posB_{kTableEnd}, ampB_{0.f}, ampStepB_{0.f};
+  
+  void clear()
   {
-    // accumulate phase and wrap to generate ticks
-    SignalBlock vy{0.f};
-    for (int n = 0; n < kFramesPerBlock; ++n)
+    phase_ = T{1.f};  // wraps on first nextFrame call
+    posA_ = posB_ = T{kTableEnd};
+    ampA_ = ampB_ = T{0.f};
+    ampStepA_ = ampStepB_ = T{0.f};
+  }
+  
+  static float tableLookupScalar(float pos)
+  {
+    if (pos < 0.f || pos >= kTableEnd) return 0.f;
+    const auto& table = getTable();
+    int idx = static_cast<int>(pos);
+    float frac = pos - static_cast<float>(idx);
+    return table[idx] + frac * (table[idx + 1] - table[idx]);
+  }
+  
+  static T tableLookup(T pos)
+  {
+    if constexpr (std::is_same_v<T, float>)
     {
-      _omega += cyclesPerSample[n];
-      if (_omega > 1.0f)
-      {
-        _omega -= 1.0f;
-
-        // start an output impulse
-        _outputCounter = 0;
-      }
-
-      if (_outputCounter < kTableSize)
-      {
-        vy[n] = _table[_outputCounter];
-        _outputCounter++;
-      }
+      return tableLookupScalar(pos);
     }
-    return vy;
+    else
+    {
+      // Gather: extract lanes, look up individually, reassemble.
+      // Requires storeFloat4 / loadFloat4 (see note below).
+      alignas(16) float lanes[4];
+      storeFloat4(lanes, pos);
+      for (int i = 0; i < 4; ++i)
+        lanes[i] = tableLookupScalar(lanes[i]);
+      return loadFloat4(lanes);
+    }
+  }
+  
+  T nextFrame(T freq)
+  {
+    T prevPhase = phase_;
+    phase_ = fracPart(phase_ + freq);
+    
+    if constexpr (std::is_same_v<T, float>)
+    {
+      if (phase_ < prevPhase) // wrap = trigger
+      {
+        float offset = phase_ / freq * kTableStep;
+        
+        if (posA_ < kTableEnd) // overlap: crossfade
+        {
+          posB_ = posA_;
+          ampB_ = ampA_;
+          float samplesLeft = (kTableEnd - posA_) / kTableStep;
+          float fadeLen = std::max(1.f, std::min(samplesLeft, 1.f / freq));
+          ampStepB_ = -ampB_ / fadeLen;
+          ampA_ = 0.f;
+          ampStepA_ = 1.f / fadeLen;
+        }
+        else // clean start
+        {
+          ampA_ = 1.f;
+          ampStepA_ = 0.f;
+        }
+        posA_ = offset;
+      }
+      
+      float output = tableLookup(posA_) * ampA_
+      + tableLookup(posB_) * ampB_;
+      
+      posA_ = std::min(posA_ + kTableStep, kTableEnd);
+      posB_ = std::min(posB_ + kTableStep, kTableEnd);
+      ampA_ = std::max(0.f, ampA_ + ampStepA_);
+      ampB_ = std::max(0.f, ampB_ + ampStepB_);
+      
+      return output;
+    }
+    else // float4
+    {
+      T trigMask = (phase_ < prevPhase);
+      T offset = phase_ * rcp(freq) * T{kTableStep};
+      
+      T aActive = (posA_ < T{kTableEnd});
+      T overlapMask = andBits(trigMask, aActive);
+      T cleanMask = andNotBits(aActive, trigMask);
+      
+      // Overlap: move A→B, set up crossfade
+      posB_ = select(posB_, posA_, overlapMask);
+      ampB_ = select(ampB_, ampA_, overlapMask);
+      T samplesLeft = (T{kTableEnd} - posA_) * T{1.f / kTableStep};
+      T fadeLen = max(T{1.f}, min(samplesLeft, rcp(freq)));
+      T rcpFade = rcp(fadeLen);
+      ampStepB_ = select(ampStepB_, T{-1.f} * ampB_ * rcpFade, overlapMask);
+      
+      // Set amplitude for triggered lanes
+      ampA_ = select(ampA_, T{0.f}, overlapMask);
+      ampStepA_ = select(ampStepA_, rcpFade, overlapMask);
+      ampA_ = select(ampA_, T{1.f}, cleanMask);
+      ampStepA_ = select(ampStepA_, T{0.f}, cleanMask);
+      
+      // Clean trigger: explicitly silence voice B
+      ampB_ = select(ampB_, T{0.f}, cleanMask);
+      ampStepB_ = select(ampStepB_, T{0.f}, cleanMask);
+      
+      // Start position for triggered lanes
+      posA_ = select(posA_, offset, trigMask);
+      
+      // Read and mix
+      T output = tableLookup(posA_) * ampA_
+      + tableLookup(posB_) * ampB_;
+      
+      // Advance
+      posA_ = min(posA_ + T{kTableStep}, T{kTableEnd});
+      posB_ = min(posB_ + T{kTableStep}, T{kTableEnd});
+      ampA_ = max(T{0.f}, ampA_ + ampStepA_);
+      ampB_ = max(T{0.f}, ampB_ + ampStepB_);
+      
+      return output;
+    }
   }
 };
 
-// generate a random number from -1 to 1 every sample.
-// NOTE: this will create more energy at higher sample rates!
-// TODO make proper pink noise, white noise gens
-class NoiseGen
+
+template<typename T>
+struct NoiseGen : Gen0<T, NoiseGen<T>>
 {
- public:
-  NoiseGen() : mSeed(0) {}
-  ~NoiseGen() {}
-
-  inline void step() { mSeed = mSeed * 0x0019660D + 0x3C6EF35F; }
-  inline void setSeed(uint32_t x) { mSeed = x; }
-
-  inline uint32_t getIntSample()
+  using IntState = std::conditional_t<std::is_same_v<T, float>, uint32_t, int4>;
+  
+  IntState seed_{};
+  
+  void clear() { setSeed(39792); }
+  
+  void setSeed(uint32_t x)
   {
-    step();
-    return mSeed;
-  }
-
-  inline float getSample()
-  {
-    step();
-    uint32_t temp = ((mSeed >> 9) & 0x007FFFFF) | 0x3F800000;
-    return (*reinterpret_cast<float*>(&temp)) * 2.f - 3.f;
-  }
-
-  // TODO SIMD
-  inline SignalBlock operator()()
-  {
-    SignalBlock y;
-    for (int i = 0; i < kFramesPerBlock; ++i)
+    if constexpr (std::is_same_v<T, float>)
     {
-      step();
-      uint32_t temp = ((mSeed >> 9) & 0x007FFFFF) | 0x3F800000;
-      y[i] = (*reinterpret_cast<float*>(&temp)) * 2.f - 3.f;
+      seed_ = x;
     }
-    return y;
+    else
+    {
+      seed_ = setrInt(x, x * 2, x * 3, x * 4);
+    }
   }
-
-  void reset() { mSeed = 0; }
-
- private:
-  uint32_t mSeed = 0;
+  
+  T nextFrame()
+  {
+    using IntT = IntTypeFor_t<T>;
+    seed_ = seed_ * IntT{0x0019660D} + IntT{0x3C6EF35F};
+    IntT temp = (seed_ >> 9) & IntT{0x007FFFFF} | IntT{0x3F800000};
+    return reinterpretIntAsFloat(temp) * T{2.f} - T{3.f};
+  }
 };
 
+// ----------------------------------------------------------------
+// PhasorGen: naive (not antialiased) sawtooth / phase ramp on (0, 1).
+// Input: frequency in cycles per sample (f/sr).
+// NOTE: uses float phase accumulation rather than the uint32
+// trick in the original. Slight precision loss but works for float4.
+
+template<typename T>
+struct PhasorGen : Gen1<T, PhasorGen<T> >
+{
+  T omega_{0.f};
+  
+  void clear() { omega_ = T{0.f}; }
+  
+  T nextFrame(T freq)
+  {
+    omega_ = fracPart(omega_ + freq);
+    return omega_;
+  }
+};
+
+// ----------------------------------------------------------------
 // super slow + accurate sine generator for testing
-class TestSineGen
+
+template<typename T>
+struct TestSineGen : Gen1<T, TestSineGen<T> >
 {
-  float mOmega{0};
-
- public:
-  void clear() { mOmega = 0; }
-
-  SignalBlock operator()(const SignalBlock freq)
+  T omega_{0.f};
+  
+  void clear() { omega_ = T{0.f}; }
+  
+  T nextFrame(T freq)
   {
-    SignalBlock vy;
-
-    for (int i = 0; i < kFramesPerBlock; ++i)
+    omega_ += T{kTwoPi} * freq;
+    if constexpr (std::is_same_v<T, float>)
     {
-      float step = ml::kTwoPi * freq[i];
-      mOmega += step;
-      if (mOmega > ml::kTwoPi) mOmega -= ml::kTwoPi;
-      vy[i] = sinf(mOmega);
-    }
-    return vy;
-  }
-};
-
-// PhasorGen is a naive (not antialiased) sawtooth generator.
-// These can be useful for a few things, like controlling wavetable playback.
-// it takes one input vector: the radial frequency in cycles per sample (f/sr).
-// it outputs a phasor with range from 0--1.
-class PhasorGen
-{
-  uint32_t mOmega32{0};
-
- public:
-  void clear(uint32_t omega = 0) { mOmega32 = omega; }
-
-  static constexpr float stepsPerCycle{static_cast<float>(1UL << 32UL)};
-  static constexpr float cyclesPerStep{1.f / stepsPerCycle};
-
-  SignalBlock operator()(const SignalBlock cyclesPerSample)
-  {
-    // calculate int steps per sample
-    SignalBlock stepsPerSampleV = cyclesPerSample * SignalBlock(stepsPerCycle);
-    SignalBlockInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
-
-    // accumulate 32-bit phase with wrap
-    SignalBlockInt omega32V;
-    for (int n = 0; n < kFramesPerBlock; ++n)
-    {
-      mOmega32 += intStepsPerSampleV[n];
-      omega32V[n] = mOmega32;
-    }
-
-    // convert counter to float output range
-    return unsignedIntToFloat(omega32V) * SignalBlock(cyclesPerStep);
-  }
-
-  float nextSample(const float cyclesPerSample)
-  {
-    // calculate int steps per sample
-    float stepsPerSample = cyclesPerSample * stepsPerCycle;
-    uint32_t intStepsPerSample = (uint32_t)roundf(stepsPerSample);
-
-    // accumulate 32-bit phase with wrap
-    mOmega32 += intStepsPerSample;
-
-    // convert counter to float output range
-    return mOmega32 * cyclesPerStep;
-  }
-};
-
-// OneShotGen, when triggered, makes a single ramp from 0-1 then resets to 0. The speed
-// of the ramp is a signal input, giving a ramp with the same speed as PhasorGen.
-class OneShotGen
-{
-  static constexpr uint32_t start = 0;
-  uint32_t mOmega32{start};
-  uint32_t mGate{0};
-  uint32_t mOmegaPrev{start};
-
- public:
-  void trigger()
-  {
-    mOmega32 = mOmegaPrev = start;
-    mGate = 1;
-  }
-
-  static constexpr float stepsPerCycle{static_cast<float>(1UL << 32UL)};
-  static constexpr float cyclesPerStep{1.f / stepsPerCycle};
-
-  SignalBlock operator()(const SignalBlock cyclesPerSample)
-  {
-    // calculate int steps per sample
-    SignalBlock stepsPerSampleV = cyclesPerSample * SignalBlock(stepsPerCycle);
-    SignalBlockInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
-
-    // accumulate 32-bit phase with wrap
-    // we test for wrap at every sample to get a clean ending
-    SignalBlockInt omega32V;
-    for (int n = 0; n < kFramesPerBlock; ++n)
-    {
-      mOmega32 += intStepsPerSampleV[n] * mGate;
-      if (mOmega32 < mOmegaPrev)
-      {
-        mGate = 0;
-        mOmega32 = start;
-      }
-      omega32V[n] = mOmegaPrev = mOmega32;
-    }
-    // convert counter to float output range
-    return unsignedIntToFloat(omega32V) * SignalBlock(cyclesPerStep);
-  }
-
-  float nextSample(const float cyclesPerSample)
-  {
-    // calculate int steps per sample
-    float stepsPerSample = cyclesPerSample * stepsPerCycle;
-    uint32_t intStepsPerSample = (uint32_t)roundf(stepsPerSample);
-
-    // accumulate 32-bit phase with wrap
-    // we test for wrap at every sample to get a clean ending
-    SignalBlockInt omega32V;
-
-    mOmega32 += intStepsPerSample * mGate;
-    if (mOmega32 < mOmegaPrev)
-    {
-      mGate = 0;
-      mOmega32 = start;
-    }
-    mOmegaPrev = mOmega32;
-
-    // convert counter to float output range
-    return mOmega32 * cyclesPerStep;
-  }
-};
-
-// bandlimited step function for reducing aliasing.
-static SignalBlock polyBLEP(const SignalBlock phase, const SignalBlock freq)
-{
-  SignalBlock blep;
-
-  for (int n = 0; n < kFramesPerBlock; ++n)
-  {
-    // could possibly differentiate to get dt instead of passing it in.
-    // but that would require state.
-    float t = phase[n];
-    float dt = freq[n];
-
-    // TODO try SIMD optimization
-    float c{0.f};
-    if (t < dt)
-    {
-      t = t / dt;
-      c = t + t - t * t - 1.0f;
-    }
-    else if (t > 1.0f - dt)
-    {
-      t = (t - 1.0f) / dt;
-      c = t * t + t + t + 1.0f;
-    }
-    blep[n] = c;
-  }
-  return blep;
-}
-
-// input: phasor on (0, 1)
-// output: sine aproximation using Taylor series on range(-1, 1). There is distortion in odd
-// harmonics only, with the 3rd harmonic at about -40dB.
-inline SignalBlock phasorToSine(SignalBlock phasorV)
-{
-  constexpr float sqrt2 = 1.4142135623730950488f;
-  constexpr float domain(sqrt2 * 4.f);
-  SignalBlock domainScaleV(domain);
-  SignalBlock domainOffsetV(-sqrt2);
-  constexpr float range(sqrt2 - sqrt2 * sqrt2 * sqrt2 / 6.f);
-  SignalBlock scaleV(1.0f / range);
-  SignalBlock flipOffsetV(sqrt2 * 2.f);
-  SignalBlock zeroV(0.f);
-  SignalBlock oneV(1.f);
-  SignalBlock oneSixthV(1.0f / 6.f);
-
-  // scale and offset input phasor on (0, 1) to sine approx domain (-sqrt(2), 3*sqrt(2))
-  SignalBlock omegaV = phasorV * (domainScaleV) + (domainOffsetV);
-
-  // reverse upper half of phasor to get triangle
-  // equivalent to: if (phasor > 0) x = flipOffset - fOmega; else x = fOmega;
-  SignalBlock triangleV = select(flipOffsetV - omegaV, omegaV, greaterThan(omegaV, SignalBlock(sqrt2)));
-
-  // convert triangle to sine approx.
-  return scaleV * triangleV * (oneV - triangleV * triangleV * oneSixthV);
-}
-
-// input: phasor on (0, 1), normalized freq, pulse width
-// output: antialiased pulse
-inline SignalBlock phasorToPulse(SignalBlock omegaV, SignalBlock freqV, SignalBlock pulseWidthV)
-{
-  // get pulse selector mask
-  SignalBlock maskV = greaterThanOrEqual(omegaV, pulseWidthV);
-
-  // select -1 or 1 (could be a multiply instead?)
-  SignalBlock pulseV = select(SignalBlock(-1.f), SignalBlock(1.f), maskV);
-
-  // add blep for up-going transition
-  pulseV += polyBLEP(omegaV, freqV);
-
-  // subtract blep for down-going transition
-  SignalBlock omegaVDown = fractionalPart(omegaV - pulseWidthV + SignalBlock(1.0f));
-  pulseV -= polyBLEP(omegaVDown, freqV);
-
-  return pulseV;
-}
-
-// input: phasor on (0, 1), normalized freq
-// output: antialiased saw on (-1, 1)
-inline SignalBlock phasorToSaw(SignalBlock omegaV, SignalBlock freqV)
-{
-  // scale phasor to saw range (-1, 1)
-  SignalBlock sawV = omegaV * SignalBlock(2.f) - SignalBlock(1.f);
-
-  // subtract BLEP from saw to smooth down-going transition
-  return sawV - polyBLEP(omegaV, freqV);
-}
-
-// these antialiased waveform generators use a PhasorGen and the functions above.
-
-class SineGen
-{
-  static constexpr int32_t kZeroPhase = -(2 << 29);
-  PhasorGen _phasor;
-
- public:
-  void clear() { _phasor.clear(kZeroPhase); }
-  SignalBlock operator()(const SignalBlock freq) { return phasorToSine(_phasor(freq)); }
-};
-
-class PulseGen
-{
-  PhasorGen _phasor;
-
- public:
-  void clear() { _phasor.clear(0); }
-  SignalBlock operator()(const SignalBlock freq, const SignalBlock width)
-  {
-    return phasorToPulse(_phasor(freq), freq, width);
-  }
-};
-
-class SawGen
-{
-  PhasorGen _phasor;
-
- public:
-  void clear() { _phasor.clear(0); }
-  SignalBlock operator()(const SignalBlock freq) { return phasorToSaw(_phasor(freq), freq); }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ----------------------------------------------------------------
-// Interpolator1
-
-// linear interpolate over signal length to next value.
-
-constexpr float unityRampFn(size_t i) { return (i + 1) / static_cast<float>(kFramesPerBlock); }
-constexpr SignalBlock kUnityRampVec{unityRampFn};
-
-struct Interpolator1
-{
-  float currentValue{0};
-
-  SignalBlock operator()(float f)
-  {
-    float dydt = f - currentValue;
-    SignalBlock outputVec = SignalBlock(currentValue) + kUnityRampVec * dydt;
-    currentValue = f;
-    return outputVec;
-  }
-};
-
-// TODO needs test
-
-// ----------------------------------------------------------------
-// LinearGlide
-
-// convert a scalar float input into a SignalBlock with linear slew.
-// to allow optimization, glide time is quantized to SignalBlocks.
-
-class LinearGlide
-{
-  SignalBlock mCurrVec{0.f};
-  SignalBlock mStepVec{0.f};
-  float mTargetValue{0};
-  float mDyPerVector{1.f / 32};
-  int mVectorsPerGlide{32};
-  int mVectorsRemaining{-1};
-
- public:
-  void setGlideTimeInSamples(float t)
-  {
-    mVectorsPerGlide = static_cast<int>(t / kFramesPerBlock);
-    if (mVectorsPerGlide < 1) mVectorsPerGlide = 1;
-    mDyPerVector = 1.0f / (mVectorsPerGlide + 0.f);
-  }
-
-  // set the current value to the given value immediately, without gliding
-  void setValue(float f)
-  {
-    mTargetValue = f;
-    mVectorsRemaining = 0;
-  }
-
-  SignalBlock operator()(float f)
-  {
-    // set target value if different from current value.
-    // const float currentValue = mCurrVec[kFramesPerBlock - 1];
-    if (f != mTargetValue)
-    {
-      mTargetValue = f;
-
-      // start counter
-      mVectorsRemaining = mVectorsPerGlide;
-    }
-
-    // process glide
-    if (mVectorsRemaining < 0)
-    {
-      // do nothing
-    }
-    else if (mVectorsRemaining == 0)
-    {
-      // end glide: write target value to output vector
-      mCurrVec = SignalBlock(mTargetValue);
-      mStepVec = SignalBlock(0.f);
-      mVectorsRemaining--;
-    }
-    else if (mVectorsRemaining == mVectorsPerGlide)
-    {
-      // start glide: get change in output value per vector
-      float currentValue = mCurrVec[kFramesPerBlock - 1];
-      float dydv = (mTargetValue - currentValue) * mDyPerVector;
-
-      // get constant step vector
-      mStepVec = SignalBlock(dydv);
-
-      // setup current vector with first interpolation ramp.
-      mCurrVec = SignalBlock(currentValue) + kUnityRampVec * mStepVec;
-
-      mVectorsRemaining--;
+      if (omega_ > kTwoPi) omega_ -= kTwoPi;
     }
     else
     {
-      // continue glide
-      // Note that repeated adding will create some error in target value.
-      // Because we return the target value explicity when we are done, this
-      // won't be a problem in reasonably short glides.
-      mCurrVec += mStepVec;
-      mVectorsRemaining--;
+      T wrap = T{kTwoPi};
+      T mask = (omega_ >= wrap);
+      omega_ = omega_ - andBits(mask, wrap);
     }
-
-    return mCurrVec;
-  }
-
-  void clear()
-  {
-    mCurrVec = 0.f;
-    mStepVec = 0.f;
-    mTargetValue = 0.f;
-    mVectorsRemaining = -1;
+    return sin(omega_);
   }
 };
 
-class SampleAccurateLinearGlide
+// ----------------------------------------------------------------
+// Antialiased waveform generators using PhasorGen
+
+template<typename T>
+struct SineGen : Gen1<T, SineGen<T> >
 {
-  float mCurrValue{0.f};
-  float mStepValue{0.f};
-  float mTargetValue{0.f};
-  int mSamplesPerGlide{32};
-  float mDyPerSample{1.f / 32};
-  int mSamplesRemaining{-1};
-
- public:
-  void setGlideTimeInSamples(float t)
+  PhasorGen<T> phasor_;
+  
+  // initial phase of 0.75 maps to zero-crossing of the sine approximation
+  void clear() { phasor_.clear(); phasor_.omega_ = T{0.75f}; }
+  
+  T nextFrame(T freq)
   {
-    mSamplesPerGlide = static_cast<int>(t);
-    if (mSamplesPerGlide < 1) mSamplesPerGlide = 1;
-    mDyPerSample = 1.0f / mSamplesPerGlide;
-  }
-
-  // set the current value to the given value immediately, without gliding
-  void setValue(float f)
-  {
-    mTargetValue = f;
-    mSamplesRemaining = 0;
-  }
-
-  float nextSample(float f)
-  {
-    // set target value if different from current value.
-    // const float currentValue = mCurrVec[kFramesPerBlock - 1];
-    if (f != mTargetValue)
-    {
-      mTargetValue = f;
-
-      // start counter
-      mSamplesRemaining = mSamplesPerGlide;
-    }
-
-    // process glide
-    if (mSamplesRemaining < 0)
-    {
-      // do nothing
-    }
-    else if (mSamplesRemaining == 0)
-    {
-      // end glide: write target value to output vector
-      mCurrValue = (mTargetValue);
-      mStepValue = (0.f);
-      mSamplesRemaining--;
-    }
-    else if (mSamplesRemaining == mSamplesPerGlide)
-    {
-      // start glide: get change in output value per sample
-      mStepValue = (mTargetValue - mCurrValue) * mDyPerSample;
-      mSamplesRemaining--;
-    }
-    else
-    {
-      // continue glide
-      // Note that repeated adding will create some error in target value.
-      // Because we return the target value explicity when we are done, this
-      // won't be a problem in reasonably short glides.
-      mCurrValue += mStepValue;
-      mSamplesRemaining--;
-    }
-
-    return mCurrValue;
-  }
-  void clear()
-  {
-    mCurrValue = 0.f;
-    mStepValue = 0.f;
-    mTargetValue = 0.f;
-    mSamplesRemaining = -1;
+    return phasorToSineSample(phasor_.nextFrame(freq));
   }
 };
+
+template<typename T>
+struct SawGen : Gen1<T, SawGen<T> >
+{
+  PhasorGen<T> phasor_;
+  
+  void clear() { phasor_.clear(); }
+  
+  T nextFrame(T freq)
+  {
+    T phase = phasor_.nextFrame(freq);
+    return phasorToSawSample(phase, freq);
+  }
+};
+
+// PulseGen takes two inputs (freq and width) so it has its own operator().
+template<typename T>
+struct PulseGen
+{
+  PhasorGen<T> phasor_;
+  
+  void clear() { phasor_.clear(); }
+  
+  Block<T> operator()(const Block<T>& freq, const Block<T>& width)
+  {
+    Block<T> output;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      T phase = phasor_.nextFrame(freq[t]);
+      output[t] = phasorToPulseSample(phase, freq[t], width[t]);
+    }
+    return output;
+  }
+};
+
 
 }  // namespace ml

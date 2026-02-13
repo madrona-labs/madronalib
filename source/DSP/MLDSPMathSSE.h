@@ -82,7 +82,7 @@ inline float4 operator<=(float4 a, float4 b) { return float4(_mm_cmple_ps(a, b))
 inline float4 select(float4 whenTrue, float4 whenFalse, float4 conditionMask) {
   int4 ones = set1Int(-1);
   return orBits(andBits(conditionMask, whenTrue),
-                andBits(xorBits(conditionMask, castIntToFloat(ones)), whenFalse));
+                andBits(xorBits(conditionMask, reinterpretIntAsFloat(ones)), whenFalse));
 }
 
 // ----------------------------------------------------------------
@@ -167,8 +167,8 @@ inline float4 unsignedIntToFloat(int4 v) {
 }
 
 // Casts (reinterpret bits)
-inline int4 castFloatToInt(float4 a) { return int4(_mm_castps_si128(a)); }
-inline float4 castIntToFloat(int4 a) { return float4(_mm_castsi128_ps(a)); }
+inline int4 reinterpretFloatAsInt(float4 a) { return int4(_mm_castps_si128(a)); }
+inline float4 reinterpretIntAsFloat(int4 a) { return float4(_mm_castsi128_ps(a)); }
 
 
 // ----------------------------------------------------------------
