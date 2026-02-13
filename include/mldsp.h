@@ -8,6 +8,7 @@
 #include "MLDSPOps.h"
 #include "MLDSPGens.h"
 #include "MLDSPFilters.h"
+#include "MLDSPShapes.h"
 #include "MLDSPAnalysis.h"
 #include "MLDSPDelays.h"
 #include "MLDSPBuffer.h"

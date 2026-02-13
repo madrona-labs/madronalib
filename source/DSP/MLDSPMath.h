@@ -98,6 +98,26 @@ inline float sign(float f)
   return (f < 0.0f) ? -1.0f : 1.0f;
 }
 
+inline float intPart(float f)
+{
+  return floorf(f);
+}
+
+inline float fracPart(float f)
+{
+  return f - floor(f);
+}
+
+inline uint32_t reinterpretFloatAsInt(float f)
+{
+  return (*reinterpret_cast<uint32_t*>(&f));
+}
+
+inline float reinterpretFloatAsInt(uint32_t f)
+{
+  return (*reinterpret_cast<float*>(&f));
+}
+
 inline float log(float x) { return std::logf(x); }
 inline float exp(float x) { return std::expf(x); }
 inline float sin(float x) { return std::sinf(x); }

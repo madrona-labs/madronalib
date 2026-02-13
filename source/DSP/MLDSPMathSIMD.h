@@ -15,6 +15,16 @@ constexpr size_t kSIMDVectorElems{4};
 #endif
 
 // ----------------------------------------------------------------
+// traits for int/float conversions
+
+template<typename T> struct IntTypeFor;
+template<> struct IntTypeFor<float> { using type = uint32_t; };
+template<> struct IntTypeFor<float4> { using type = int4; };
+
+template<typename T>
+using IntTypeFor_t = typename IntTypeFor<T>::type;
+
+// ----------------------------------------------------------------
 // float4 utilities with scalar equivalents
 
 inline float4 clamp(float4 a, float4 b, float4 c) { return min(max(a, b), c); }
@@ -31,6 +41,14 @@ inline float4 intPart(float4 val) {
 inline float4 fracPart(float4 val) {
   return val - intPart(val);
 }
+
+// ----------------------------------------------------------------
+// int4 utilities with scalar equivalents
+
+inline int4 operator*(int4 a, int4 b) { return multiplyUnsigned(a, b); }
+inline int4 operator>>(int4 a, int n) { return shiftRightElements(a, n); }
+inline int4 operator&(int4 a, int4 b) { return andBits(a, b); }
+inline int4 operator|(int4 a, int4 b) { return orBits(a, b); }
 
 // ----------------------------------------------------------------
 // Shuffle and transpose

@@ -69,11 +69,11 @@ inline float4 log(float4 x) {
   float4 one = _ps_1;
   float4 invalid_mask = (x <= setZero());
   
-  x = max(x, castIntToFloat(_pi32_min_norm_pos));
+  x = max(x, reinterpretIntAsFloat(_pi32_min_norm_pos));
   
-  emm0 = shiftRightElements(castFloatToInt(x), 23);
+  emm0 = shiftRightElements(reinterpretFloatAsInt(x), 23);
   
-  x = andBits(x, castIntToFloat(_pi32_inv_mant_mask));
+  x = andBits(x, reinterpretIntAsFloat(_pi32_inv_mant_mask));
   x = orBits(x, _ps_0p5);
   
   emm0 = emm0 - _pi32_0x7f;
@@ -168,7 +168,7 @@ inline float4 exp(float4 x) {
   emm0 = floatToIntTruncate(fx);
   emm0 = emm0 + _pi32_0x7f;
   emm0 = shiftLeftElements(emm0, 23);
-  float4 pow2n = castIntToFloat(emm0);
+  float4 pow2n = reinterpretIntAsFloat(emm0);
   
   y = y * pow2n;
   return y;
@@ -182,8 +182,8 @@ inline float4 sin(float4 x) {
   int4 emm0, emm2;
   
   sign_bit = x;
-  x = andBits(x, castIntToFloat(_pi32_inv_sign_mask));
-  sign_bit = andBits(sign_bit, castIntToFloat(_pi32_sign_mask));
+  x = andBits(x, reinterpretIntAsFloat(_pi32_inv_sign_mask));
+  sign_bit = andBits(sign_bit, reinterpretIntAsFloat(_pi32_sign_mask));
   
   y = x * _ps_cephes_FOPI;
   
@@ -198,8 +198,8 @@ inline float4 sin(float4 x) {
   emm2 = andBits(emm2, _pi32_2);
   emm2 = compareEqualInt(emm2, setZeroInt());
   
-  float4 swap_sign_bit = castIntToFloat(emm0);
-  float4 poly_mask = castIntToFloat(emm2);
+  float4 swap_sign_bit = reinterpretIntAsFloat(emm0);
+  float4 poly_mask = reinterpretIntAsFloat(emm2);
   sign_bit = xorBits(sign_bit, swap_sign_bit);
   
   xmm1 = _ps_minus_cephes_DP1;
@@ -249,7 +249,7 @@ inline float4 cos(float4 x) {
   float4 xmm1, xmm2 = setZero(), xmm3, y;
   int4 emm0, emm2;
   
-  x = andBits(x, castIntToFloat(_pi32_inv_sign_mask));
+  x = andBits(x, reinterpretIntAsFloat(_pi32_inv_sign_mask));
   
   y = x * _ps_cephes_FOPI;
   
@@ -265,8 +265,8 @@ inline float4 cos(float4 x) {
   emm2 = andBits(emm2, _pi32_2);
   emm2 = compareEqualInt(emm2, setZeroInt());
   
-  float4 sign_bit = castIntToFloat(emm0);
-  float4 poly_mask = castIntToFloat(emm2);
+  float4 sign_bit = reinterpretIntAsFloat(emm0);
+  float4 poly_mask = reinterpretIntAsFloat(emm2);
   
   xmm1 = _ps_minus_cephes_DP1;
   xmm2 = _ps_minus_cephes_DP2;
@@ -317,8 +317,8 @@ inline std::pair<float4, float4> sincos(float4 x) {
   int4 emm0, emm2, emm4;
   
   sign_bit_sin = x;
-  x = andBits(x, castIntToFloat(_pi32_inv_sign_mask));
-  sign_bit_sin = andBits(sign_bit_sin, castIntToFloat(_pi32_sign_mask));
+  x = andBits(x, reinterpretIntAsFloat(_pi32_inv_sign_mask));
+  sign_bit_sin = andBits(sign_bit_sin, reinterpretIntAsFloat(_pi32_sign_mask));
   
   y = x * _ps_cephes_FOPI;
   
@@ -332,11 +332,11 @@ inline std::pair<float4, float4> sincos(float4 x) {
   
   emm0 = andBits(emm2, _pi32_4);
   emm0 = shiftLeftElements(emm0, 29);
-  float4 swap_sign_bit_sin = castIntToFloat(emm0);
+  float4 swap_sign_bit_sin = reinterpretIntAsFloat(emm0);
   
   emm2 = andBits(emm2, _pi32_2);
   emm2 = compareEqualInt(emm2, setZeroInt());
-  float4 poly_mask = castIntToFloat(emm2);
+  float4 poly_mask = reinterpretIntAsFloat(emm2);
   
   xmm1 = _ps_minus_cephes_DP1;
   xmm2 = _ps_minus_cephes_DP2;
@@ -351,7 +351,7 @@ inline std::pair<float4, float4> sincos(float4 x) {
   emm4 = emm4 - _pi32_2;
   emm4 = andNotBits(emm4, _pi32_4);
   emm4 = shiftLeftElements(emm4, 29);
-  float4 sign_bit_cos = castIntToFloat(emm4);
+  float4 sign_bit_cos = reinterpretIntAsFloat(emm4);
   
   sign_bit_sin = xorBits(sign_bit_sin, swap_sign_bit_sin);
   
@@ -434,11 +434,11 @@ inline T tanhApprox(T x) {
 // ----------------------------------------------------------------
 // Scalar bit-manipulation primitives (match the float4/int4 versions)
 
-inline int32_t castFloatToInt(float x) {
+inline int32_t reinterpretFloatAsInt(float x) {
   int32_t i; std::memcpy(&i, &x, 4); return i;
 }
 
-inline float castIntToFloat(int32_t i) {
+inline float reinterpretIntAsFloat(int32_t i) {
   float x; std::memcpy(&x, &i, 4); return x;
 }
 
@@ -450,8 +450,8 @@ inline int32_t shiftLeftElements(int32_t a, int count) { return a << count; }
 
 inline int32_t andBits(int32_t a, int32_t b) { return a & b; }
 inline int32_t orBits(int32_t a, int32_t b) { return a | b; }
-inline float andBits(float a, float b) { return castIntToFloat(castFloatToInt(a) & castFloatToInt(b)); }
-inline float orBits(float a, float b) { return castIntToFloat(castFloatToInt(a) | castFloatToInt(b)); }
+inline float andBits(float a, float b) { return reinterpretIntAsFloat(reinterpretFloatAsInt(a) & reinterpretFloatAsInt(b)); }
+inline float orBits(float a, float b) { return reinterpretIntAsFloat(reinterpretFloatAsInt(a) | reinterpretFloatAsInt(b)); }
 
 constexpr float kExpC1 = 2139095040.f;
 constexpr float kExpC2 = 12102203.1615614f;
@@ -479,8 +479,8 @@ inline T expApprox(T x) {
   T val4 = max(val3, T{0.0f});
   I val4i = floatToIntTruncate(val4);
   
-  T xu = castIntToFloat(andBits(val4i, I{0x7F800000}));
-  T b = castIntToFloat(orBits(andBits(val4i, I{0x7FFFFF}), I{0x3F800000}));
+  T xu = reinterpretIntAsFloat(andBits(val4i, I{0x7F800000}));
+  T b = reinterpretIntAsFloat(orBits(andBits(val4i, I{0x7FFFFF}), I{0x3F800000}));
   
   return xu * (T{kExpC4} + (b * (T{kExpC5} + (b * (T{kExpC6} + (b * (T{kExpC7} + (b * T{kExpC8}))))))));
 }
@@ -489,11 +489,11 @@ template<typename T>
 inline T logApprox(T x) {
   using I = std::conditional_t<std::is_same_v<T, float>, int32_t, int4>;
   
-  I valAsInt = castFloatToInt(x);
+  I valAsInt = reinterpretFloatAsInt(x);
   I expi = shiftRightElements(valAsInt, 23);
   
   I valMasked = orBits(andBits(valAsInt, I{0x7FFFFF}), I{0x3F800000});
-  T xm = castIntToFloat(valMasked);
+  T xm = reinterpretIntAsFloat(valMasked);
   
   T poly = xm * (T{kLogC2} + (xm * (T{kLogC3} + (xm * (T{kLogC4} + (xm * (T{kLogC5} + (xm * T{kLogC6}))))))));
   

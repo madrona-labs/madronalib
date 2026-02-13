@@ -9,18 +9,21 @@
 #include "MLTestUtils.h"
 #include "MLDSPGens.h"
 
+#define DO_TIME_TESTS 1
+
 using namespace ml;
+using namespace testUtils;
 
 TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
 {
-  PhasorGen p1;
+  PhasorGen<float> p1;
   p1.clear();
   auto v0 = p1(1.f/kFramesPerBlock);
   
   
 //  std::cout << "phasor: " << v0 << "\n";
   
-  SineGen s1;
+  SineGen<float> s1;
   s1.clear();
   auto v1 = s1(1.f/kFramesPerBlock);
   
@@ -31,13 +34,7 @@ TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
   float epsilon = dBToAmp(-120.f);
   REQUIRE(fabs(v1[kFramesPerBlock - 1]) < epsilon);
   
-  // one shot
-  OneShotGen g1;
-  auto vg0 = g1(1.f/kFramesPerBlock);
-  
-  g1.trigger();
-  auto vg1 = g1(1.f/kFramesPerBlock);
-  auto vg2 = g1(1.f/kFramesPerBlock);
+
 
   // validate element order and horizontal <-> vertical transforms
   Counter<float> cf;
@@ -57,6 +54,74 @@ TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
   auto th = verticalToHorizontal(t1);
   // neat! std::cout << th << "\n";
     
+  
+  // noise
+  NoiseGen<float4> noisy;
+  noisy.clear();
+
+  // impulses
+  const SignalBlock impFreq(1.f/20.f);
+  const SignalBlock4 impFreq4(1.f/20.f);
+  ImpulseGen<float> imp;
+  ImpulseGen<float4> imp4;
+  imp.clear();
+  imp4.clear();
+
+  
+  
+#if DO_TIME_TESTS
+
+  
+  SECTION("time")
+  {
+    // test speed of precise functions relative to native ones.
+    // test speed of approximate functions relative to precise ones.
+    // if we are optimizing the compiled code, approximate ones should be faster.
+    // in debug builds, not necessarily.
+    // std::cout << "nanoseconds per iteration:\n";
+    
+    const SignalBlock impFreq(1.f/20.f);
+    const SignalBlock4 impFreq4(1.f/20.f);
+    ImpulseGen<float> imp;
+    ImpulseGen<float4> imp4;
+    imp.clear();
+    imp4.clear();
+
+    auto impTest = ([&]() {
+      SignalBlock r;
+      for(int i=0; i<4; ++i) {
+        r += imp(impFreq);
+      };
+      return r;
+    });
+    auto imp4Test = ([&]() {
+      return imp4(impFreq4);
+    });
+
+      
+      // temporarily we have a separate timing function for Apple Silicon, which
+      // tries to runs the test on a performance core.
+      
+#if (defined __ARM_NEON) || (defined __ARM_NEON__)
+      TimedResult<SignalBlock> impulsesFloatTime =
+      timeIterationsInThread<SignalBlock>(impTest);
+      TimedResult<SignalBlock4> impulsesFloat4Time =
+      timeIterationsInThread<SignalBlock4>(imp4Test);
+
+#else
+      TimedResult<SignalBlock> impulsesFloatTime =
+      timeIterations<SignalBlock>(impTest);
+      TimedResult<SignalBlock4> impulsesFloat4Time =
+      timeIterations<SignalBlock4>(imp4Test);
+
+#endif
+      
+    std::cout << "impulses float: " << impulsesFloatTime.ns << "\n";
+    std::cout << "impulses float4: " << impulsesFloat4Time.ns << "\n";
+    }
+  
+#endif
+  
 }
 
 

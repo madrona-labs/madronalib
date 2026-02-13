@@ -233,8 +233,8 @@ inline float4 unsignedIntToFloat(int4 v) {
 }
 
 // Casts (reinterpret bits)
-inline int4 castFloatToInt(float4 a) { return int4(vreinterpretq_s32_f32(a.v)); }
-inline float4 castIntToFloat(int4 a) { return float4(vreinterpretq_f32_s32(a.v)); }
+inline int4 reinterpretFloatAsInt(float4 a) { return int4(vreinterpretq_s32_f32(a.v)); }
+inline float4 reinterpretIntAsFloat(int4 a) { return float4(vreinterpretq_f32_s32(a.v)); }
 
 
 // ----------------------------------------------------------------

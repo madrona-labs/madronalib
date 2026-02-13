@@ -156,6 +156,260 @@ struct ADSR
 };
 
 
+// Ramp, when triggered, makes a single ramp from 0-1 then resets to 0. The speed
+// of the ramp is a signal input, giving a ramp with the same speed as PhasorGen.
+struct Ramp
+{
+  static constexpr uint32_t start = 0;
+  uint32_t mOmega32{start};
+  uint32_t mGate{0};
+  uint32_t mOmegaPrev{start};
+
+  void trigger()
+  {
+    mOmega32 = mOmegaPrev = start;
+    mGate = 1;
+  }
+  
+  static constexpr float stepsPerCycle{static_cast<float>(1UL << 32UL)};
+  static constexpr float cyclesPerStep{1.f / stepsPerCycle};
+  
+  SignalBlock operator()(const SignalBlock cyclesPerSample)
+  {
+    // calculate int steps per sample
+    SignalBlock stepsPerSampleV = cyclesPerSample * SignalBlock(stepsPerCycle);
+    SignalBlockInt intStepsPerSampleV = roundFloatToInt(stepsPerSampleV);
+    
+    // accumulate 32-bit phase with wrap
+    // we test for wrap at every sample to get a clean ending
+    SignalBlockInt omega32V;
+    for (int n = 0; n < kFramesPerBlock; ++n)
+    {
+      mOmega32 += intStepsPerSampleV[n] * mGate;
+      if (mOmega32 < mOmegaPrev)
+      {
+        mGate = 0;
+        mOmega32 = start;
+      }
+      omega32V[n] = mOmegaPrev = mOmega32;
+    }
+    // convert counter to float output range
+    return unsignedIntToFloat(omega32V) * SignalBlock(cyclesPerStep);
+  }
+  
+  float nextSample(const float cyclesPerSample)
+  {
+    // calculate int steps per sample
+    float stepsPerSample = cyclesPerSample * stepsPerCycle;
+    uint32_t intStepsPerSample = (uint32_t)roundf(stepsPerSample);
+    
+    // accumulate 32-bit phase with wrap
+    // we test for wrap at every sample to get a clean ending
+    SignalBlockInt omega32V;
+    
+    mOmega32 += intStepsPerSample * mGate;
+    if (mOmega32 < mOmegaPrev)
+    {
+      mGate = 0;
+      mOmega32 = start;
+    }
+    mOmegaPrev = mOmega32;
+    
+    // convert counter to float output range
+    return mOmega32 * cyclesPerStep;
+  }
+};
+
+
+// ----------------------------------------------------------------
+// Interpolator1
+
+// linear interpolate over signal length to next value.
+
+constexpr float unityRampFn(size_t i) { return (i + 1) / static_cast<float>(kFramesPerBlock); }
+constexpr SignalBlock kUnityRampVec{unityRampFn};
+
+struct Interpolator1
+{
+  float currentValue{0};
+  
+  SignalBlock operator()(float f)
+  {
+    float dydt = f - currentValue;
+    SignalBlock outputVec = SignalBlock(currentValue) + kUnityRampVec * dydt;
+    currentValue = f;
+    return outputVec;
+  }
+};
+
+// TODO needs test
+
+// ----------------------------------------------------------------
+// LinearGlide
+
+// convert a scalar float input into a SignalBlock with linear slew.
+// to allow optimization, glide time is quantized to SignalBlocks.
+
+class LinearGlide
+{
+  SignalBlock mCurrVec{0.f};
+  SignalBlock mStepVec{0.f};
+  float mTargetValue{0};
+  float mDyPerVector{1.f / 32};
+  int mVectorsPerGlide{32};
+  int mVectorsRemaining{-1};
+  
+public:
+  void setGlideTimeInSamples(float t)
+  {
+    mVectorsPerGlide = static_cast<int>(t / kFramesPerBlock);
+    if (mVectorsPerGlide < 1) mVectorsPerGlide = 1;
+    mDyPerVector = 1.0f / (mVectorsPerGlide + 0.f);
+  }
+  
+  // set the current value to the given value immediately, without gliding
+  void setValue(float f)
+  {
+    mTargetValue = f;
+    mVectorsRemaining = 0;
+  }
+  
+  SignalBlock operator()(float f)
+  {
+    // set target value if different from current value.
+    // const float currentValue = mCurrVec[kFramesPerBlock - 1];
+    if (f != mTargetValue)
+    {
+      mTargetValue = f;
+      
+      // start counter
+      mVectorsRemaining = mVectorsPerGlide;
+    }
+    
+    // process glide
+    if (mVectorsRemaining < 0)
+    {
+      // do nothing
+    }
+    else if (mVectorsRemaining == 0)
+    {
+      // end glide: write target value to output vector
+      mCurrVec = SignalBlock(mTargetValue);
+      mStepVec = SignalBlock(0.f);
+      mVectorsRemaining--;
+    }
+    else if (mVectorsRemaining == mVectorsPerGlide)
+    {
+      // start glide: get change in output value per vector
+      float currentValue = mCurrVec[kFramesPerBlock - 1];
+      float dydv = (mTargetValue - currentValue) * mDyPerVector;
+      
+      // get constant step vector
+      mStepVec = SignalBlock(dydv);
+      
+      // setup current vector with first interpolation ramp.
+      mCurrVec = SignalBlock(currentValue) + kUnityRampVec * mStepVec;
+      
+      mVectorsRemaining--;
+    }
+    else
+    {
+      // continue glide
+      // Note that repeated adding will create some error in target value.
+      // Because we return the target value explicity when we are done, this
+      // won't be a problem in reasonably short glides.
+      mCurrVec += mStepVec;
+      mVectorsRemaining--;
+    }
+    
+    return mCurrVec;
+  }
+  
+  void clear()
+  {
+    mCurrVec = 0.f;
+    mStepVec = 0.f;
+    mTargetValue = 0.f;
+    mVectorsRemaining = -1;
+  }
+};
+
+class SampleAccurateLinearGlide
+{
+  float mCurrValue{0.f};
+  float mStepValue{0.f};
+  float mTargetValue{0.f};
+  int mSamplesPerGlide{32};
+  float mDyPerSample{1.f / 32};
+  int mSamplesRemaining{-1};
+  
+public:
+  void setGlideTimeInSamples(float t)
+  {
+    mSamplesPerGlide = static_cast<int>(t);
+    if (mSamplesPerGlide < 1) mSamplesPerGlide = 1;
+    mDyPerSample = 1.0f / mSamplesPerGlide;
+  }
+  
+  // set the current value to the given value immediately, without gliding
+  void setValue(float f)
+  {
+    mTargetValue = f;
+    mSamplesRemaining = 0;
+  }
+  
+  float nextSample(float f)
+  {
+    // set target value if different from current value.
+    // const float currentValue = mCurrVec[kFramesPerBlock - 1];
+    if (f != mTargetValue)
+    {
+      mTargetValue = f;
+      
+      // start counter
+      mSamplesRemaining = mSamplesPerGlide;
+    }
+    
+    // process glide
+    if (mSamplesRemaining < 0)
+    {
+      // do nothing
+    }
+    else if (mSamplesRemaining == 0)
+    {
+      // end glide: write target value to output vector
+      mCurrValue = (mTargetValue);
+      mStepValue = (0.f);
+      mSamplesRemaining--;
+    }
+    else if (mSamplesRemaining == mSamplesPerGlide)
+    {
+      // start glide: get change in output value per sample
+      mStepValue = (mTargetValue - mCurrValue) * mDyPerSample;
+      mSamplesRemaining--;
+    }
+    else
+    {
+      // continue glide
+      // Note that repeated adding will create some error in target value.
+      // Because we return the target value explicity when we are done, this
+      // won't be a problem in reasonably short glides.
+      mCurrValue += mStepValue;
+      mSamplesRemaining--;
+    }
+    
+    return mCurrValue;
+  }
+  void clear()
+  {
+    mCurrValue = 0.f;
+    mStepValue = 0.f;
+    mTargetValue = 0.f;
+    mSamplesRemaining = -1;
+  }
+};
+
+
 // more shapes:
 /*
  Envelopes

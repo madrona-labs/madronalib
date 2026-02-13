@@ -280,13 +280,13 @@ TEST_CASE("madronalib/dsp_math/float4_logical", "[dsp_math]")
 {
   int4 ia(0x0F0F0F0F);
   int4 ib(0x00FF00FF);
-  float4 a = castIntToFloat(ia);
-  float4 b = castIntToFloat(ib);
+  float4 a = reinterpretIntAsFloat(ia);
+  float4 b = reinterpretIntAsFloat(ib);
 
-  SECTION("andBits")    { REQUIRE(eq(castFloatToInt(andBits(a, b)), int4(0x000F000F))); }
-  SECTION("orBits")     { REQUIRE(eq(castFloatToInt(orBits(a, b)), int4(0x0FFF0FFF))); }
-  SECTION("xorBits")    { REQUIRE(eq(castFloatToInt(xorBits(a, b)), int4(0x0FF00FF0))); }
-  SECTION("andNotBits") { REQUIRE(eq(castFloatToInt(andNotBits(a, b)), int4(0x00F000F0))); }
+  SECTION("andBits")    { REQUIRE(eq(reinterpretFloatAsInt(andBits(a, b)), int4(0x000F000F))); }
+  SECTION("orBits")     { REQUIRE(eq(reinterpretFloatAsInt(orBits(a, b)), int4(0x0FFF0FFF))); }
+  SECTION("xorBits")    { REQUIRE(eq(reinterpretFloatAsInt(xorBits(a, b)), int4(0x0FF00FF0))); }
+  SECTION("andNotBits") { REQUIRE(eq(reinterpretFloatAsInt(andNotBits(a, b)), int4(0x00F000F0))); }
 }
 
 TEST_CASE("madronalib/dsp_math/int4_logical", "[dsp_math]")
@@ -309,12 +309,12 @@ TEST_CASE("madronalib/dsp_math/float4_comparisons", "[dsp_math]")
   float4 a(1.0f, 2.0f, 3.0f, 4.0f);
   float4 b(2.0f, 2.0f, 2.0f, 2.0f);
 
-  SECTION("compareEqual")              { REQUIRE(eq(castFloatToInt((a == b)), int4(0, -1, 0, 0))); }
-  SECTION("compareNotEqual")           { REQUIRE(eq(castFloatToInt((a != b)), int4(-1, 0, -1, -1))); }
-  SECTION("compareLessThan")           { REQUIRE(eq(castFloatToInt((a < b)), int4(-1, 0, 0, 0))); }
-  SECTION("compareLessThanOrEqual")    { REQUIRE(eq(castFloatToInt((a <= b)), int4(-1, -1, 0, 0))); }
-  SECTION("compareGreaterThan")        { REQUIRE(eq(castFloatToInt((a > b)), int4(0, 0, -1, -1))); }
-  SECTION("compareGreaterThanOrEqual") { REQUIRE(eq(castFloatToInt((a >= b)), int4(0, -1, -1, -1))); }
+  SECTION("compareEqual")              { REQUIRE(eq(reinterpretFloatAsInt((a == b)), int4(0, -1, 0, 0))); }
+  SECTION("compareNotEqual")           { REQUIRE(eq(reinterpretFloatAsInt((a != b)), int4(-1, 0, -1, -1))); }
+  SECTION("compareLessThan")           { REQUIRE(eq(reinterpretFloatAsInt((a < b)), int4(-1, 0, 0, 0))); }
+  SECTION("compareLessThanOrEqual")    { REQUIRE(eq(reinterpretFloatAsInt((a <= b)), int4(-1, -1, 0, 0))); }
+  SECTION("compareGreaterThan")        { REQUIRE(eq(reinterpretFloatAsInt((a > b)), int4(0, 0, -1, -1))); }
+  SECTION("compareGreaterThanOrEqual") { REQUIRE(eq(reinterpretFloatAsInt((a >= b)), int4(0, -1, -1, -1))); }
 }
 
 TEST_CASE("madronalib/dsp_math/int4_comparisons", "[dsp_math]")
@@ -392,10 +392,10 @@ TEST_CASE("madronalib/dsp_math/conversions", "[dsp_math]")
     REQUIRE(eq(intToFloat(int4(1, -2, 3, -4)), float4(1.0f, -2.0f, 3.0f, -4.0f)));
   }
 
-  SECTION("castFloatToInt and castIntToFloat")
+  SECTION("reinterpretFloatAsInt and reinterpretIntAsFloat")
   {
     float4 a(1.0f, 2.0f, 3.0f, 4.0f);
-    REQUIRE(eq(castIntToFloat(castFloatToInt(a)), a));
+    REQUIRE(eq(reinterpretIntAsFloat(reinterpretFloatAsInt(a)), a));
   }
 
   SECTION("intPart")
@@ -449,7 +449,7 @@ TEST_CASE("madronalib/dsp_math/select_functions", "[dsp_math]")
   float4 b(10.0f, 20.0f, 30.0f, 40.0f);
   int4 mask(0, -1, 0, -1);
 
-  SECTION("select") { REQUIRE(eq(select(a, b, castIntToFloat(mask)), float4(10.0f, 2.0f, 30.0f, 4.0f))); }
+  SECTION("select") { REQUIRE(eq(select(a, b, reinterpretIntAsFloat(mask)), float4(10.0f, 2.0f, 30.0f, 4.0f))); }
 }
 
 // ================================================================

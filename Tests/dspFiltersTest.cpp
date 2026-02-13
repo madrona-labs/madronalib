@@ -16,13 +16,13 @@ using namespace ml;
 TEST_CASE("madronalib/core/dsp_filters", "[dsp_filters]")
 {
   float freq1 = 0.13f;
-  SineGen s1gen;
+  SineGen<float> s1gen;
   float freq2(0.013f);
   Lopass<float> filter1;
   
   for(int i=0; i<4; ++i)
   {
-//    std::cout << filter1(s1gen(freq1), Lopass<float>::Params{freq2, 0.5f});
+//  std::cout << filter1(s1gen(freq1), Lopass<float>::Params{freq2, 0.5f});
   }
 
 }
