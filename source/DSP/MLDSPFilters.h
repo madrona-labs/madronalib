@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "MLDSPOps.h"
+#include "MLDSPSolvers.h"
 
 namespace ml
 {
@@ -489,34 +490,84 @@ struct Allpass1 : Filter<T, Allpass1<T>>
   }
 };
 
+// ----------------------------------------------------------------
+// PinkFilter
 // Pink noise filter: parallel one-pole bank approximating -3 dB/octave.
 // Call init(sampleRate) before use; gains are computed analytically
 // so the response tracks the ideal 1/f slope at any sample rate.
+// Apply to white noise to produce pink noise.
+// Based on Paul Kellet's parallel one-pole approximation.
 
 template<typename T>
 struct PinkFilter
 {
   static constexpr int kNumPoles = 6;
+  static constexpr int kNumTargets = 32;
   static constexpr float kPoleFreqs[kNumPoles] = {
     1.5f, 42.0f, 220.0f, 950.0f, 3300.0f, 9500.0f
   };
   
-  std::array<T, kNumPoles> a{};     // pole coefficients
-  std::array<T, kNumPoles> g{};     // input gains
-  std::array<T, kNumPoles> state{}; // filter state
+  std::array<T, kNumPoles> a{};
+  std::array<T, kNumPoles> g{};
+  std::array<T, kNumPoles> state{};
   
   void clear() { state.fill(T{0.f}); }
   
   void init(float sr)
   {
-    // compute pole coefficients from absolute frequencies
+    // pole coefficients from absolute frequencies
+    float af[kNumPoles];
     for (int i = 0; i < kNumPoles; ++i)
+      af[i] = expf(-kTwoPi * kPoleFreqs[i] / sr);
+    
+    // log-spaced target frequencies
+    float fTargets[kNumTargets];
+    float logMin = logf(5.0f);
+    float logMax = logf(sr * 0.45f);
+    for (int k = 0; k < kNumTargets; ++k)
+      fTargets[k] = expf(logMin + (logMax - logMin) * k / (kNumTargets - 1));
+    
+    // target: 1/sqrt(f), normalized at midpoint
+    float targetMag[kNumTargets];
+    float midMag = 1.0f / sqrtf(fTargets[kNumTargets / 2]);
+    for (int k = 0; k < kNumTargets; ++k)
+      targetMag[k] = (1.0f / sqrtf(fTargets[k])) / midMag;
+    
+    // complex basis: B[k][i] = 1 / (1 - a_i * e^{-jw_k})
+    float Br[kNumTargets][kNumPoles], Bi[kNumTargets][kNumPoles];
+    for (int k = 0; k < kNumTargets; ++k)
     {
-      a[i] = T{expf(-kTwoPi * kPoleFreqs[i] / sr)};
+      float w = kTwoPi * fTargets[k] / sr;
+      float cw = cosf(w), sw = sinf(w);
+      for (int i = 0; i < kNumPoles; ++i)
+      {
+        float dr = 1.0f - af[i] * cw;
+        float di = af[i] * sw;
+        float denom = dr * dr + di * di;
+        Br[k][i] = dr / denom;
+        Bi[k][i] = -di / denom;
+      }
     }
     
-    // solve for gains using iterative phase-retrieval least squares
-    solveGains(sr);
+    // initial guess
+    float gf[kNumPoles];
+    float gSum = 0.f;
+    for (int i = 0; i < kNumPoles; ++i)
+    {
+      gf[i] = (1.0f - af[i]) / sqrtf(kPoleFreqs[i]);
+      gSum += fabsf(gf[i]);
+    }
+    for (int i = 0; i < kNumPoles; ++i) gf[i] /= gSum;
+    
+    // fit
+    fitMagnitudeResponse<kNumPoles, kNumTargets>(Br, Bi, targetMag, gf);
+    
+    // store as T
+    for (int i = 0; i < kNumPoles; ++i)
+    {
+      a[i] = T{af[i]};
+      g[i] = T{gf[i]};
+    }
   }
   
   T nextFrame(T white)
@@ -534,183 +585,9 @@ struct PinkFilter
   {
     Block<T> output;
     for (size_t t = 0; t < kFramesPerBlock; ++t)
-    {
       output[t] = nextFrame(input[t]);
-    }
     return output;
   }
-  
-private:
-  void solveGains(float sr)
-  {
-    // target frequencies: log-spaced from 5 Hz to 0.9 * Nyquist
-    constexpr int kNumTargets = 32;
-    constexpr int kNumIters = 10;
-    constexpr int N = kNumPoles;
-    constexpr int M = kNumTargets;
-    
-    float fTargets[M];
-    float logMin = logf(5.0f);
-    float logMax = logf(sr * 0.45f);
-    for (int k = 0; k < M; ++k)
-    {
-      fTargets[k] = expf(logMin + (logMax - logMin) * k / (M - 1));
-    }
-    
-    // target magnitude: 1/sqrt(f), normalized at midpoint
-    float targetMag[M];
-    float midMag = 1.0f / sqrtf(fTargets[M / 2]);
-    for (int k = 0; k < M; ++k)
-    {
-      targetMag[k] = (1.0f / sqrtf(fTargets[k])) / midMag;
-    }
-    
-    // complex basis: B[k][i] = 1 / (1 - a_i * e^{-jw_k})
-    // store as separate real/imaginary arrays
-    float af[N]; // float copies of pole coeffs
-    for (int i = 0; i < N; ++i) af[i] = getFloat4Lane(T{a[i]}, 0);
-    // (for scalar T this is just a cast; for float4 all lanes are the same)
-    
-    float Br[M][N], Bi[M][N]; // real and imaginary parts of basis
-    for (int k = 0; k < M; ++k)
-    {
-      float w = kTwoPi * fTargets[k] / sr;
-      float cw = cosf(w);
-      float sw = sinf(w);
-      for (int i = 0; i < N; ++i)
-      {
-        // 1/(1 - a*e^{-jw}) = 1/((1 - a*cos(w)) + j*(a*sin(w)))
-        float dr = 1.0f - af[i] * cw;
-        float di = af[i] * sw;
-        float denom = dr * dr + di * di;
-        Br[k][i] = dr / denom;
-        Bi[k][i] = -di / denom;
-      }
-    }
-    
-    // initial gains
-    float gf[N];
-    float gSum = 0.f;
-    for (int i = 0; i < N; ++i)
-    {
-      gf[i] = (1.0f - af[i]) / sqrtf(kPoleFreqs[i]);
-      gSum += fabsf(gf[i]);
-    }
-    for (int i = 0; i < N; ++i) gf[i] /= gSum;
-    
-    // iterative phase-retrieval
-    for (int iter = 0; iter < kNumIters; ++iter)
-    {
-      // 1. evaluate H(f) and extract phase
-      float Tr[M], Ti[M]; // complex target
-      for (int k = 0; k < M; ++k)
-      {
-        float hr = 0.f, hi = 0.f;
-        for (int i = 0; i < N; ++i)
-        {
-          hr += gf[i] * Br[k][i];
-          hi += gf[i] * Bi[k][i];
-        }
-        // normalize phase vector to target magnitude
-        float mag = sqrtf(hr * hr + hi * hi);
-        if (mag > 1e-12f)
-        {
-          float scale = targetMag[k] / mag;
-          Tr[k] = hr * scale;
-          Ti[k] = hi * scale;
-        }
-        else
-        {
-          Tr[k] = targetMag[k];
-          Ti[k] = 0.f;
-        }
-      }
-      
-      // 2. solve normal equations: (B^T B) g = B^T T
-      //    where B is the stacked [Re(B); Im(B)] and T is [Re(T); Im(T)]
-      float BtB[N][N] = {};
-      float BtT[N] = {};
-      
-      for (int i = 0; i < N; ++i)
-      {
-        for (int j = 0; j < N; ++j)
-        {
-          float sum = 0.f;
-          for (int k = 0; k < M; ++k)
-          {
-            sum += Br[k][i] * Br[k][j] + Bi[k][i] * Bi[k][j];
-          }
-          BtB[i][j] = sum;
-        }
-        float rhs = 0.f;
-        for (int k = 0; k < M; ++k)
-        {
-          rhs += Br[k][i] * Tr[k] + Bi[k][i] * Ti[k];
-        }
-        BtT[i] = rhs;
-      }
-      
-      // Gaussian elimination with partial pivoting
-      float aug[N][N + 1];
-      for (int i = 0; i < N; ++i)
-      {
-        for (int j = 0; j < N; ++j) aug[i][j] = BtB[i][j];
-        aug[i][N] = BtT[i];
-      }
-      
-      for (int col = 0; col < N; ++col)
-      {
-        // pivot
-        int maxRow = col;
-        float maxVal = fabsf(aug[col][col]);
-        for (int row = col + 1; row < N; ++row)
-        {
-          if (fabsf(aug[row][col]) > maxVal)
-          {
-            maxVal = fabsf(aug[row][col]);
-            maxRow = row;
-          }
-        }
-        if (maxRow != col)
-        {
-          for (int j = 0; j <= N; ++j)
-          {
-            float tmp = aug[col][j];
-            aug[col][j] = aug[maxRow][j];
-            aug[maxRow][j] = tmp;
-          }
-        }
-        
-        // eliminate
-        for (int row = col + 1; row < N; ++row)
-        {
-          float factor = aug[row][col] / aug[col][col];
-          for (int j = col; j <= N; ++j)
-          {
-            aug[row][j] -= factor * aug[col][j];
-          }
-        }
-      }
-      
-      // back substitution
-      for (int i = N - 1; i >= 0; --i)
-      {
-        gf[i] = aug[i][N];
-        for (int j = i + 1; j < N; ++j)
-        {
-          gf[i] -= aug[i][j] * gf[j];
-        }
-        gf[i] /= aug[i][i];
-      }
-    }
-    
-    // store gains
-    for (int i = 0; i < N; ++i)
-    {
-      g[i] = T{gf[i]};
-    }
-  }
 };
-
 }  // namespace ml
 
