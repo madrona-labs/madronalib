@@ -9,6 +9,7 @@
 #include <iostream>
 #include <numeric>
 
+#include "MLDSPOps.h"
 #include "MLDSPProjections.h"
 
 using namespace std::chrono;
@@ -308,3 +309,4 @@ inline bool nearlyEqual(float a, float b, float eps = 1.0e-6)
 }
 
 } // namespace testUtils
+

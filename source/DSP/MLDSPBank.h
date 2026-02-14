@@ -20,7 +20,7 @@ namespace ml
 {
 
 // Bank: a bank of float4 processors.
-// FN must be a float4 processor (e.g. Lopass<float4>) with the standard
+// FN must be a processor capable of handing float4 (e.g. Lopass) with the standard
 // Filter interface: operator() with 0, 1 (Params), or 1 (signal-rate) args
 // plus input, and a clear() method.
 // ROWS is the number of voices. Internally, ceil(ROWS/4) float4 processors

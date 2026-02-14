@@ -44,6 +44,12 @@ constexpr float kMinGain = 0.00001f;  // 10e-5 = -120dB
 
 // equivalents to SIMD math
 
+inline float sqrt(float a)
+{
+  return sqrtf(a);
+}
+
+
 inline float select(float a, float b, float x)
 {
   return (x != 0.0f ? a : b);
