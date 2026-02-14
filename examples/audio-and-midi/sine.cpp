@@ -15,7 +15,7 @@ constexpr float kOutputGain = 0.1f;
 
 struct SineExampleState
 {
-  SineGen s1, s2;
+  SineGen<float> s1, s2;
 };
 
 // sineProcess() does all of the audio processing, in SignalBlock-sized chunks.

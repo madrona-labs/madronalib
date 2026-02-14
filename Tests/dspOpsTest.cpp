@@ -154,6 +154,15 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     auto c = add1(a, b);
     auto d = subtract1(c, b);
     REQUIRE(a == d);
+    
+    
+    SignalBlock4Array<2> aa = frameIndex<float4, 2>();
+    
+    std::cout << aa << "\n\n";
+    
+    auto bb = verticalToHorizontal(aa);
+    std::cout << bb << "\n\n";
+
   }
   
   SECTION("ternary operations")
@@ -518,7 +527,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     }
     
     SignalBlock4 originalSingle = singleRow;
-    transposeRow(singleRow, 0);
+    transposeRow(singleRow);
     
     // Verify change
     bool singleChanged = false;
@@ -530,7 +539,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     REQUIRE(singleChanged);
     
     // Transpose back
-    transposeRow(singleRow, 0);
+    transposeRow(singleRow);
     for (size_t i = 0; i < kFramesPerBlock; ++i) {
       REQUIRE(eq(singleRow[i], originalSingle[i]));
     }

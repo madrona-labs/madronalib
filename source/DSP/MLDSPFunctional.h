@@ -19,32 +19,6 @@
 namespace ml
 {
 
-// Element-wise map: apply f to each element of input array
-template<typename InT, size_t N, typename Function>
-auto map(Function f, const AlignedArray<InT, N>& input)
-{
-  using OutT = decltype(f(std::declval<InT>()));
-  AlignedArray<OutT, N> output;
-  for (size_t i = 0; i < N; ++i) {
-    output[i] = f(input[i]);
-  }
-  return output;
-}
-
-// Row-wise map: apply f to each row of a SignalBlockArray
-template<size_t N, typename Function>
-auto mapRows(Function f, const SignalBlockArray<N>& input)
-{
-  using OutRow = decltype(f(std::declval<SignalBlock>()));
-  
-  // Assumes f returns a SignalBlock (or compatible type)
-  SignalBlockArray<N> output;
-  for (size_t i = 0; i < N; ++i) {
-    output.setRow(i, f(input.getRow(i)));
-  }
-  return output;
-}
-
 // ----------------------------------------------------------------
 // higher-order functions with DSP
 

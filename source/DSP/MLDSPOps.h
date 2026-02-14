@@ -273,76 +273,90 @@ using SignalBlock4 = SignalBlockArrayBase<float4, 1>;
 template<size_t ROWS>
 using SignalBlock4Array = SignalBlockArrayBase<float4, ROWS>;
 
-// Get pointer to the start of the nth 4x4 block
-template<size_t ROWS>
-float4* getBlockPtr(SignalBlock4Array<ROWS>& array, size_t n) {
-  return array.data() + n * 4;
+// Get pointer to the start of the nth 4x4 block in a SignalBlock4
+inline float4* getFloat4BlockPtr(float4* array, size_t n) {
+  return array + n * 4;
 }
 
-// Transpose all 4x4 blocks in a single row
-template<size_t ROWS>
-void transposeRow(SignalBlock4Array<ROWS>& array, size_t row) {
+// Transpose all 4x4 blocks in the single row starting at rowPtr
+inline void transposeRow(float4* rowPtr) {
   constexpr size_t blocksPerRow = kFramesPerBlock / 4;
-  size_t firstBlock = row * blocksPerRow;
   for (size_t i = 0; i < blocksPerRow; ++i) {
-    transpose4x4InPlace(getBlockPtr(array, firstBlock + i));
+    transpose4x4InPlace(getFloat4BlockPtr(rowPtr, i));
+  }
+}
+
+// Transpose all 4x4 blocks in the single row starting at rowPtr
+inline void transposeRow(SignalBlock4& float4Row) {
+  float4* rowPtr = float4Row.data();
+  constexpr size_t blocksPerRow = kFramesPerBlock / 4;
+  for (size_t i = 0; i < blocksPerRow; ++i) {
+    transpose4x4InPlace(getFloat4BlockPtr(rowPtr, i));
   }
 }
 
 // Transpose all 4x4 blocks in all rows
 template<size_t ROWS>
-void transposeRows(SignalBlock4Array<ROWS>& array) {
+inline void transposeRows(SignalBlock4Array<ROWS>& array) {
   for (size_t row = 0; row < ROWS; ++row) {
-    transposeRow(array, row);
+    transposeRow(array.rowPtr(row));
   }
 }
 
-// Convert vertical SIMD (SignalBlock4) to 4 horizontal SignalBlocks.
+// Convert ROWS of SignalBlock4 to 4*ROWS horizontal SignalBlocks.
 // Transpose separates the lanes within each 4x4 block,
 // then we deinterleave to collect each lane contiguously.
-inline SignalBlockArray<4> verticalToHorizontal(const SignalBlock4& v)
+template<size_t ROWS>
+inline SignalBlockArray<ROWS * 4> verticalToHorizontal(const SignalBlockArrayBase<float4, ROWS>& v)
 {
-  // Step 1: transpose each 4x4 block to separate lanes
-  SignalBlock4 temp = v;
-  transposeRow(temp, 0);
+  SignalBlockArray<ROWS * 4> result;
   
-  // After transpose, memory is: [A0-3][B0-3][C0-3][D0-3] [A4-7][B4-7]...
-  // Step 2: gather every 4th float4 into contiguous rows
-  SignalBlockArray<4> result;
-  constexpr size_t numBlocks = kFramesPerBlock / 4;
-  
-  for (size_t lane = 0; lane < 4; ++lane)
+  SignalBlockArrayBase<float4, ROWS> temp = v;
+  for (size_t r = 0; r < ROWS; ++r)
   {
-    float4* dest = reinterpret_cast<float4*>(result.rowPtr(lane));
-    for (size_t block = 0; block < numBlocks; ++block)
+    transposeRow(temp.rowPtr(r));
+  }
+  
+  constexpr size_t numBlocks = kFramesPerBlock / 4;
+  for (size_t r = 0; r < ROWS; ++r)
+  {
+    for (size_t lane = 0; lane < 4; ++lane)
     {
-      dest[block] = temp[block * 4 + lane];
+      float4* dest = reinterpret_cast<float4*>(result.rowPtr(r * 4 + lane));
+      const float4* src = reinterpret_cast<const float4*>(temp.rowPtr(r));
+      for (size_t block = 0; block < numBlocks; ++block)
+      {
+        dest[block] = src[block * 4 + lane];
+      }
     }
   }
   
   return result;
 }
 
+
 // Convert 4 horizontal SignalBlocks to vertical SIMD (SignalBlock4).
 // Interleave the rows into ABCD blocks, then transpose to get
 // back to the vertical-SIMD layout.
-inline SignalBlock4 horizontalToVertical(const SignalBlockArray<4>& h)
+template<size_t ROWS>
+inline SignalBlockArrayBase<float4, ROWS> horizontalToVertical(const SignalBlockArray<ROWS * 4>& h)
 {
-  SignalBlock4 temp;
+  SignalBlockArrayBase<float4, ROWS> temp;
   constexpr size_t numBlocks = kFramesPerBlock / 4;
   
-  // Step 1: scatter each row's float4s into interleaved block positions
-  for (size_t lane = 0; lane < 4; ++lane)
+  for (size_t r = 0; r < ROWS; ++r)
   {
-    const float4* src = reinterpret_cast<const float4*>(h.rowPtr(lane));
-    for (size_t block = 0; block < numBlocks; ++block)
+    for (size_t lane = 0; lane < 4; ++lane)
     {
-      temp[block * 4 + lane] = src[block];
+      const float4* src = reinterpret_cast<const float4*>(h.rowPtr(r * 4 + lane));
+      float4* dest = reinterpret_cast<float4*>(temp.rowPtr(r));
+      for (size_t block = 0; block < numBlocks; ++block)
+      {
+        dest[block * 4 + lane] = src[block];
+      }
     }
+    transposeRow(temp.rowPtr(r));
   }
-  
-  // Step 2: transpose to get vertical-SIMD layout
-  transposeRow(temp, 0);
   
   return temp;
 }
@@ -799,6 +813,7 @@ inline SignalBlockArray<ROWS> rotateRows(const SignalBlockArray<ROWS>& x, int ro
   return result;
 }
 
+
 // ----------------------------------------------------------------
 // row-wise combining
 
@@ -954,28 +969,48 @@ inline SignalBlockArray<ROWS> rowIndex()
 // frameIndex - returns a SignalBlockArray<T> of ROWS rows, each row filled
 // with the index of its row in time order.
 
-
-// TEMP wrong order!
-
-
 template <typename T, size_t ROWS>
 inline SignalBlockArrayBase<T, ROWS> frameIndex()
 {
   SignalBlockArrayBase<T, ROWS> result;
-  T elem(0.f);
-  T elemOne(1.f);
   T* writePtr = result.data();
-  for (size_t j = 0; j < ROWS; ++j)
+  for (size_t j = 0; j < ROWS * kFramesPerBlock; ++j)
   {
-    for(size_t i=0; i< kFramesPerBlock; ++i)
-    {
-      *writePtr = elem;
-      elem += elemOne;
-      writePtr++;
-    }
+      *writePtr++ = T(j);
   }
   return result;
 }
+
+
+// ----------------------------------------------------------------
+// maps
+
+// Element-wise map: apply f to each element of input array
+template<typename InT, size_t N, typename FN>
+auto map(FN f, const AlignedArray<InT, N>& input)
+{
+  using OutT = decltype(f(std::declval<InT>()));
+  AlignedArray<OutT, N> output;
+  for (size_t i = 0; i < N; ++i) {
+    output[i] = f(input[i]);
+  }
+  return output;
+}
+
+// Row-wise map: apply f to each row of a SignalBlockArray
+template<size_t N, typename FN>
+auto mapRows(FN f, const SignalBlockArray<N>& input)
+{
+  using OutRow = decltype(f(std::declval<SignalBlock>()));
+  
+  // Assumes f returns a SignalBlock (or compatible type)
+  SignalBlockArray<N> output;
+  for (size_t i = 0; i < N; ++i) {
+    output.setRow(i, f(input.getRow(i)));
+  }
+  return output;
+}
+
 
 // ----------------------------------------------------------------
 // constexpr array construction helpers
