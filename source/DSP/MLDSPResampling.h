@@ -16,129 +16,141 @@
 
 #include "MLDSPOps.h"
 #include "MLDSPMath.h"
+#include "MLDSPFilters.h"
 
 namespace ml
 {
 
+// Half-block type for rate-changed data
+template<typename T>
+using HalfBlock = AlignedArray<T, kFramesPerBlock / 2>;
 
-// Half Band Filter
-// Polyphase allpass filter used to upsample or downsample a signal by 2x.
+// ----------------------------------------------------------------
+// HalfBandFilter
+// Polyphase allpass filter for 2x up/downsampling.
 // Structure due to fred harris, A. G. Constantinides and Valenzuela.
+// Order=4, rejection=70dB, transition band=0.1.
 
-class HalfBandFilter
+template<typename T>
+struct HalfBandFilter
 {
- public:
-  inline SignalBlock upsampleFirstHalf(const SignalBlock vx)
+  // TEMP
+  Allpass1<T> apa0{{0.07986642623635751f}};
+  Allpass1<T> apa1{{0.5453536510711322f}};
+  Allpass1<T> apb0{{0.28382934487410993f}};
+  Allpass1<T> apb1{{0.8344118914807379f}};
+  T b1{0.f};
+  
+  // 32 in → 64 out
+  Block<T> upsample(const HalfBlock<T>& in)
   {
-    SignalBlock vy;
-    int i2 = 0;
-    for (int i = 0; i < kFramesPerBlock / 2; ++i)
+    Block<T> out;
+    size_t i2 = 0;
+    for (size_t i = 0; i < kFramesPerBlock / 2; ++i)
     {
-      vy[i2++] = apa1.processSample(apa0.processSample(vx[i]));
-      vy[i2++] = apb1.processSample(apb0.processSample(vx[i]));
+      out[i2++] = apa1.nextFrame(apa0.nextFrame(in[i]));
+      out[i2++] = apb1.nextFrame(apb0.nextFrame(in[i]));
     }
-    return vy;
+    return out;
   }
-
-  inline SignalBlock upsampleSecondHalf(const SignalBlock vx)
+  
+  // 64 in → 32 out
+  HalfBlock<T> downsample(const Block<T>& in)
   {
-    SignalBlock vy;
-    int i2 = 0;
-    for (int i = kFramesPerBlock / 2; i < kFramesPerBlock; ++i)
+    HalfBlock<T> out;
+    size_t i2 = 0;
+    for (size_t i = 0; i < kFramesPerBlock / 2; ++i)
     {
-      vy[i2++] = apa1.processSample(apa0.processSample(vx[i]));
-      vy[i2++] = apb1.processSample(apb0.processSample(vx[i]));
-    }
-    return vy;
-  }
-
-  inline SignalBlock downsample(const SignalBlock vx1, const SignalBlock vx2)
-  {
-    SignalBlock vy;
-    int i2 = 0;
-    for (int i = 0; i < kFramesPerBlock / 2; ++i)
-    {
-      float a0 = apa1.processSample(apa0.processSample(vx1[i2]));
-      float b0 = apb1.processSample(apb0.processSample(vx1[i2 + 1]));
-      vy[i] = (a0 + b1) * 0.5f;
+      T a0 = apa1.nextFrame(apa0.nextFrame(in[i2]));
+      T b0 = apb1.nextFrame(apb0.nextFrame(in[i2 + 1]));
+      out[i] = (a0 + b1) * T{0.5f};
       b1 = b0;
       i2 += 2;
     }
-    i2 = 0;
-    for (int i = kFramesPerBlock / 2; i < kFramesPerBlock; ++i)
-    {
-      float a0 = apa1.processSample(apa0.processSample(vx2[i2]));
-      float b0 = apb1.processSample(apb0.processSample(vx2[i2 + 1]));
-      vy[i] = (a0 + b1) * 0.5f;
-      b1 = b0;
-      i2 += 2;
-    }
-    return vy;
+    return out;
   }
-
+  
   void clear()
   {
-    apa0.clear();
-    apa1.clear();
-    apb0.clear();
-    apb1.clear();
-    b1 = 0;
+    apa0.clear(); apa1.clear();
+    apb0.clear(); apb1.clear();
+    b1 = T{0.f};
   }
-
- private:
-  // order=4, rejection=70dB, transition band=0.1.
-  Allpass1 apa0{0.07986642623635751f}, apa1{0.5453536510711322f}, apb0{0.28382934487410993f},
-      apb1{0.8344118914807379f};
-  float b1{0};
 };
 
-// Downsampler
-// a cascade of half band filters, one for each octave.
-// TODO this is complicated. replace with single-channel version then use Bank<Downsampler> for
-// multiple channels?
+// ----------------------------------------------------------------
+// Upsampler2x: one block in → two blocks out
+
+template<typename T>
+struct Upsampler2x
+{
+  HalfBandFilter<T> filter;
+  
+  std::pair<Block<T>, Block<T>> operator()(const Block<T>& in)
+  {
+    const auto* half = reinterpret_cast<const HalfBlock<T>*>(&in);
+    return { filter.upsample(half[0]), filter.upsample(half[1]) };
+  }
+  
+  void clear() { filter.clear(); }
+};
+
+// ----------------------------------------------------------------
+// Downsampler2x: two blocks in → one block out
+
+template<typename T>
+struct Downsampler2x
+{
+  HalfBandFilter<T> filter;
+  
+  Block<T> operator()(const Block<T>& in1, const Block<T>& in2)
+  {
+    Block<T> out;
+    auto lo = filter.downsample(in1);
+    auto hi = filter.downsample(in2);
+    auto* half = reinterpret_cast<HalfBlock<T>*>(&out);
+    half[0] = lo;
+    half[1] = hi;
+    return out;
+  }
+  
+  void clear() { filter.clear(); }
+};
+
+// ----------------------------------------------------------------
+// Multi-octave Downsampler
+
 class Downsampler
 {
-  std::vector<HalfBandFilter> _filters;
-  std::vector<float> _buffers;
+  std::vector<Downsampler2x<float>> _filters;
+  std::vector<SignalBlock> _buffers;
   int _octaves;
-  int _numBuffers;
   uint32_t _counter{0};
-
-  float* bufferPtr(int idx) { return _buffers.data() + idx * kFramesPerBlock; }
-
- public:
+  
+  SignalBlock& buf(int idx) { return _buffers[idx]; }
+  
+public:
   Downsampler(int octavesDown) : _octaves(octavesDown)
   {
     if (_octaves)
     {
-      // one pair of buffers for each octave plus one output buffer.
-      _numBuffers = 2 * _octaves + 1;
-
-      // each octave uses one filter.
       _filters.resize(_octaves);
-
-      // get all buffers as a single contiguous array of floats.
-      _buffers.resize(kFramesPerBlock * _numBuffers);
-
+      // one pair of buffers per octave + one output
+      _buffers.resize(2 * _octaves + 1);
       clear();
     }
+    else
+    {
+      _buffers.resize(1);
+    }
   }
-  ~Downsampler() = default;
-
-  // write a vector of samples to the filter chain, run filters, and return
-  // true if there is a new vector of output to read (every 2^octaves writes)
+  
   bool write(SignalBlock v)
   {
     if (_octaves)
     {
-      // write input to one of first two buffers
-      const float* pSrc = v.data();
-      float* pDest = bufferPtr(_counter & 1);
-      std::copy(pSrc, pSrc + kFramesPerBlock, pDest);
-
-      // look at the bits of the counter from lowest to highest.
-      // there is one bit for each octave of downsampling.
-      // each octave is run if its bit and all lesser bits are 1.
+      buf(_counter & 1) = v;
+      
       uint32_t mask = 1;
       for (int h = 0; h < _octaves; ++h)
       {
@@ -146,113 +158,200 @@ class Downsampler
         if (!b0) break;
         mask <<= 1;
         bool b1 = _counter & mask;
-
-        // run filter
-        HalfBandFilter* f = &(_filters[h]);
-        SignalBlock vSrc1(bufferPtr(h * 2));
-        SignalBlock vSrc2(bufferPtr(h * 2 + 1));
-        SignalBlock vDest = f->downsample(vSrc1, vSrc2);
-        store(vDest, bufferPtr(h * 2 + 2 + b1));
+        
+        buf(h * 2 + 2 + b1) = _filters[h](buf(h * 2), buf(h * 2 + 1));
       }
-
-      // advance and wrap counter. If it's back to 0, we have output
+      
       uint32_t counterMask = (1 << _octaves) - 1;
       _counter = (_counter + 1) & counterMask;
       return (_counter == 0);
     }
     else
     {
-      // write input to final buffer
-      const float* pSrc = v.data();
-      float* pDest = bufferPtr(_numBuffers - 1);
-      std::copy(pSrc, pSrc + kFramesPerBlock, pDest);
+      buf(0) = v;
       return true;
     }
   }
-
-  SignalBlock read() { return SignalBlock(bufferPtr(_numBuffers - 1)); }
-
+  
+  SignalBlock read() { return _buffers.back(); }
+  
   void clear()
   {
-    for (auto& f : _filters)
-    {
-      f.clear();
-    }
-    std::fill(_buffers.begin(), _buffers.end(), 0.f);
+    for (auto& f : _filters) f.clear();
+    for (auto& b : _buffers) b = SignalBlock{0.f};
     _counter = 0;
   }
 };
 
+// ----------------------------------------------------------------
+// Multi-octave Upsampler
+
 struct Upsampler
 {
-  std::vector<HalfBandFilter> _filters;
-  std::vector<float> _buffers;
+  std::vector<Upsampler2x<float>> _filters;
+  std::vector<SignalBlock> _buffers;
   int _octaves;
-  int _numBuffers;
   int readIdx_{0};
-
-  float* bufferPtr(int idx) { return _buffers.data() + idx * kFramesPerBlock; }
-
+  
+  SignalBlock& buf(int idx) { return _buffers[idx]; }
+  
   Upsampler(int octavesUp) : _octaves(octavesUp)
   {
     if (_octaves)
     {
-      _numBuffers = 1 << _octaves;
-      size_t numFilters = _octaves;
-      _filters.resize(numFilters);
-
-      // get all buffers as a single contiguous array of floats.
-      _buffers.resize(kFramesPerBlock * _numBuffers);
-
+      _filters.resize(_octaves);
+      _buffers.resize(1 << _octaves);
       clear();
     }
   }
-  ~Upsampler() = default;
-
+  
   void write(SignalBlock x)
   {
-    // write to last vector in buffer
-    store(x, bufferPtr(_numBuffers - 1));
-
-    // for each octave of upsampling, upsample blocks to twice as many, in place, ending at buffers
-    // end
+    int numBufs = 1 << _octaves;
+    buf(numBufs - 1) = x;
+    
     for (int j = 0; j < _octaves; ++j)
     {
       int sourceBufs = 1 << j;
       int destBufs = sourceBufs << 1;
-      int srcStart = _numBuffers - sourceBufs;
-      int destStart = _numBuffers - destBufs;
-
+      int srcStart = numBufs - sourceBufs;
+      int destStart = numBufs - destBufs;
+      
       for (int i = 0; i < sourceBufs; ++i)
       {
-        SignalBlock src, dest1, dest2;
-        load(src, bufferPtr(srcStart + i));
-        dest1 = _filters[j].upsampleFirstHalf(src);
-        dest2 = _filters[j].upsampleSecondHalf(src);
-        store(dest1, bufferPtr(destStart + (i * 2)));
-        store(dest2, bufferPtr(destStart + (i * 2) + 1));
+        auto [first, second] = _filters[j](buf(srcStart + i));
+        buf(destStart + i * 2) = first;
+        buf(destStart + i * 2 + 1) = second;
       }
     }
     readIdx_ = 0;
   }
-
-  // after a write, 1 << octaves reads are available.
-  SignalBlock read()
-  {
-    SignalBlock result;
-    load(result, bufferPtr(readIdx_++));
-    return result;
-  }
-
+  
+  SignalBlock read() { return buf(readIdx_++); }
+  
   void clear()
   {
-    for (auto& f : _filters)
-    {
-      f.clear();
-    }
-    std::fill(_buffers.begin(), _buffers.end(), 0.f);
+    for (auto& f : _filters) f.clear();
+    for (auto& b : _buffers) b = SignalBlock{0.f};
     readIdx_ = 0;
   }
+};
+// ----------------------------------------------------------------
+// higher-order functions with DSP
+
+// Upsample2xFunction is a function object that given a process function f,
+// upsamples the input x by 2, applies f, downsamples and returns the result.
+// The total delay from the resampling filters used is about 3 samples.
+
+template <typename T, int IN_ROWS>
+class Upsample2xFunction
+{
+  static constexpr int OUT_ROWS = 1;
+  
+  using inputType = const SignalBlockArrayBase<T, IN_ROWS>;
+  using outputType = SignalBlockArrayBase<T, OUT_ROWS>;
+  using ProcessFn = std::function<outputType(inputType)>;
+  
+public:
+  inline outputType operator()(ProcessFn fn, inputType vx)
+  {
+    // upsample each row of input to 2x buffers
+    for (int j = 0; j < IN_ROWS; ++j)
+    {
+      auto [first, second] = mUppers[j](vx.constRow(j));
+      mUpsampledInput1.row(j) = first;
+      mUpsampledInput2.row(j) = second;
+    }
+    
+    // process upsampled input
+    mUpsampledOutput1 = fn(mUpsampledInput1);
+    mUpsampledOutput2 = fn(mUpsampledInput2);
+    
+    // downsample each processed row to 1x output
+    outputType vy;
+    for (int j = 0; j < OUT_ROWS; ++j)
+    {
+      vy.setRow(j, mDowners[j](mUpsampledOutput1.getRow(j), mUpsampledOutput2.getRow(j)));
+    }
+    return vy;
+  }
+  
+  void clear()
+  {
+    for (auto& u : mUppers) u.clear();
+    for (auto& d : mDowners) d.clear();
+  }
+  
+private:
+  std::array<Upsampler2x<T>, IN_ROWS> mUppers;
+  std::array<Downsampler2x<T>, OUT_ROWS> mDowners;
+  SignalBlockArrayBase<T, IN_ROWS> mUpsampledInput1, mUpsampledInput2;
+  SignalBlockArrayBase<T, OUT_ROWS> mUpsampledOutput1, mUpsampledOutput2;
+};
+
+// Downsample2xFunction is a function object that given a process function f,
+// downsamples the input x by 2, applies f, upsamples and returns the result.
+// Since two Blocks of input are needed to create a single block of
+// downsampled input to the wrapped function, this function has an entire
+// Block of delay in addition to the group delay of the allpass
+// interpolation (about 6 samples).
+
+template <typename T, int IN_ROWS>
+class Downsample2xFunction
+{
+  static constexpr int OUT_ROWS = 1;
+  
+  using inputType = const SignalBlockArrayBase<T, IN_ROWS>;
+  using outputType = SignalBlockArrayBase<T, OUT_ROWS>;
+  using ProcessFn = std::function<outputType(inputType)>;
+  
+public:
+  inline outputType operator()(ProcessFn fn, inputType vx)
+  {
+    outputType vy;
+    if (mPhase)
+    {
+      // downsample each row of input to 1/2x buffers
+      for (int j = 0; j < IN_ROWS; ++j)
+      {
+        mDownsampledInput.row(j) = mDowners[j](mInputBuffer.constRow(j), vx.constRow(j));
+      }
+      
+      // process downsampled input
+      mDownsampledOutput = fn(mDownsampledInput);
+      
+      // upsample each processed row to output
+      for (int j = 0; j < OUT_ROWS; ++j)
+      {
+        auto [first, second] = mUppers[j](mDownsampledOutput.getRow(j));
+        vy.setRow(j, first);
+        mOutputBuffer.setRow(j, second);
+      }
+    }
+    else
+    {
+      mInputBuffer = vx;
+      vy = mOutputBuffer;
+    }
+    mPhase = !mPhase;
+    return vy;
+  }
+  
+  void clear()
+  {
+    for (auto& d : mDowners) d.clear();
+    for (auto& u : mUppers) u.clear();
+    mPhase = false;
+  }
+  
+private:
+  std::array<Downsampler2x<T>, IN_ROWS> mDowners;
+  std::array<Upsampler2x<T>, OUT_ROWS> mUppers;
+  SignalBlockArrayBase<T, IN_ROWS> mInputBuffer;
+  SignalBlockArrayBase<T, OUT_ROWS> mOutputBuffer;
+  SignalBlockArrayBase<T, IN_ROWS> mDownsampledInput;
+  SignalBlockArrayBase<T, OUT_ROWS> mDownsampledOutput;
+  bool mPhase{false};
 };
 
 }  // namespace ml

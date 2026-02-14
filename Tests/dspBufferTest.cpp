@@ -8,7 +8,6 @@
 #include "MLTestUtils.h"
 #include "MLDSPBuffer.h"
 #include "MLDSPUtils.h"
-#include "MLDSPFunctional.h"
 
 
 #if 0 // TEMP

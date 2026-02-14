@@ -201,6 +201,13 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
     T& operator[](size_t i) { return _data[i]; }
     const T& operator[](size_t i) const { return _data[i]; }
     
+    RowView& operator=(const SignalBlockArrayBase<T, 1>& other) {
+      for (size_t i = 0; i < kFramesPerBlock; ++i) {
+        _data[i] = other[i];
+      }
+      return *this;
+    }
+
     RowView& operator+=(const SignalBlockArrayBase<T, 1>& other) {
       for (size_t i = 0; i < kFramesPerBlock; ++i) {
         _data[i] += other[i];
@@ -227,8 +234,22 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
     }
   };
   
+  struct ConstRowView {
+    const T* _data;
+    
+    const T& operator[](size_t i) const { return _data[i]; }
+    
+    operator SignalBlockArrayBase<T, 1>() const {
+      return SignalBlockArrayBase<T, 1>(_data);
+    }
+  };
+
   RowView row(size_t i) {
     return RowView{this->data() + i * kFramesPerBlock};
+  }
+  
+  ConstRowView constRow(size_t i) const {
+    return ConstRowView{this->data() + i * kFramesPerBlock};
   }
 };
 

@@ -410,6 +410,113 @@ public:
 };
 
 
+
+// From an input clock phasor and an output/input frequency ratio,
+// produce an output clock at the given ratio that is phase-synched with the input.
+//
+class TempoLock
+{
+  // phasor on [0. - 1.), changes at rate of input phasor * input ratio
+  float _omega{-1.f};  // current output phase
+  float _x1v{0};       // input one vector ago
+  
+public:
+  // phase of -1 means we are stopped.
+  void clear() { _omega = -1.0f; }
+  
+  // function call takes 3 inputs:
+  // x: the input phasor to follow
+  // dydx: the ratio to the input at which to lock the output phasor
+  // isr: inverse of sample rate
+  SignalBlock operator()(SignalBlock x, float dydx, float isr)
+  {
+    SignalBlock y;
+    float x0 = x[0];
+    float dxdt{0.f};
+    float dydt{0.f};
+    
+    // if input phasor is inactive, reset and output 0.
+    // we check against -1 because a running input phasor may be slightly
+    // less than zero.
+    if (x0 == -1.0f)
+    {
+      clear();
+      y = SignalBlock(0.f);
+    }
+    else
+    {
+      // get dxdt and dydt from input and ratio
+      if (_omega > -1.f)
+      {
+        // if we are already running: get average input slope every vector
+        float dx = x0 - _x1v;
+        if (dx < 0.f) dx += 1.f;
+        dxdt = dx / kFramesPerBlock;
+        dydt = dxdt * dydx;
+        _x1v = x0;
+      }
+      else
+      {
+        // on startup: we are active but phase is unknown, so jump to
+        // current phase based on input.
+        dxdt = x[1] - x0;
+        dydt = dxdt * dydx;
+        _x1v = x0 - dxdt * kFramesPerBlock;
+        _omega = fmod(x0 * dydx, 1.0f);
+      }
+      
+      // if the ratio of its reciprocal is close to an integer, lock to input phase
+      bool lock{false};
+      constexpr float lockDist = 0.001f;
+      if (fabs(dydx - roundf(dydx)) < lockDist) lock = true;
+      float rdydx = 1.0f / dydx;
+      if (fabs(rdydx - roundf(rdydx)) < lockDist) lock = true;
+      
+      if (lock)
+      {
+        // get error term at each vector by comparing output to scaled input
+        // or scaled input to output depending on ratio.
+        float ref, refWrap, error;
+        if (dydx >= 1.f)
+        {
+          ref = x0 * dydx;
+          refWrap = ref - floorf(ref);
+          error = _omega - refWrap;
+        }
+        else
+        {
+          ref = _omega / dydx;
+          refWrap = ref - floorf(ref);
+          error = refWrap - x0;
+        }
+        
+        // get error difference from closest sync target
+        float errorDiff = roundf(error) - error;
+        
+        // add error correction term to dydt. Note that this is only added to the current vector.
+        // this is different from a traditional PLL, which would need a filter in the feedback loop.
+        //
+        // this addition tweaks the slope to reach the target value in 1/4 second. However as
+        // the target gets closer the slope is less, resulting in an exponentially slowing approach.
+        float correction = errorDiff * isr * 4.0f;
+        
+        // don't allow going under 0.5x or over 2x speed
+        correction = clamp(correction, -dydt * 0.5f, dydt * 1.0f);
+        dydt += correction;
+      }
+      
+      // make output vector with sample-accurate wrap
+      for (int i = 0; i < kFramesPerBlock; ++i)
+      {
+        y[i] = _omega;
+        _omega += dydt;
+        if (_omega > 1.0f) _omega -= 1.0f;
+      }
+    }
+    return y;
+  }
+};
+
 // more shapes:
 /*
  Envelopes
