@@ -176,6 +176,7 @@ struct TickGen : Gen1<T, TickGen<T>>
   }
 };
 
+
 // Bandlimited impulse train generator.
 // Uses a windowed sinc table with two readout voices for crossfading
 // when impulses overlap at high frequencies.
@@ -183,13 +184,14 @@ struct TickGen : Gen1<T, TickGen<T>>
 template<typename T>
 struct ImpulseGen : Gen1<T, ImpulseGen<T>>
 {
-  static constexpr int kSincHalfWidth = 8;
+  static constexpr int kSincHalfWidth = 16;
   static constexpr int kOversample = 8;
   static constexpr int kTableSize = kSincHalfWidth * 2 * kOversample + 1; // 129
   static constexpr float kTableEnd = static_cast<float>(kTableSize - 1);  // 128.0
   static constexpr float kTableStep = static_cast<float>(kOversample);    // 8.0
-  static constexpr float kSincOmega = 0.25f;
+  static constexpr float kSincOmega = 0.45f;
   
+  // make windowed-sinc filter. 
   static const std::array<float, kTableSize>& getTable()
   {
     static const auto table = [] {
