@@ -16,6 +16,7 @@
 
 #include "MLDSPOps.h"
 #include "MLDSPMath.h"
+#include "MLDSPFilters.h"
 
 namespace ml
 {
@@ -141,70 +142,17 @@ class IntegerDelay
 
 
 
-// First order allpass section with a single sample of delay.
-// One-multiply form, see
-// https://ccrma.stanford.edu/~jos/pasp/One_Multiply_Scattering_Junctions.html
-
-class Allpass1
-{
- private:
-  float x1{0}, y1{0};
-
- public:
-  typedef float Coeffs;
-  Coeffs coeffs{0.f};
-
-  Allpass1(float a) : coeffs(a) {}
-  ~Allpass1() {}
-
-  inline void clear()
-  {
-    x1 = 0.f;
-    y1 = 0.f;
-  }
-
-  // get allpass coefficient from a delay fraction d.
-  // to minimize modulation noise, d should be in the range [0.618 - 1.618].
-  static float makeCoeffs(float d)
-  {
-    // return 2nd order approx around 1 to (1.f - d) / (1.f + d)
-    float xm1 = (d - 1.f);
-    return -0.53f * xm1 + 0.24f * xm1 * xm1;
-  }
-
-  inline float processSample(const float x)
-  {
-    // one-multiply form. see
-    // https://ccrma.stanford.edu/~jos/pasp/One_Multiply_Scattering_Junctions.html
-    float y = x1 + (x - y1) * coeffs;
-    x1 = x;
-    y1 = y;
-    return y;
-  }
-
-  inline SignalBlock operator()(const SignalBlock vx)
-  {
-    SignalBlock vy;
-    for (int n = 0; n < kFramesPerBlock; ++n)
-    {
-      vy[n] = processSample(vx[n]);
-    }
-    return vy;
-  }
-};
-
 // Combining the integer delay and first order allpass section
 // gives us an allpass-interpolated fractional delay. In general, modulating the
 // delay time will change the allpass coefficient, producing clicks in the
 // output.
-
 class FractionalDelay
 {
   IntegerDelay mIntegerDelay;
-  Allpass1 mAllpassSection{0.f};
+  Allpass1<float> mAllpassSection{0.f};
   float mDelayInSamples{};
-
- public:
+  
+public:
   FractionalDelay() = default;
   FractionalDelay(float d)
   {
@@ -212,20 +160,20 @@ class FractionalDelay
     setDelayInSamples(d);
   }
   ~FractionalDelay() = default;
-
+  
   inline void clear()
   {
     mIntegerDelay.clear();
     mAllpassSection.clear();
   }
-
+  
   inline void setDelayInSamples(float d)
   {
     mDelayInSamples = d;
     float fDelayInt = floorf(d);
     int delayInt = static_cast<int>(fDelayInt);
     float delayFrac = d - fDelayInt;
-
+    
     // constrain D to [0.618 - 1.618] if possible
     if ((delayFrac < 0.618f) && (delayInt > 0))
     {
@@ -233,15 +181,15 @@ class FractionalDelay
       delayInt -= 1;
     }
     mIntegerDelay.setDelayInSamples(delayInt);
-    mAllpassSection.coeffs = Allpass1::makeCoeffs(delayFrac);
+    mAllpassSection.coeffs = Allpass1<float>::makeCoeffs({delayFrac});
   }
-
+  
   inline void setMaxDelayInSamples(float d) { mIntegerDelay.setMaxDelayInSamples(floorf(d)); }
-
+  
   // return the input signal, delayed by the constant delay time
   // mDelayInSamples.
   inline SignalBlock operator()(const SignalBlock vx) { return mAllpassSection(mIntegerDelay(vx)); }
-
+  
   // return the input signal, delayed by the varying delay time vDelayInSamples.
   inline SignalBlock operator()(const SignalBlock vx, const SignalBlock vDelayInSamples)
   {
@@ -249,15 +197,15 @@ class FractionalDelay
     for (int n = 0; n < kFramesPerBlock; ++n)
     {
       setDelayInSamples(vDelayInSamples[n]);
-      vy[n] = mAllpassSection.processSample(mIntegerDelay.processSample(vx[n]));
+      vy[n] = mAllpassSection.nextFrame(mIntegerDelay.processSample(vx[n]));
     }
     return vy;
   }
-
+  
   // return the input signal, delayed by the varying delay time vDelayInSamples,
   // but only allow changes to the delay time when vChangeTicks is nonzero.
   inline SignalBlock operator()(const SignalBlock vx, const SignalBlock vDelayInSamples,
-                              const SignalBlockInt vChangeTicks)
+                                const SignalBlockInt vChangeTicks)
   {
     SignalBlock vy;
     for (int n = 0; n < kFramesPerBlock; ++n)
@@ -266,13 +214,12 @@ class FractionalDelay
       {
         setDelayInSamples(vDelayInSamples[n]);
       }
-
-      vy[n] = mAllpassSection.processSample(mIntegerDelay.processSample(vx[n]));
+      
+      vy[n] = mAllpassSection.nextFrame(mIntegerDelay.processSample(vx[n]));
     }
     return vy;
   }
 };
-
 // Crossfading two allpass-interpolated delays allows modulating the delay
 // time without clicks. See "A Lossless, Click-free, Pitchbend-able Delay Line
 // Loop Interpolation Scheme", Van Duyne, Jaffe, Scandalis, Stilson, ICMC 1997.
@@ -469,111 +416,97 @@ class FDN
 };
 
 
-// From an input clock phasor and an output/input frequency ratio,
-// produce an output clock at the given ratio that is phase-synched with the input.
-//
-class TempoLock
-{
-  // phasor on [0. - 1.), changes at rate of input phasor * input ratio
-  float _omega{-1.f};  // current output phase
-  float _x1v{0};       // input one vector ago
-
+// OverlapAddFunction TODO
+/*
+ template<int LENGTH, int DIVISIONS, int IN_ROWS, int OUT_ROWS>
+ class OverlapAddFunction
+ {
+ typedef std::function<SignalBlockArray<OUT_ROWS>(const
+ SignalBlockArray<IN_ROWS>)> ProcessFn;
+ 
  public:
-  // phase of -1 means we are stopped.
-  void clear() { _omega = -1.0f; }
+ inline SignalBlockArray<OUT_ROWS> operator()(ProcessFn fn, const
+ SignalBlockArray<IN_ROWS> vx)
+ {
+ }
+ 
+ private:
+ //Matrix mHistory;
+ const SignalBlock& mWindow;
+ };
+ */
 
-  // function call takes 3 inputs:
-  // x: the input phasor to follow
-  // dydx: the ratio to the input at which to lock the output phasor
-  // isr: inverse of sample rate
-  SignalBlock operator()(SignalBlock x, float dydx, float isr)
+// FeedbackDelayFunction
+// Wraps a function in a pitchbendable delay with feedback per row.
+// Since the feedback adds the output of the function to its input, the function
+// must input and output the same number of rows.
+
+// template<int ROWS>
+class FeedbackDelayFunction
+{
+  static constexpr int ROWS = 1;  // see above
+  using inputType = const SignalBlockArray<ROWS>;
+  using outputType = SignalBlockArray<1>;  // ROWS
+  using ProcessFn = std::function<outputType(inputType)>;
+  
+public:
+  float feedbackGain{1.f};
+  
+  inline SignalBlockArray<ROWS> operator()(const SignalBlockArray<ROWS> vx, ProcessFn fn,
+                                           const SignalBlock vDelayTime)
   {
-    SignalBlock y;
-    float x0 = x[0];
-    float dxdt{0.f};
-    float dydt{0.f};
-
-    // if input phasor is inactive, reset and output 0.
-    // we check against -1 because a running input phasor may be slightly
-    // less than zero.
-    if (x0 == -1.0f)
+    SignalBlockArray<ROWS> vFnOutput;
+    vFnOutput = fn(vx + vy1 * SignalBlockArray<ROWS>(feedbackGain));
+    
+    for (int j = 0; j < ROWS; ++j)
     {
-      clear();
-      y = SignalBlock(0.f);
+      vy1.setRow(j, mDelays[j](vFnOutput.getRow(j), vDelayTime - SignalBlock(kFramesPerBlock)));
     }
-    else
-    {
-      // get dxdt and dydt from input and ratio
-      if (_omega > -1.f)
-      {
-        // if we are already running: get average input slope every vector
-        float dx = x0 - _x1v;
-        if (dx < 0.f) dx += 1.f;
-        dxdt = dx / kFramesPerBlock;
-        dydt = dxdt * dydx;
-        _x1v = x0;
-      }
-      else
-      {
-        // on startup: we are active but phase is unknown, so jump to
-        // current phase based on input.
-        dxdt = x[1] - x0;
-        dydt = dxdt * dydx;
-        _x1v = x0 - dxdt * kFramesPerBlock;
-        _omega = fmod(x0 * dydx, 1.0f);
-      }
-
-      // if the ratio of its reciprocal is close to an integer, lock to input phase
-      bool lock{false};
-      constexpr float lockDist = 0.001f;
-      if (fabs(dydx - roundf(dydx)) < lockDist) lock = true;
-      float rdydx = 1.0f / dydx;
-      if (fabs(rdydx - roundf(rdydx)) < lockDist) lock = true;
-
-      if (lock)
-      {
-        // get error term at each vector by comparing output to scaled input
-        // or scaled input to output depending on ratio.
-        float ref, refWrap, error;
-        if (dydx >= 1.f)
-        {
-          ref = x0 * dydx;
-          refWrap = ref - floorf(ref);
-          error = _omega - refWrap;
-        }
-        else
-        {
-          ref = _omega / dydx;
-          refWrap = ref - floorf(ref);
-          error = refWrap - x0;
-        }
-
-        // get error difference from closest sync target
-        float errorDiff = roundf(error) - error;
-
-        // add error correction term to dydt. Note that this is only added to the current vector.
-        // this is different from a traditional PLL, which would need a filter in the feedback loop.
-        //
-        // this addition tweaks the slope to reach the target value in 1/4 second. However as
-        // the target gets closer the slope is less, resulting in an exponentially slowing approach.
-        float correction = errorDiff * isr * 4.0f;
-
-        // don't allow going under 0.5x or over 2x speed
-        correction = clamp(correction, -dydt * 0.5f, dydt * 1.0f);
-        dydt += correction;
-      }
-
-      // make output vector with sample-accurate wrap
-      for (int i = 0; i < kFramesPerBlock; ++i)
-      {
-        y[i] = _omega;
-        _omega += dydt;
-        if (_omega > 1.0f) _omega -= 1.0f;
-      }
-    }
-    return y;
+    return vFnOutput;
   }
+  
+private:
+  std::array<PitchbendableDelay, ROWS> mDelays;
+  SignalBlockArray<ROWS> vy1;
 };
+
+// FeedbackDelayFunctionWithTap
+// Wraps a function in a pitchbendable delay with feedback per row. The function
+// outputs a tap that can be different from the feedback signal sent to the
+// input. Since the feedback adds the output of the function to its input, the
+// function must input and output the same number of rows.
+
+// template<int ROWS>
+class FeedbackDelayFunctionWithTap
+{
+  static constexpr int ROWS = 1;  // see above
+  using inputType = const SignalBlockArray<ROWS>;
+  using tapType = SignalBlockArray<ROWS>&;
+  using outputType = SignalBlockArray<1>;  // ROWS
+  using ProcessFn = std::function<outputType(inputType, tapType)>;
+  
+public:
+  float feedbackGain{1.f};
+  
+  inline SignalBlockArray<ROWS> operator()(const SignalBlockArray<ROWS> vx, ProcessFn fn,
+                                           const SignalBlock vDelayTime)
+  {
+    SignalBlockArray<ROWS> vFeedback;
+    SignalBlockArray<ROWS> vOutputTap;
+    vFeedback = fn(vx + vy1 * SignalBlockArray<ROWS>(feedbackGain), vOutputTap);
+    
+    for (int j = 0; j < ROWS; ++j)
+    {
+      vy1.setRow(j, mDelays[j](vFeedback.getRow(j), vDelayTime - SignalBlock(kFramesPerBlock)));
+    }
+    return vOutputTap;
+  }
+  
+private:
+  std::array<PitchbendableDelay, ROWS> mDelays;
+  SignalBlockArray<ROWS> vy1;
+};
+
 
 }  // namespace ml
 

@@ -2,8 +2,6 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
-// example of RtAudio wrapping low-level madronalib DSP code.
-
 #include "madronalib.h"
 
 using namespace ml;

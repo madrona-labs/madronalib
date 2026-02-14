@@ -5,7 +5,6 @@
 #include "catch.hpp"
 #include "MLTestUtils.h"
 #include "MLDSPOps.h"
-#include "MLDSPFunctional.h"
 #include "MLDSPUtils.h"
 #include "MLDSPRouting.h"
 #include "MLDSPGens.h"

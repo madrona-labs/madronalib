@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "MLDSPFunctional.h"
 #include "MLDSPOps.h"
 #include "MLDSPUtils.h"
 
@@ -150,13 +149,17 @@ struct Counter : Gen0<T, Counter<T>>
 template<typename T>
 struct TickGen : Gen1<T, TickGen<T>>
 {
+  enum { freq, nParams };
+  
+  using Params = std::array<T, nParams>;
+  
   T omega_{0.f};
   
   void clear() { omega_ = T{0.f}; }
   
-  T nextFrame(T freq)
+  T nextFrame(T f)
   {
-    omega_ += freq;
+    omega_ += f;
     if constexpr (std::is_same_v<T, float>)
     {
       if (omega_ >= 1.0f)
@@ -176,7 +179,6 @@ struct TickGen : Gen1<T, TickGen<T>>
   }
 };
 
-
 // Bandlimited impulse train generator.
 // Uses a windowed sinc table with two readout voices for crossfading
 // when impulses overlap at high frequencies.
@@ -191,7 +193,7 @@ struct ImpulseGen : Gen1<T, ImpulseGen<T>>
   static constexpr float kTableStep = static_cast<float>(kOversample);    // 8.0
   static constexpr float kSincOmega = 0.45f;
   
-  // make windowed-sinc filter. 
+  // make windowed-sinc filter.
   static const std::array<float, kTableSize>& getTable()
   {
     static const auto table = [] {

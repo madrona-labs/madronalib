@@ -33,6 +33,7 @@ SignalBlockArrayBase<T, COEFFS_SIZE> interpolateCoeffsLinear(
 template<typename T, typename Derived>
 struct Filter
 {
+  // Block processing with parameter interpolation (one Params per block)
   template<typename Params>
   Block<T> operator()(const Block<T>& input, Params nextParams)
   {
@@ -40,12 +41,6 @@ struct Filter
     Block<T> output;
     
     auto nextCoeffs = Derived::makeCoeffs(nextParams);
-    
-    // TODO if the coeffs are the same as self.coeffs, don't interpolate
-    // and run a different loop with constant coeffs.
-    // NOTE if interpolation is other than linear at some point we will need
-    // to test whether the interpolation is finished
-    
     auto coeffsBlock = interpolateCoeffsLinear(self.coeffs, nextCoeffs);
     self.coeffs = nextCoeffs;
     
@@ -57,6 +52,40 @@ struct Filter
         c[i] = coeffsBlock.rowPtr(i)[t];
       }
       output[t] = self.nextFrame(input[t], c);
+    }
+    return output;
+  }
+  
+  // Block processing with signal-rate params (makeCoeffs called per frame)
+  template<size_t N_PARAMS>
+  Block<T> operator()(const Block<T>& input,
+                      const SignalBlockArrayBase<T, N_PARAMS>& paramBlock)
+  {
+    static_assert(N_PARAMS == Derived::nParams, "paramBlock row count must match nParams");
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      typename Derived::Params p;
+      for (size_t i = 0; i < Derived::nParams; ++i)
+      {
+        p[i] = paramBlock.rowPtr(i)[t];
+      }
+      self.coeffs = Derived::makeCoeffs(p);
+      output[t] = self.nextFrame(input[t], self.coeffs);
+    }
+    return output;
+  }
+  
+  // Block processing with constant stored coefficients
+  Block<T> operator()(const Block<T>& input)
+  {
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      output[t] = self.nextFrame(input[t], self.coeffs);
     }
     return output;
   }
@@ -408,6 +437,57 @@ struct DCBlocker : Filter<T, DCBlocker<T>>
   }
 };
 
+// First order allpass section with a single sample of delay.
+// One-multiply form, see
+// https://ccrma.stanford.edu/~jos/pasp/One_Multiply_Scattering_Junctions.html
+
+template<typename T>
+struct Allpass1 : Filter<T, Allpass1<T>>
+{
+  enum { d, nParams };
+  enum { c0, nCoeffs };
+  enum { x1, y1, nStateVars };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  using State = std::array<T, nStateVars>;
+  
+  Coeffs coeffs{};
+  State state{};
+  
+  Allpass1() = default;
+  
+  // construct with a fixed coefficient value (for HalfBandFilter etc.)
+  Allpass1(float a) : coeffs{T{a}}, state{} {}
+  
+  void clear()
+  {
+    state.fill(T{0.f});
+  }
+  
+  // get allpass coefficient from a delay fraction d.
+  // to minimize modulation noise, d should be in the range [0.618 - 1.618].
+  static Coeffs makeCoeffs(Params p)
+  {
+    T xm1 = p[d] - T{1.f};
+    return {T{-0.53f} * xm1 + T{0.24f} * xm1 * xm1};
+  }
+  
+  // per-sample with explicit coefficients (used by Filter base)
+  T nextFrame(T x, Coeffs c)
+  {
+    T y = state[x1] + (x - state[y1]) * c[c0];
+    state[x1] = x;
+    state[y1] = y;
+    return y;
+  }
+  
+  // per-sample with stored coefficient (used by HalfBandFilter)
+  T nextFrame(T x)
+  {
+    return nextFrame(x, coeffs);
+  }
+};
 
 }  // namespace ml
 
