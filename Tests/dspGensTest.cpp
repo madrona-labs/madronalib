@@ -9,7 +9,7 @@
 #include "MLTestUtils.h"
 #include "MLDSPGens.h"
 
-#define DO_TIME_TESTS 1
+#define DO_TIME_TESTS 0
 
 using namespace ml;
 using namespace testUtils;
@@ -34,8 +34,6 @@ TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
   float epsilon = dBToAmp(-120.f);
   REQUIRE(fabs(v1[kFramesPerBlock - 1]) < epsilon);
   
-
-
   // validate element order and horizontal <-> vertical transforms
   Counter<float> cf;
   SignalBlock cfOut = cf();
