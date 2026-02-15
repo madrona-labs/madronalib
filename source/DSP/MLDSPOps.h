@@ -455,7 +455,7 @@ DEFINE_OP_F2F(log2Approx, logApprox(x) * kLogTwoRVec)
 DEFINE_OP_F2F(exp2Approx, expApprox(kLogTwoVec * x))
 
 // Cubic tanh approx
-DEFINE_OP_F2F(tanhApprox, tanhApprox(x))
+DEFINE_OP_F2F(sigTanhApprox, tanhApprox(x))
 
 // Fractional part
 DEFINE_OP_F2F(fractionalPart, x - intToFloat(floatToIntTruncate(x)))
