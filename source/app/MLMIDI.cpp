@@ -43,34 +43,39 @@ struct MIDIInput::Impl
   }
 };
 
-MIDIInput::MIDIInput() : pImpl(std::make_unique<Impl>()) {}
+MIDIInput::MIDIInput() : pImpl(std::make_unique<Impl>())
+{
+  try { pImpl->midiIn_ = std::make_unique<RtMidiIn>(); }
+  catch (RtMidiError& error) { error.printMessage(); }
+}
 
 MIDIInput::~MIDIInput() { stop(); }
 
-bool MIDIInput::start(MIDIMessageHandler handler)
+unsigned int MIDIInput::getPortCount()
 {
-  int OK{true};
+  return pImpl->midiIn_ ? pImpl->midiIn_->getPortCount() : 0;
+}
+
+std::string MIDIInput::getPortName(unsigned int portNumber)
+{
+  return pImpl->midiIn_ ? pImpl->midiIn_->getPortName(portNumber) : "";
+}
+
+bool MIDIInput::start(MIDIMessageHandler handler, unsigned int portNumber)
+{
+  if (!pImpl->midiIn_) return false;
+
+  pImpl->midiPort_ = portNumber;
+
+  bool OK{true};
   try
   {
-    pImpl->midiIn_ = std::make_unique<RtMidiIn>();
+    pImpl->midiIn_->openPort(pImpl->midiPort_);
   }
   catch (RtMidiError& error)
   {
     error.printMessage();
     OK = false;
-  }
-
-  if (OK)
-  {
-    try
-    {
-      pImpl->midiIn_->openPort(pImpl->midiPort_);  // just use first port for now - TODO select ports
-    }
-    catch (RtMidiError& error)
-    {
-      error.printMessage();
-      OK = false;
-    }
   }
 
   // Don't ignore sysex, timing, or active sensing messages.
@@ -81,12 +86,8 @@ bool MIDIInput::start(MIDIMessageHandler handler)
   constexpr int kTimerInterval{1};
   if (OK)
   {
-    pImpl->inputTimer_.start([&]() { pImpl->readNewMessages(handler); },
+    pImpl->inputTimer_.start([this, handler]() { pImpl->readNewMessages(handler); },
                             milliseconds(kTimerInterval));
-  }
-  else
-  {
-    pImpl->midiIn_ = nullptr;
   }
 
   return OK;
@@ -105,13 +106,6 @@ std::string MIDIInput::getAPIDisplayName()
 {
   auto& midiin = pImpl->midiIn_;
   return midiin->getApiDisplayName(midiin->getCurrentApi());
-}
-
-std::string MIDIInput::getPortName()
-{
-  auto& midiin = pImpl->midiIn_;
-  auto portNum = pImpl->midiPort_;
-  return midiin->getPortName(portNum);
 }
 
 // free functions
