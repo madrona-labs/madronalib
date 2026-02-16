@@ -25,7 +25,7 @@ int main( int argc, char *argv[] )
   MIDIInput midiInput;
   if(midiInput.start(handleMsg))
   {
-    std::cout << "Reading MIDI from API " << midiInput.getAPIDisplayName() << ", port " << midiInput.getPortName() << " ...\n";
+    std::cout << "Reading MIDI from API " << midiInput.getAPIDisplayName() << ", port " << midiInput.getPortName(0) << " ...\n";
     while(true) {
       std::this_thread::sleep_for(milliseconds(1000));
     }
