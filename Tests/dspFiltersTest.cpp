@@ -515,3 +515,103 @@ TEST_CASE("madronalib/filters/pink_filter_rolloff", "[filters]")
     REQUIRE(drop2 > -4.5f);
   }
 }
+
+TEST_CASE("madronalib/filters/ladder", "[filters]")
+{
+  // small impulse to stay in the linear region of tanh
+  auto getLadderMagnitudes = [&](LadderFilter<float>& lf) {
+    constexpr int kFFTOrder = 6;
+    ffft::FFTRealFixLen<kFFTOrder> fft;
+    
+    SignalBlock impulse{0.f};
+    impulse[0] = 0.01f;
+    
+    SignalBlock output = lf(impulse);
+    
+    std::array<float, N> fftOut{};
+    fft.do_fft(fftOut.data(), output.data());
+    
+    std::array<float, N / 2> mag{};
+    for (int i = 0; i < N / 2; ++i)
+    {
+      float re = fftOut[i];
+      float im = (i == 0) ? 0.f : fftOut[i + N / 2];
+      mag[i] = sqrtf(re * re + im * im);
+    }
+    return mag;
+  };
+  
+  SECTION("lowpass: DC passes, high frequencies attenuated")
+  {
+    LadderFilter<float> lf;
+    lf.mode = LadderFilter<float>::kLopass;
+    lf.coeffs = LadderFilter<float>::makeCoeffs({0.1f, 0.0f});
+    auto mag = getLadderMagnitudes(lf);
+    REQUIRE(mag[0] > 0.001f);
+    for (int i = N / 4; i < N / 2; ++i)
+      REQUIRE(mag[i] < mag[0] * 0.25f);
+  }
+  
+  SECTION("highpass: DC rejected, high frequencies pass")
+  {
+    LadderFilter<float> lf;
+    lf.mode = LadderFilter<float>::kHipass;
+    lf.coeffs = LadderFilter<float>::makeCoeffs({0.1f, 0.0f});
+    auto mag = getLadderMagnitudes(lf);
+    REQUIRE(mag[0] < 0.0001f);
+    float upperAvg = 0.f;
+    for (int i = N / 4; i < N / 2; ++i) upperAvg += mag[i];
+    upperAvg /= (N / 4);
+    REQUIRE(upperAvg > mag[0] * 10.f);
+  }
+  
+  SECTION("bandpass: DC rejected, peak near cutoff")
+  {
+    LadderFilter<float> lf;
+    lf.mode = LadderFilter<float>::kBandpass;
+    lf.coeffs = LadderFilter<float>::makeCoeffs({0.1f, 0.0f});
+    auto mag = getLadderMagnitudes(lf);
+    REQUIRE(mag[0] < 0.0001f);
+    int peakBin = std::max_element(mag.begin(), mag.end()) - mag.begin();
+    REQUIRE(peakBin >= 3);
+    REQUIRE(peakBin <= 12);
+  }
+  
+  SECTION("resonance peaks near cutoff")
+  {
+    LadderFilter<float> lf;
+    lf.mode = LadderFilter<float>::kLopass;
+    lf.coeffs = LadderFilter<float>::makeCoeffs({0.1f, 0.9f});
+    auto mag = getLadderMagnitudes(lf);
+    float peak = *std::max_element(mag.begin() + 1, mag.end());
+    REQUIRE(peak > mag[0]);
+  }
+  
+  SECTION("steeper than 2-pole SVF")
+  {
+    LadderFilter<float> ladder;
+    ladder.mode = LadderFilter<float>::kLopass;
+    ladder.coeffs = LadderFilter<float>::makeCoeffs({0.1f, 0.0f});
+    auto magLadder = getLadderMagnitudes(ladder);
+    
+    Lopass<float> svf;
+    svf.coeffs = Lopass<float>::makeCoeffs({0.1f, 0.5f});
+    
+    // scale SVF impulse the same way
+    SignalBlock impulse{0.f};
+    impulse[0] = 0.01f;
+    SignalBlock svfOut = svf(impulse);
+    ffft::FFTRealFixLen<kFFTOrder> fft;
+    std::array<float, N> fftOut{};
+    fft.do_fft(fftOut.data(), svfOut.data());
+    std::array<float, N / 2> magSVF{};
+    for (int i = 0; i < N / 2; ++i)
+    {
+      float re = fftOut[i];
+      float im = (i == 0) ? 0.f : fftOut[i + N / 2];
+      magSVF[i] = sqrtf(re * re + im * im);
+    }
+    
+    REQUIRE(magLadder[N / 2 - 1] < magSVF[N / 2 - 1]);
+  }
+}

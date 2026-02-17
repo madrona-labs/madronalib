@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "MLDSPOps.h"
+#include "MLDSPMathApprox.h"
 #include "MLDSPSolvers.h"
 
 namespace ml
@@ -487,6 +488,73 @@ struct Allpass1 : Filter<T, Allpass1<T>>
   T nextFrame(T x)
   {
     return nextFrame(x, coeffs);
+  }
+};
+
+// LadderFilter: four one-pole stages with nonlinearities.
+// Reference: "An Improved Virtual Analog Model of the Moog Ladder Filter"
+// Original Implementation: D'Angelo, Valimaki
+
+template<typename T>
+struct LadderFilter : Filter<T, LadderFilter<T>>
+{
+  enum Mode { kLopass = 0, kBandpass, kHipass, kThru };
+  enum { omega, q, nParams };
+  enum { h, k, nCoeffs };
+  enum { sB, sC, sD, sE, dV0, dV1, dV2, dV3, tV0, tV1, tV2, tV3, nStateVars };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  using State = std::array<T, nStateVars>;
+  
+  Coeffs coeffs{};
+  State state{};
+  Mode mode{kLopass};
+  
+  void clear() { state.fill(T{0.f}); }
+  
+  static Coeffs makeCoeffs(Params p)
+  {
+    constexpr float kVT = 0.312f;
+    T vOmega = clamp(p[omega], T{0.00001f}, T{0.25f});
+    T maxQ = T{1.2f} - T{3.0f} * vOmega;
+    return {
+      T{2.0f * kPi * kVT} * vOmega, // h
+      p[q] * maxQ // k
+    };
+  }
+  
+  T nextFrame(T x, Coeffs c)
+  {
+    constexpr float kVT = 0.312f;
+    constexpr float kIVT = 1.0f / (2.0f * kVT);
+    T ivt{kIVT};
+    
+    auto stage = [&](T input, int s, int dV, int tV)
+    {
+      T dVL = input - state[tV];
+      state[s] += (dVL + state[dV]) * c[h];
+      state[dV] = dVL;
+      state[tV] = tanhApprox(state[s] * ivt);
+    };
+    
+    T A = -(x + c[k] * T{4.0f} * state[sE]);
+    
+    stage(tanhApprox(A * ivt), sB, dV0, tV0);
+    stage(state[tV0],          sC, dV1, tV1);
+    stage(state[tV1],          sD, dV2, tV2);
+    stage(state[tV2],          sE, dV3, tV3);
+    
+    switch(mode)
+    {
+      case kHipass:
+        return A + T{-3.0f} * state[sB] + T{3.0f} * state[sC] + T{-1.0f} * state[sD];
+      case kBandpass:
+        return T{2.0f} * (-state[sB] + T{2.0f} * state[sC] - state[sD]);
+      case kLopass:
+      default:
+        return state[sC];
+    }
   }
 };
 
