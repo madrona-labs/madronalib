@@ -30,10 +30,10 @@ template <template<typename> class FN, int ROWS>
 class Bank
 {
 public:
-  static constexpr int kNumProcessors = (ROWS + 3) / 4;
+  static constexpr int kNumFloat4Procs = (ROWS + 3) / 4;
   using Processor = FN<float4>;
   
-  using BankBlock = SignalBlockArrayBase<float4, kNumProcessors>;
+  using BankBlock = SignalBlockArrayBase<float4, kNumFloat4Procs>;
   using Params = typename Processor::Params;
   using ParamBlock = SignalBlockArrayBase<float4, Processor::nParams>;
   
@@ -41,7 +41,7 @@ public:
   BankBlock operator()(const BankBlock& input)
   {
     BankBlock output;
-    for (int p = 0; p < kNumProcessors; ++p)
+    for (int p = 0; p < kNumFloat4Procs; ++p)
     {
       output.row(p) = _processors[p](input.constRow(p));
     }
@@ -50,10 +50,10 @@ public:
   
   // Per-block params (interpolated), one Params per processor
   BankBlock operator()(const BankBlock& input,
-                       const std::array<Params, kNumProcessors>& params)
+                       const std::array<Params, kNumFloat4Procs>& params)
   {
     BankBlock output;
-    for (int p = 0; p < kNumProcessors; ++p)
+    for (int p = 0; p < kNumFloat4Procs; ++p)
     {
       output.row(p) = _processors[p](input.constRow(p), params[p]);
     }
@@ -62,10 +62,10 @@ public:
   
   // Signal-rate params, one param block per processor
   BankBlock operator()(const BankBlock& input,
-                       const std::array<ParamBlock, kNumProcessors>& paramBlocks)
+                       const std::array<ParamBlock, kNumFloat4Procs>& paramBlocks)
   {
     BankBlock output;
-    for (int p = 0; p < kNumProcessors; ++p)
+    for (int p = 0; p < kNumFloat4Procs; ++p)
     {
       output.row(p) = _processors[p](input.constRow(p), paramBlocks[p]);
     }
@@ -80,7 +80,7 @@ public:
   Processor& operator[](size_t n) { return _processors[n]; }
   
 private:
-  std::array<Processor, kNumProcessors> _processors;
+  std::array<Processor, kNumFloat4Procs> _processors;
 };
 
 }  // namespace ml

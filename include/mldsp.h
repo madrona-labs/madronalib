@@ -7,6 +7,7 @@
 #include "MLDSPMath.h"
 #include "MLDSPOps.h"
 #include "MLDSPGens.h"
+#include "MLDSPBank.h"
 #include "MLDSPFilters.h"
 #include "MLDSPShapes.h"
 #include "MLDSPAnalysis.h"
