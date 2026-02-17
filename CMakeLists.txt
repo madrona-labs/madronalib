@@ -427,6 +427,7 @@ if(BUILD_EXAMPLES)
   make_example(MIDIExample midi.cpp)
   make_example(ControllersToAudioExample controllers-to-audio.cpp)
   make_example(SineExample sine.cpp)
+  make_example(Study1Example study1.cpp)
 endif()
 
 #--------------------------------------------------------------------
