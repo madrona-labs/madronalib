@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  macos:
+    name: macOS
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET="10.15"
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build tests
+        run: cmake --build build --target tests --parallel 4
+
+      - name: Run tests
+        run: ./build/bin/tests
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libasound2-dev
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+          -DLINUX_ASOUND=ON
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build tests
+        run: cmake --build build --target tests --parallel
+
+      - name: Run tests
+        run: ./build/bin/tests
+
+  windows:
+    name: Windows
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build tests
+        run: cmake --build build --target tests --config Release --parallel
+
+      - name: Run tests
+        run: .\build\bin\Release\tests.exe

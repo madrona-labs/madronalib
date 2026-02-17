@@ -213,6 +213,9 @@ packages/
 cmake-build-*
 .idea
 
+# CMake user presets (local overrides)
+CMakeUserPresets.json
+
 # Claude
 claude/
 
