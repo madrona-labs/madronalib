@@ -16,7 +16,7 @@ namespace ml
 struct ADSR
 {
   static constexpr float bias = 0.1f;
-  static constexpr float minSegmentTime = 0.0002f;
+  static constexpr float minSegmentTime = 0.00005f;
 
   struct Coeffs
   {
@@ -32,6 +32,7 @@ struct ADSR
     off = 4
   };
 
+  // set coeffs given sample rate and asdr times in seconds
   static Coeffs calcCoeffs(float a, float d, float s, float r, float sr)
   {
     const float invSr = 1.0f / sr;

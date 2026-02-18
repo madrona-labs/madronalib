@@ -162,7 +162,7 @@ inline std::ostream& operator<<(std::ostream& out, const AlignedArray<T, N>& aa)
 }
 
 // ----------------------------------------------------------------
-// SignalBlockArray - common base for signal types with kFramesPerBlock frames
+// SignalBlockArrayBase - common base for signal types with kFramesPerBlock frames
 // per row and some number of rows
 
 template<typename T, size_t ROWS>
@@ -272,7 +272,6 @@ using SignalBlockIntArray = SignalBlockArrayBase<int32_t, ROWS>;
 // This lets us write Block<T> in templates
 template<typename T>
 using Block = SignalBlockArrayBase<T, 1>;
-
 
 // ----------------------------------------------------------------
 // SignalBlock4Array<ROWS>
@@ -1123,6 +1122,22 @@ inline bool validate(const SignalBlock& x)
   return true;
 }
 
+// ----------------------------------------------------------------
+// interpolate float array coeffs to SignalBlockArray<T> rows
+
+
+template<typename T, size_t COEFFS_SIZE>
+SignalBlockArrayBase<T, COEFFS_SIZE> interpolateCoeffsLinear(
+                                                             const std::array<T, COEFFS_SIZE>& c0,
+                                                             const std::array<T, COEFFS_SIZE>& c1)
+{
+  SignalBlockArrayBase<T, COEFFS_SIZE> vy;
+  for (size_t i = 0; i < COEFFS_SIZE; ++i)
+  {
+    vy.setRow(i, interpolateBlockLinear(c0[i], c1[i]));
+  }
+  return vy;
+}
 
 
 }  // namespace ml

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <type_traits>
 #include "MLDSPOps.h"
 #include "MLDSPUtils.h"
 
@@ -12,31 +13,85 @@ namespace ml
 
 // ----------------------------------------------------------------
 // Block generation objects, used by Gens
-
 template<typename T, typename Derived>
-struct Gen0
+struct Gen
 {
-  Block<T> operator()()
+  // Block processing with signal-rate params (one Params per frame)
+  template<size_t N_PARAMS>
+  Block<T> operator()(const SignalBlockArrayBase<T, N_PARAMS>& paramBlock)
   {
+    static_assert(N_PARAMS == Derived::nParams, "paramBlock row count must match nParams");
+    auto& self = *static_cast<Derived*>(this);
     Block<T> output;
+    
     for (size_t t = 0; t < kFramesPerBlock; ++t)
     {
-      output[t] = static_cast<Derived*>(this)->nextFrame();
+      typename Derived::Params p;
+      for (size_t i = 0; i < Derived::nParams; ++i)
+        p[i] = paramBlock.rowPtr(i)[t];
+      self.coeffs = Derived::makeCoeffs(p);
+      output[t] = self.nextFrame(self.coeffs);
     }
     return output;
   }
-};
-
-template<typename T, typename Derived>
-struct Gen1
-{
-  Block<T> operator()(const Block<T>& params)
+  
+  // Block processing with parameter interpolation — T::Params argument
+  // std::enable_if_t... disables matching when the single argument is a float
+  template<typename Params,
+  typename = std::enable_if_t<!std::is_same_v<std::remove_cv_t<std::remove_reference_t<Params>>, float>>>
+  Block<T> operator()(Params nextParams)
   {
+    auto& self = *static_cast<Derived*>(this);
     Block<T> output;
+    
+    auto nextCoeffs = Derived::makeCoeffs(nextParams);
+    auto coeffsBlock = interpolateCoeffsLinear(self.coeffs, nextCoeffs);
+    self.coeffs = nextCoeffs;
+    
     for (size_t t = 0; t < kFramesPerBlock; ++t)
     {
-      output[t] = static_cast<Derived*>(this)->nextFrame(params[t]);
+      typename Derived::Coeffs c;
+      for (size_t i = 0; i < Derived::nCoeffs; ++i)
+        c[i] = coeffsBlock.rowPtr(i)[t];
+      output[t] = self.nextFrame(c);
     }
+    return output;
+  }
+  
+  // Block processing with parameter interpolation — list of float arguments
+  template<typename... Args>
+  Block<T> operator()(Args&&... args)
+  {
+    static_assert((std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, float> && ...),
+                  "Gen::operator(): all arguments must be float");
+    
+    std::array<std::common_type_t<Args...>, sizeof...(Args)> arr = { std::forward<Args>(args)... };
+    const std::array nextParams = arr;
+    
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    
+    auto nextCoeffs = Derived::makeCoeffs(nextParams);
+    auto coeffsBlock = interpolateCoeffsLinear(self.coeffs, nextCoeffs);
+    self.coeffs = nextCoeffs;
+    
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      typename Derived::Coeffs c;
+      for (size_t i = 0; i < Derived::nCoeffs; ++i)
+        c[i] = coeffsBlock.rowPtr(i)[t];
+      output[t] = self.nextFrame(c);
+    }
+    return output;
+  }
+
+  // Block processing with constant stored coefficients
+  Block<T> operator()()
+  {
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      output[t] = self.nextFrame(self.coeffs);
     return output;
   }
 };
@@ -129,13 +184,23 @@ T phasorToSawSample(T phase, T freq)
 // Frame counter generator
 
 template<typename T>
-struct Counter : Gen0<T, Counter<T>>
+struct Counter : Gen<T, Counter<T>>
 {
+  enum { nParams = 0 };
+  enum { nCoeffs = 0 };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
+  Coeffs coeffs{};
   T state_{0.f};
   
   void clear() { state_ = T{0.f}; }
   
-  T nextFrame() {
+  static Coeffs makeCoeffs(Params) { return {}; }
+  
+  T nextFrame(Coeffs)
+  {
     T currentValue = state_;
     state_ += T{1.0f};
     return currentValue;
@@ -144,22 +209,27 @@ struct Counter : Gen0<T, Counter<T>>
 
 // ----------------------------------------------------------------
 // TickGen
-// generate a single-sample tick, repeating at a frequency given by the input.
+// Generate a single-sample tick, repeating at a frequency given by the input.
 
 template<typename T>
-struct TickGen : Gen1<T, TickGen<T>>
+struct TickGen : Gen<T, TickGen<T>>
 {
   enum { freq, nParams };
+  enum { freqCoeff, nCoeffs };
   
   using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
   
+  Coeffs coeffs{};
   T omega_{0.f};
   
   void clear() { omega_ = T{0.f}; }
   
-  T nextFrame(T f)
+  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  
+  T nextFrame(Coeffs c)
   {
-    omega_ += f;
+    omega_ += c[freqCoeff];
     if constexpr (std::is_same_v<T, float>)
     {
       if (omega_ >= 1.0f)
@@ -171,21 +241,61 @@ struct TickGen : Gen1<T, TickGen<T>>
     }
     else
     {
-      float4 ones(1.0f);
-      float4 mask = (omega_ >= ones);
+      T ones{1.0f};
+      T mask = (omega_ >= ones);
       omega_ = omega_ - andBits(mask, ones);
       return andBits(mask, ones);
     }
   }
 };
 
+// ----------------------------------------------------------------
+// RectGen
+// Generate an antialiased rectangle wave repeating at the given frequency
+// with the given pulse width.
+
+template<typename T>
+struct RectGen : Gen<T, RectGen<T>>
+{
+  enum { freq, width, nParams };
+  enum { freqCoeff, widthCoeff, nCoeffs };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
+  Coeffs coeffs{};
+  T omega_{0.f};
+  
+  void clear()
+  {
+    omega_ = T{0.f};
+    const Params kDefaultParams{0.f, 0.5f};
+    coeffs = makeCoeffs(kDefaultParams);
+  }
+  
+  static Coeffs makeCoeffs(Params p) { return {p[freq], p[width]}; }
+  
+  T nextFrame(Coeffs c)
+  {
+    omega_ = fracPart(omega_ + c[freqCoeff]);
+    return phasorToPulseSample(omega_, c[freqCoeff], c[widthCoeff]);
+  }
+};
+
+// ----------------------------------------------------------------
 // Bandlimited impulse train generator.
 // Uses a windowed sinc table with two readout voices for crossfading
 // when impulses overlap at high frequencies.
 
 template<typename T>
-struct ImpulseGen : Gen1<T, ImpulseGen<T>>
+struct ImpulseGen : Gen<T, ImpulseGen<T>>
 {
+  enum { freq, nParams };
+  enum { freqCoeff, nCoeffs };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
   static constexpr int kSincHalfWidth = 16;
   static constexpr int kOversample = 8;
   static constexpr int kTableSize = kSincHalfWidth * 2 * kOversample + 1; // 129
@@ -193,7 +303,6 @@ struct ImpulseGen : Gen1<T, ImpulseGen<T>>
   static constexpr float kTableStep = static_cast<float>(kOversample);    // 8.0
   static constexpr float kSincOmega = 0.45f;
   
-  // make windowed-sinc filter.
   static const std::array<float, kTableSize>& getTable()
   {
     static const auto table = [] {
@@ -216,6 +325,8 @@ struct ImpulseGen : Gen1<T, ImpulseGen<T>>
     return table;
   }
   
+  Coeffs coeffs{};
+  
   // State: two readout voices
   T phase_{0.f};
   T posA_{kTableEnd}, ampA_{0.f}, ampStepA_{0.f};
@@ -228,6 +339,8 @@ struct ImpulseGen : Gen1<T, ImpulseGen<T>>
     ampA_ = ampB_ = T{0.f};
     ampStepA_ = ampStepB_ = T{0.f};
   }
+  
+  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
   
   static float tableLookupScalar(float pos)
   {
@@ -246,8 +359,6 @@ struct ImpulseGen : Gen1<T, ImpulseGen<T>>
     }
     else
     {
-      // Gather: extract lanes, look up individually, reassemble.
-      // Requires storeFloat4 / loadFloat4 (see note below).
       alignas(16) float lanes[4];
       storeFloat4(lanes, pos);
       for (int i = 0; i < 4; ++i)
@@ -256,23 +367,24 @@ struct ImpulseGen : Gen1<T, ImpulseGen<T>>
     }
   }
   
-  T nextFrame(T freq)
+  T nextFrame(Coeffs c)
   {
+    T f = c[freqCoeff];
     T prevPhase = phase_;
-    phase_ = fracPart(phase_ + freq);
+    phase_ = fracPart(phase_ + f);
     
     if constexpr (std::is_same_v<T, float>)
     {
       if (phase_ < prevPhase) // wrap = trigger
       {
-        float offset = phase_ / freq * kTableStep;
+        float offset = phase_ / f * kTableStep;
         
         if (posA_ < kTableEnd) // overlap: crossfade
         {
           posB_ = posA_;
           ampB_ = ampA_;
           float samplesLeft = (kTableEnd - posA_) / kTableStep;
-          float fadeLen = std::max(1.f, std::min(samplesLeft, 1.f / freq));
+          float fadeLen = std::max(1.f, std::min(samplesLeft, 1.f / f));
           ampStepB_ = -ampB_ / fadeLen;
           ampA_ = 0.f;
           ampStepA_ = 1.f / fadeLen;
@@ -298,38 +410,32 @@ struct ImpulseGen : Gen1<T, ImpulseGen<T>>
     else // float4
     {
       T trigMask = (phase_ < prevPhase);
-      T offset = phase_ * rcp(freq) * T{kTableStep};
+      T offset = phase_ * rcp(f) * T{kTableStep};
       
       T aActive = (posA_ < T{kTableEnd});
       T overlapMask = andBits(trigMask, aActive);
       T cleanMask = andNotBits(aActive, trigMask);
       
-      // Overlap: move A→B, set up crossfade
       posB_ = select(posB_, posA_, overlapMask);
       ampB_ = select(ampB_, ampA_, overlapMask);
       T samplesLeft = (T{kTableEnd} - posA_) * T{1.f / kTableStep};
-      T fadeLen = max(T{1.f}, min(samplesLeft, rcp(freq)));
+      T fadeLen = max(T{1.f}, min(samplesLeft, rcp(f)));
       T rcpFade = rcp(fadeLen);
       ampStepB_ = select(ampStepB_, T{-1.f} * ampB_ * rcpFade, overlapMask);
       
-      // Set amplitude for triggered lanes
       ampA_ = select(ampA_, T{0.f}, overlapMask);
       ampStepA_ = select(ampStepA_, rcpFade, overlapMask);
       ampA_ = select(ampA_, T{1.f}, cleanMask);
       ampStepA_ = select(ampStepA_, T{0.f}, cleanMask);
       
-      // Clean trigger: explicitly silence voice B
       ampB_ = select(ampB_, T{0.f}, cleanMask);
       ampStepB_ = select(ampStepB_, T{0.f}, cleanMask);
       
-      // Start position for triggered lanes
       posA_ = select(posA_, offset, trigMask);
       
-      // Read and mix
       T output = tableLookup(posA_) * ampA_
       + tableLookup(posB_) * ampB_;
       
-      // Advance
       posA_ = min(posA_ + T{kTableStep}, T{kTableEnd});
       posB_ = min(posB_ + T{kTableStep}, T{kTableEnd});
       ampA_ = max(T{0.f}, ampA_ + ampStepA_);
@@ -340,15 +446,25 @@ struct ImpulseGen : Gen1<T, ImpulseGen<T>>
   }
 };
 
+// ----------------------------------------------------------------
+// NoiseGen
 
 template<typename T>
-struct NoiseGen : Gen0<T, NoiseGen<T>>
+struct NoiseGen : Gen<T, NoiseGen<T>>
 {
+  enum { nParams = 0 };
+  enum { nCoeffs = 0 };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
   using IntState = std::conditional_t<std::is_same_v<T, float>, uint32_t, int4>;
   
+  Coeffs coeffs{};
   IntState seed_{};
   
   void clear() { setSeed(39792); }
+  
+  static Coeffs makeCoeffs(Params) { return {}; }
   
   void setSeed(uint32_t x)
   {
@@ -362,7 +478,7 @@ struct NoiseGen : Gen0<T, NoiseGen<T>>
     }
   }
   
-  T nextFrame()
+  T nextFrame(Coeffs)
   {
     using IntT = IntTypeFor_t<T>;
     seed_ = seed_ * IntT{0x0019660D} + IntT{0x3C6EF35F};
@@ -373,20 +489,26 @@ struct NoiseGen : Gen0<T, NoiseGen<T>>
 
 // ----------------------------------------------------------------
 // PhasorGen: naive (not antialiased) sawtooth / phase ramp on (0, 1).
-// Input: frequency in cycles per sample (f/sr).
-// NOTE: uses float phase accumulation rather than the uint32
-// trick in the original. Slight precision loss but works for float4.
 
 template<typename T>
-struct PhasorGen : Gen1<T, PhasorGen<T> >
+struct PhasorGen : Gen<T, PhasorGen<T>>
 {
+  enum { freq, nParams };
+  enum { freqCoeff, nCoeffs };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
+  Coeffs coeffs{};
   T omega_{0.f};
   
   void clear() { omega_ = T{0.f}; }
   
-  T nextFrame(T freq)
+  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  
+  T nextFrame(Coeffs c)
   {
-    omega_ = fracPart(omega_ + freq);
+    omega_ = fracPart(omega_ + c[freqCoeff]);
     return omega_;
   }
 };
@@ -395,15 +517,24 @@ struct PhasorGen : Gen1<T, PhasorGen<T> >
 // super slow + accurate sine generator for testing
 
 template<typename T>
-struct TestSineGen : Gen1<T, TestSineGen<T> >
+struct TestSineGen : Gen<T, TestSineGen<T>>
 {
+  enum { freq, nParams };
+  enum { freqCoeff, nCoeffs };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
+  Coeffs coeffs{};
   T omega_{0.f};
   
   void clear() { omega_ = T{0.f}; }
   
-  T nextFrame(T freq)
+  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  
+  T nextFrame(Coeffs c)
   {
-    omega_ += T{kTwoPi} * freq;
+    omega_ += T{kTwoPi} * c[freqCoeff];
     if constexpr (std::is_same_v<T, float>)
     {
       if (omega_ > kTwoPi) omega_ -= kTwoPi;
@@ -422,52 +553,81 @@ struct TestSineGen : Gen1<T, TestSineGen<T> >
 // Antialiased waveform generators using PhasorGen
 
 template<typename T>
-struct SineGen : Gen1<T, SineGen<T> >
+struct SineGen : Gen<T, SineGen<T>>
 {
+  enum { freq, nParams };
+  enum { freqCoeff, nCoeffs };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
+  Coeffs coeffs{};
   PhasorGen<T> phasor_;
   
   // initial phase of 0.75 maps to zero-crossing of the sine approximation
   void clear() { phasor_.clear(); phasor_.omega_ = T{0.75f}; }
   
-  T nextFrame(T freq)
+  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  
+  T nextFrame(Coeffs c)
   {
-    return phasorToSineSample(phasor_.nextFrame(freq));
+    return phasorToSineSample(phasor_.nextFrame(typename PhasorGen<T>::Coeffs{c[freqCoeff]}));
   }
 };
 
 template<typename T>
-struct SawGen : Gen1<T, SawGen<T> >
+struct SawGen : Gen<T, SawGen<T>>
 {
+  enum { freq, nParams };
+  enum { freqCoeff, nCoeffs };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
+  Coeffs coeffs{};
   PhasorGen<T> phasor_;
   
   void clear() { phasor_.clear(); }
   
-  T nextFrame(T freq)
+  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  
+  T nextFrame(Coeffs c)
   {
-    T phase = phasor_.nextFrame(freq);
-    return phasorToSawSample(phase, freq);
+    T f = c[freqCoeff];
+    T phase = phasor_.nextFrame(typename PhasorGen<T>::Coeffs{f});
+    return phasorToSawSample(phase, f);
   }
 };
 
-// PulseGen takes two inputs (freq and width) so it has its own operator().
+// PulseGen takes two inputs (freq and width).
+
 template<typename T>
-struct PulseGen
+struct PulseGen : Gen<T, PulseGen<T>>
 {
+  enum { freq, width, nParams };
+  enum { freqCoeff, widthCoeff, nCoeffs };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
+  Coeffs coeffs{};
   PhasorGen<T> phasor_;
   
-  void clear() { phasor_.clear(); }
-  
-  Block<T> operator()(const Block<T>& freq, const Block<T>& width)
+  void clear()
   {
-    Block<T> output;
-    for (size_t t = 0; t < kFramesPerBlock; ++t)
-    {
-      T phase = phasor_.nextFrame(freq[t]);
-      output[t] = phasorToPulseSample(phase, freq[t], width[t]);
-    }
-    return output;
+    phasor_.clear();
+    const Params kDefaultParams{0.f, 0.5f};
+    coeffs = makeCoeffs(kDefaultParams);
+  }
+  
+  static Coeffs makeCoeffs(Params p) { return {p[freq], p[width]}; }
+  
+  T nextFrame(Coeffs c)
+  {
+    T f = c[freqCoeff];
+    T phase = phasor_.nextFrame(typename PhasorGen<T>::Coeffs{f});
+    return phasorToPulseSample(phase, f, c[widthCoeff]);
   }
 };
-
 
 }  // namespace ml
