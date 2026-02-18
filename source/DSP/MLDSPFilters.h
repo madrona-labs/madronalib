@@ -19,46 +19,10 @@
 namespace ml
 {
 
-template<typename T, size_t COEFFS_SIZE>
-SignalBlockArrayBase<T, COEFFS_SIZE> interpolateCoeffsLinear(
-                                                             const std::array<T, COEFFS_SIZE>& c0,
-                                                             const std::array<T, COEFFS_SIZE>& c1)
-{
-  SignalBlockArrayBase<T, COEFFS_SIZE> vy;
-  for (size_t i = 0; i < COEFFS_SIZE; ++i)
-  {
-    vy.setRow(i, interpolateBlockLinear(c0[i], c1[i]));
-  }
-  return vy;
-}
-
 template<typename T, typename Derived>
 struct Filter
 {
-  // Block processing with parameter interpolation (one Params per block)
-  template<typename Params>
-  Block<T> operator()(const Block<T>& input, Params nextParams)
-  {
-    auto& self = *static_cast<Derived*>(this);
-    Block<T> output;
-    
-    auto nextCoeffs = Derived::makeCoeffs(nextParams);
-    auto coeffsBlock = interpolateCoeffsLinear(self.coeffs, nextCoeffs);
-    self.coeffs = nextCoeffs;
-    
-    for (size_t t = 0; t < kFramesPerBlock; ++t)
-    {
-      typename Derived::Coeffs c;
-      for (size_t i = 0; i < Derived::nCoeffs; ++i)
-      {
-        c[i] = coeffsBlock.rowPtr(i)[t];
-      }
-      output[t] = self.nextFrame(input[t], c);
-    }
-    return output;
-  }
-  
-  // Block processing with signal-rate params (makeCoeffs called per frame)
+  // Block processing with signal-rate params (one Params per frame)
   template<size_t N_PARAMS>
   Block<T> operator()(const Block<T>& input,
                       const SignalBlockArrayBase<T, N_PARAMS>& paramBlock)
@@ -80,6 +44,58 @@ struct Filter
     return output;
   }
   
+  // Block processing with parameter interpolation — T::Params argument
+  // std::enable_if_t... disables matching when the single argument is a float
+  template<typename Params,
+  typename = std::enable_if_t<!std::is_same_v<std::remove_cv_t<std::remove_reference_t<Params>>, float>>>
+  Block<T> operator()(const Block<T>& input, Params nextParams)
+  {
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    
+    auto nextCoeffs = Derived::makeCoeffs(nextParams);
+    auto coeffsBlock = interpolateCoeffsLinear(self.coeffs, nextCoeffs);
+    self.coeffs = nextCoeffs;
+    
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      typename Derived::Coeffs c;
+      for (size_t i = 0; i < Derived::nCoeffs; ++i)
+      {
+        c[i] = coeffsBlock.rowPtr(i)[t];
+      }
+      output[t] = self.nextFrame(input[t], c);
+    }
+    return output;
+  }
+  
+  // Block processing with parameter interpolation — list of float arguments
+  template<typename... Args>
+  Block<T> operator()(const Block<T>& input, Args&&... args)
+  {
+    static_assert((std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, float> && ...),
+                  "Gen::operator(): all arguments must be float");
+    
+    std::array<std::common_type_t<Args...>, sizeof...(Args)> arr = { std::forward<Args>(args)... };
+    const std::array nextParams = arr;
+    
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    
+    auto nextCoeffs = Derived::makeCoeffs(nextParams);
+    auto coeffsBlock = interpolateCoeffsLinear(self.coeffs, nextCoeffs);
+    self.coeffs = nextCoeffs;
+    
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      typename Derived::Coeffs c;
+      for (size_t i = 0; i < Derived::nCoeffs; ++i)
+        c[i] = coeffsBlock.rowPtr(i)[t];
+      output[t] = self.nextFrame(c);
+    }
+    return output;
+  }
+
   // Block processing with constant stored coefficients
   Block<T> operator()(const Block<T>& input)
   {
