@@ -35,12 +35,11 @@ struct Gen
     return output;
   }
   
-  // Block processing with parameter interpolation — T::Params argument
-  // std::enable_if_t... disables matching when the single argument is a float
-  template<typename Params,
-  typename = std::enable_if_t<!std::is_same_v<std::remove_cv_t<std::remove_reference_t<Params>>, float>>>
-  Block<T> operator()(Params nextParams)
+  // Block processing with parameter interpolation from std::array argument
+  template<size_t N_PARAMS>
+  Block<T> operator()(const std::array<T, N_PARAMS>& nextParams)
   {
+    static_assert(N_PARAMS == Derived::nParams, "paramBlock row count must match nParams");
     auto& self = *static_cast<Derived*>(this);
     Block<T> output;
     
@@ -58,13 +57,13 @@ struct Gen
     return output;
   }
   
+  
   // Block processing with parameter interpolation — list of float arguments
-  template<typename... Args>
+  template<typename... Args,
+  typename = std::enable_if_t<(std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, float> && ...)>>
   Block<T> operator()(Args&&... args)
+
   {
-    static_assert((std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, float> && ...),
-                  "Gen::operator(): all arguments must be float");
-    
     std::array<std::common_type_t<Args...>, sizeof...(Args)> arr = { std::forward<Args>(args)... };
     const std::array nextParams = arr;
     
@@ -85,6 +84,7 @@ struct Gen
     return output;
   }
 
+  
   // Block processing with constant stored coefficients
   Block<T> operator()()
   {
@@ -504,6 +504,7 @@ struct PhasorGen : Gen<T, PhasorGen<T>>
   
   void clear() { omega_ = T{0.f}; }
   
+  // just copying param to get the coefficient, needed for template compatibility
   static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
   
   T nextFrame(Coeffs c)
