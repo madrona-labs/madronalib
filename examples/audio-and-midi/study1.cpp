@@ -15,13 +15,16 @@ constexpr float kOutputGain = 0.1f;
 
 struct Study1 : public SignalProcessor
 {
-  PhasorGen<float> phasor1 ;
+  NoiseGen<float> test1;
+  PinkFilter<float> pinker;
+  PhasorGen<float> phasor1;
   TickGen<float> tick1;
   PulseGen<float> osc1;
   ADSR env1;
   
-  void init()
+  void init(float sr)
   {
+    pinker.init(sr);
     env1.coeffs = ADSR::calcCoeffs(0, 0, 1, 1.0f, 48000);
     publishSignal("osc", 512, 1, 1, 0);
     setPublishedSignalsActive(true);
@@ -29,8 +32,6 @@ struct Study1 : public SignalProcessor
   
   SignalBlock process(AudioContext* ctx)
   {
-    SignalBlock output;
-    
     const float sr = ctx->getSampleRate();
 
     auto ticks = tick1(2.f/sr);
@@ -40,11 +41,14 @@ struct Study1 : public SignalProcessor
     SignalBlock osc1Freq = (20.f + modOut*4000.f)/sr;
     SignalBlock osc1Duty {0.5f};
     SignalBlockArray<2> rectParams = concatRows(osc1Freq, osc1Duty);
-    float osc1FreqF = osc1Freq[0];
     auto oscOut = osc1(rectParams);
     
     // store signal from oscillator as "osc"
+    // NOTE: downsampling param does not seem to be working
     storePublishedSignal("osc", oscOut, kFramesPerBlock, 1);
+    
+    // test pink noise
+    auto pinkNoise = pinker(test1())*dBToAmp(-40.f);
  
     // mono output
     return envs*oscOut*kOutputGain;
@@ -67,7 +71,7 @@ int main()
   AudioTask study1Task(&ctx, study1Process, &state);
   const float sr = ctx.getSampleRate();
   
-  state.init();
+  state.init(sr);
   
   // very simple background thread for reading signals from state
   std::thread ticker([&]() {
