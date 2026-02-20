@@ -43,7 +43,7 @@ class ExampleProcessor : public SignalProcessor
 {
 public:
   // sine generators.
-  SineGen s1, s2;
+  SineGen<float> s1, s2;
 };
 
 void processParamsExample(AudioContext* ctx, void *untypedProcState)

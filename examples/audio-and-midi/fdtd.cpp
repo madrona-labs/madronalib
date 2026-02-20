@@ -27,8 +27,8 @@ using FDTDSurface = float[kRowStride*kTotalHeight];
 
 struct FDTDState
 {
-  ImpulseGen impulse1;
-  SineGen sine1;
+  ImpulseGen<float> impulse1;
+  SineGen<float> sine1;
   FDTDSurface u0{0};
   FDTDSurface u1{0};
   FDTDSurface u2{0};
