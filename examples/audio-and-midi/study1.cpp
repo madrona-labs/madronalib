@@ -15,24 +15,16 @@ constexpr float kOutputGain = 0.1f;
 
 struct Study1 : public SignalProcessor
 {
-  // TODO this is not working Bank<SawGen, 8> oscs;
-  
-  PhasorGen<float>::Params pTest;
-  
-  SawGen<float> s1;
-  SawGen<float> s2;
-  SawGen<float> osc1;
-  
-  SineGen<float> modOsc1;
-  
+  PhasorGen<float> phasor1 ;
   TickGen<float> tick1;
-  TickGen<float> tick2;
+  PulseGen<float> osc1;
   ADSR env1;
   
   void init()
   {
     env1.coeffs = ADSR::calcCoeffs(0, 0, 1, 1.0f, 48000);
-    publishSignal("ticks", 512, 1, 1, 0);
+    publishSignal("osc", 512, 1, 1, 0);
+    setPublishedSignalsActive(true);
   }
   
   SignalBlock process(AudioContext* ctx)
@@ -40,28 +32,19 @@ struct Study1 : public SignalProcessor
     SignalBlock output;
     
     const float sr = ctx->getSampleRate();
-    
-    
-    //auto oscsOut = state->oscs();
-    
-    // OK auto ticks = state->tick1(RectGen<float>::Params{2.f/sr, 0.01f});
-    //  std::array<float, 2> tickParams{2.f/kSampleRate, 0.01f};
-    //  auto ticks = state->tick1(tickParams);
-    
-    SignalBlock tickParams{2.f/sr};
-    //std::array<float, 1> tickParams{2.f/sr};
-    //float tickParams{2.f/sr};
-    auto ticks = tick1(tickParams);
-    
+
+    auto ticks = tick1(2.f/sr);
     auto envs = env1(ticks);
     
-    //  auto oscOut = state->osc1(SawGen<float>::Params{110.f/sr});
+    SignalBlock modOut = phasor1(0.25f/sr);
+    SignalBlock osc1Freq = (20.f + modOut*4000.f)/sr;
+    SignalBlock osc1Duty {0.5f};
+    SignalBlockArray<2> rectParams = concatRows(osc1Freq, osc1Duty);
+    float osc1FreqF = osc1Freq[0];
+    auto oscOut = osc1(rectParams);
     
-    SignalBlock modOscOut = modOsc1(257.f/sr);
-    SignalBlock osc1Freq = (220.f + modOscOut*100.f)/sr;
-    auto oscOut = osc1(osc1Freq);
-    
-    storePublishedSignal("ticks", ticks, kFramesPerBlock, 1);
+    // store signal from oscillator as "osc"
+    storePublishedSignal("osc", oscOut, kFramesPerBlock, 1);
  
     // mono output
     return envs*oscOut*kOutputGain;
@@ -69,15 +52,11 @@ struct Study1 : public SignalProcessor
 };
 
 
-// sineProcess() does all of the audio processing, in SignalBlock-sized chunks.
+// study1Process() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
 void study1Process(AudioContext* ctx, void *untypedProcState)
 {
   auto state = static_cast< Study1* >(untypedProcState);
-            
-  // Running the sine generators makes SignalBlocks as output.
-  // The input parameter is omega: the frequency in Hz divided by the sample rate.
-  // The output sines are multiplied by the gain.
   ctx->outputs[0] = ctx->outputs[1] = state->process(ctx);
 }
 
@@ -85,22 +64,31 @@ int main()
 {
   Study1 state;
   AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
-  AudioTask study1(&ctx, study1Process, &state);
+  AudioTask study1Task(&ctx, study1Process, &state);
   const float sr = ctx.getSampleRate();
-
+  
   state.init();
   
-  //  prelude: test sparklines
-  //float omega{2200.f / sr};
-  //SignalBlock omega{2200.f/sr};
-  std::array<float, 1> omega{2200.f/sr};
-
-  //float tickParams{2.f/sr};
-
-  auto a = sparkline(state.s1(omega));
-  std::cout << "spark: " << a <<  "\n";
-  std::cout << "bar: " << a <<  "\n";
+  // very simple background thread for reading signals from state
+  std::thread ticker([&]() {
+    while (!study1Task.hasQuit())
+    {
+      SignalBlock osc1Sig;
+      auto& signals = state.getPublishedSignals();
+      auto framesAvailable = signals["osc"]->getReadAvailable();
+      if(framesAvailable > kFramesPerBlock)
+      {
+        auto& buf = signals["osc"]->buffer_;
+        buf.read(osc1Sig.data(), kFramesPerBlock);
+        std::cout << sparkline(osc1Sig) << "\n";
+      }
+      
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+  });
   
-  
-  return study1.runConsoleApp();
+
+  auto result = study1Task.runConsoleApp();
+  ticker.join();
+  return result;
 }

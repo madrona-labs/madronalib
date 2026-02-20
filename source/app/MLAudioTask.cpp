@@ -96,6 +96,8 @@ constexpr int kRtAudioCallbackFrames{512};
 
 struct AudioProcessData
 {
+  std::atomic<bool> hasQuit{false};
+  
   // buffered processing
   std::unique_ptr<SignalProcessBuffer> buffer;
 
@@ -208,7 +210,7 @@ int AudioTask::startAudio()
   RtAudio::StreamOptions options;
   options.flags |= RTAUDIO_NONINTERLEAVED;
 
-  auto pInputParams = (nInputs ? &iParams : nullptr);
+  auto pInputParams = (nInputs ? &iParams : nullptr); 
 
   if (RTAUDIO_NO_ERROR != pImpl->adac.openStream(&oParams, pInputParams, RTAUDIO_FLOAT32,
                                                  sampleRate, &bufferFrames, &RtAudioCallbackFn,
@@ -229,6 +231,8 @@ int AudioTask::startAudio()
 
 void AudioTask::stopAudio()
 {
+  pImpl->processData.hasQuit = true;
+
   if (RTAUDIO_NO_ERROR != pImpl->adac.stopStream())
   {
     std::cout << pImpl->adac.getErrorText() << std::endl;
@@ -236,6 +240,17 @@ void AudioTask::stopAudio()
 
   if (pImpl->adac.isStreamOpen()) pImpl->adac.closeStream();
 }
+
+bool AudioTask::hasQuit() const
+{
+  return pImpl->processData.hasQuit;
+}
+
+void* AudioTask::getState()
+{
+  return pImpl->processData.processState;
+}
+
 
 int AudioTask::runConsoleApp()
 {

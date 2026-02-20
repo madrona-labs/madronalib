@@ -18,7 +18,7 @@ struct ExampleState {
   // These are the default mappings of my Akai MIDIMix hardware. Pick any numbers you like.
   std::vector< int > sineControllers {19, 23, 27, 31, 49, 53, 57, 61};
   const int volumeControl{62};
-  std::vector< SineGen > sineGens;
+  std::vector< SineGen<float> > sineGens; // TODO use Bank!
 };
 
 // processAudio() does all of the audio processing, in SignalBlock-sized chunks.

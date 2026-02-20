@@ -25,14 +25,17 @@ class AudioTask
   static constexpr int kMaxBlockSize{4096};
 
  public:
-  AudioTask(AudioContext* ctx, SignalProcessFn procFn, void* procState);
+  AudioTask(AudioContext* ctx, SignalProcessFn procFn, void* state);
 
   ~AudioTask();
 
   int startAudio();
   void stopAudio();
   int runConsoleApp();
-
+  
+  bool hasQuit() const;
+  void* getState();
+  
  private:
   struct Impl;
   std::unique_ptr<Impl> pImpl;

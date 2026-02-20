@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <type_traits>
 #include "MLDSPOps.h"
 #include "MLDSPUtils.h"
 
@@ -156,10 +155,10 @@ T phasorToPulseSample(T phase, T freq, T pulseWidth)
   if constexpr (std::is_same_v<T, float>)
   {
     float pulse = (phase >= pulseWidth) ? 1.0f : -1.0f;
-    pulse += polyBLEPSample<T>(phase, freq);
+    pulse -= polyBLEPSample<T>(phase, freq);
     float downPhase = phase - pulseWidth + 1.0f;
     downPhase = downPhase - intPart(downPhase);
-    pulse -= polyBLEPSample<T>(downPhase, freq);
+    pulse += polyBLEPSample<T>(downPhase, freq);
     return pulse;
   }
   else
@@ -246,39 +245,6 @@ struct TickGen : Gen<T, TickGen<T>>
       omega_ = omega_ - andBits(mask, ones);
       return andBits(mask, ones);
     }
-  }
-};
-
-// ----------------------------------------------------------------
-// RectGen
-// Generate an antialiased rectangle wave repeating at the given frequency
-// with the given pulse width.
-
-template<typename T>
-struct RectGen : Gen<T, RectGen<T>>
-{
-  enum { freq, width, nParams };
-  enum { freqCoeff, widthCoeff, nCoeffs };
-  
-  using Params = std::array<T, nParams>;
-  using Coeffs = std::array<T, nCoeffs>;
-  
-  Coeffs coeffs{};
-  T omega_{0.f};
-  
-  void clear()
-  {
-    omega_ = T{0.f};
-    const Params kDefaultParams{0.f, 0.5f};
-    coeffs = makeCoeffs(kDefaultParams);
-  }
-  
-  static Coeffs makeCoeffs(Params p) { return {p[freq], p[width]}; }
-  
-  T nextFrame(Coeffs c)
-  {
-    omega_ = fracPart(omega_ + c[freqCoeff]);
-    return phasorToPulseSample(omega_, c[freqCoeff], c[widthCoeff]);
   }
 };
 
