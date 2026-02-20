@@ -23,13 +23,7 @@
 #endif
 
 #include <array>
-//#include <cstddef>
-//#include <functional>
 #include <iostream>
-//#include <iterator>
-//#include <type_traits>
-//#include <vector>
-//#include <utility>
 
 #include "MLDSPMath.h"
 #include "MLDSPMathApprox.h"

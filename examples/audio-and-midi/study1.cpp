@@ -4,6 +4,7 @@
 
 #include "madronalib.h"
 #include "mldsp.h"
+#include "MLSparkline.h"
 
 using namespace ml;
 
@@ -18,22 +19,53 @@ struct Study1 : public SignalProcessor
   
   PhasorGen<float>::Params pTest;
   
-  
   SawGen<float> s1;
   SawGen<float> s2;
   SawGen<float> osc1;
   
-  RectGen<float> tick1;
+  SineGen<float> modOsc1;
+  
+  TickGen<float> tick1;
+  TickGen<float> tick2;
   ADSR env1;
   
   void init()
   {
     env1.coeffs = ADSR::calcCoeffs(0, 0, 1, 1.0f, 48000);
-    
-    //publishSignal
+    publishSignal("ticks", 512, 1, 1, 0);
   }
-
-
+  
+  SignalBlock process(AudioContext* ctx)
+  {
+    SignalBlock output;
+    
+    const float sr = ctx->getSampleRate();
+    
+    
+    //auto oscsOut = state->oscs();
+    
+    // OK auto ticks = state->tick1(RectGen<float>::Params{2.f/sr, 0.01f});
+    //  std::array<float, 2> tickParams{2.f/kSampleRate, 0.01f};
+    //  auto ticks = state->tick1(tickParams);
+    
+    SignalBlock tickParams{2.f/sr};
+    //std::array<float, 1> tickParams{2.f/sr};
+    //float tickParams{2.f/sr};
+    auto ticks = tick1(tickParams);
+    
+    auto envs = env1(ticks);
+    
+    //  auto oscOut = state->osc1(SawGen<float>::Params{110.f/sr});
+    
+    SignalBlock modOscOut = modOsc1(257.f/sr);
+    SignalBlock osc1Freq = (220.f + modOscOut*100.f)/sr;
+    auto oscOut = osc1(osc1Freq);
+    
+    storePublishedSignal("ticks", ticks, kFramesPerBlock, 1);
+ 
+    // mono output
+    return envs*oscOut*kOutputGain;
+  }
 };
 
 
@@ -42,35 +74,11 @@ struct Study1 : public SignalProcessor
 void study1Process(AudioContext* ctx, void *untypedProcState)
 {
   auto state = static_cast< Study1* >(untypedProcState);
-
-  const float sr = kSampleRate;
-  
-  
-  //auto oscsOut = state->oscs();
-  
-  // OK auto ticks = state->tick1(RectGen<float>::Params{2.f/sr, 0.01f});
-  //  std::array<float, 2> tickParams{2.f/kSampleRate, 0.01f};
-  //  auto ticks = state->tick1(tickParams);
-  
-  auto ticks = state->tick1(2.f/sr, 0.01f);
-  
-  std::array<float, 2> tickParamsArray{2.f/sr, 0.01f};
-  auto ticks2 = state->tick1(tickParamsArray);
-  
-  RectGen<float>::Params tickParams{2.f/sr, 0.01f};
-  auto ticks3 = state->tick1(tickParams);
-  
-  auto envs = state->env1(ticks);
-  
-//  auto oscOut = state->osc1(SawGen<float>::Params{110.f/sr});
-  
-  auto oscOut = state->osc1(110.f/sr);
-                            
-                            
+            
   // Running the sine generators makes SignalBlocks as output.
   // The input parameter is omega: the frequency in Hz divided by the sample rate.
   // The output sines are multiplied by the gain.
-  ctx->outputs[0] = ctx->outputs[1] = oscOut*kOutputGain;
+  ctx->outputs[0] = ctx->outputs[1] = state->process(ctx);
 }
 
 int main()
@@ -78,14 +86,20 @@ int main()
   Study1 state;
   AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
   AudioTask study1(&ctx, study1Process, &state);
-  
+  const float sr = ctx.getSampleRate();
+
   state.init();
   
   //  prelude: test sparklines
-  // SignalBlock omega = 2200.f / kSampleRate;
-  //auto a = sparkline(state.s1(omega));
-  //std::cout << "spark: " << sparkline(state.s1(omega)) <<  "\n";
-  //std::cout << "bar: " << sparkgraph(state.s1(omega)) <<  "\n";
+  //float omega{2200.f / sr};
+  //SignalBlock omega{2200.f/sr};
+  std::array<float, 1> omega{2200.f/sr};
+
+  //float tickParams{2.f/sr};
+
+  auto a = sparkline(state.s1(omega));
+  std::cout << "spark: " << a <<  "\n";
+  std::cout << "bar: " << a <<  "\n";
   
   
   return study1.runConsoleApp();
