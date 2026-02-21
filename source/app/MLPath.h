@@ -59,6 +59,27 @@ class GenericPath
 {
  public:
   constexpr GenericPath() = default;
+  GenericPath(const GenericPath&) = default;
+  GenericPath& operator=(const GenericPath&) = default;
+
+  GenericPath(GenericPath&& other) noexcept
+      : elements_(std::move(other.elements_)), size_(other.size_), copy_(other.copy_)
+  {
+    other.size_ = 0;
+  }
+
+  GenericPath& operator=(GenericPath&& other) noexcept
+  {
+    if (this != &other)
+    {
+      elements_ = std::move(other.elements_);
+      size_ = other.size_;
+      copy_ = other.copy_;
+      other.size_ = 0;
+    }
+    return *this;
+  }
+
   GenericPath(const char* str);
   GenericPath(const TextFragment& frag);
 
