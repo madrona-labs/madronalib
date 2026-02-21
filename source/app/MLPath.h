@@ -63,21 +63,21 @@ class GenericPath
   GenericPath(const TextFragment& frag);
 
   // Combining paths
-  GenericPath(const GenericPath p1, const GenericPath p2)
+  GenericPath(const GenericPath& p1, const GenericPath& p2)
   {
     for (K elem : p1) addElement(elem);
     for (K elem : p2) addElement(elem);
   }
 
-  GenericPath(const GenericPath p1, const GenericPath p2, const GenericPath p3)
+  GenericPath(const GenericPath& p1, const GenericPath& p2, const GenericPath& p3)
   {
     for (K elem : p1) addElement(elem);
     for (K elem : p2) addElement(elem);
     for (K elem : p3) addElement(elem);
   }
 
-  GenericPath(const GenericPath p1, const GenericPath p2, const GenericPath p3,
-              const GenericPath p4)
+  GenericPath(const GenericPath& p1, const GenericPath& p2, const GenericPath& p3,
+              const GenericPath& p4)
   {
     for (K elem : p1) addElement(elem);
     for (K elem : p2) addElement(elem);
@@ -86,7 +86,7 @@ class GenericPath
   }
 
   // Comparison
-  bool operator==(const GenericPath b) const
+  bool operator==(const GenericPath& b) const
   {
     if (getSize() != b.getSize()) return false;
     for (int i = 0; i < getSize(); ++i)
@@ -96,7 +96,7 @@ class GenericPath
     return true;
   }
 
-  bool operator!=(const GenericPath b) const { return !(operator==(b)); }
+  bool operator!=(const GenericPath& b) const { return !(operator==(b)); }
   explicit operator bool() const { return size_ != 0; }
 
   // Accessors
@@ -112,7 +112,7 @@ class GenericPath
     }
   }
 
-  bool beginsWith(GenericPath<K> b) const
+  bool beginsWith(const GenericPath<K>& b) const
   {
     if (b.getSize() > getSize()) return false;
     for (int i = 0; i < b.getSize(); ++i)
