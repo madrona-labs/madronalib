@@ -52,7 +52,10 @@ void SignalProcessBuffer::process(const float** externalInputs, float** external
     }
   }
 
+  samplesAccumulated_ += externalFrames;
+
   // run vector-size process until we have externalFrames of output
+  bool didProcess{false};
   int startOffset{0};
   while (outputBuffers_[0].getReadAvailable() < externalFrames)
   {
@@ -75,6 +78,8 @@ void SignalProcessBuffer::process(const float** externalInputs, float** external
     {
       outputBuffers_[c].write(context->outputs[c]);
     }
+
+    didProcess = true;
   }
 
   // read from outputBuffers to external outputs
@@ -86,7 +91,17 @@ void SignalProcessBuffer::process(const float** externalInputs, float** external
     }
   }
 
-  context->clearInputEvents();
+  // only clear events after processVector has consumed them.
+  // when the loop doesn't run, events must survive until the next call.
+  if (didProcess)
+  {
+    context->clearInputEvents();
+    samplesAccumulated_ = std::max(0, samplesAccumulated_ - startOffset);
+  }
+
+  // set the time offset for events added in the next host callback.
+  // this ensures they land at the correct position in the accumulation window.
+  context->setInputEventTimeOffset(samplesAccumulated_);
 }
 
 }  // namespace ml
