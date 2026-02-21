@@ -13,8 +13,7 @@
 
 namespace ml
 {
-static constexpr int kShortFragmentSizeInCodePoints = 16;
-static constexpr int kShortFragmentSizeInChars = kShortFragmentSizeInCodePoints * 4;
+static constexpr int kShortFragmentSizeInChars = 16;
 
 using CodePoint = char32_t;
 
@@ -108,6 +107,7 @@ class TextFragment
   Iterator begin() const;
   Iterator end() const;
 
+  // TODO shouldn't this be called c_str()?
   inline const char* getText() const { return pText_; }
 
   inline bool beginsWith(const TextFragment& fb) const
