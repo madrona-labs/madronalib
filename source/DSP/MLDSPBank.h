@@ -19,6 +19,11 @@
 namespace ml
 {
 
+// These Bank templates are just a start. TODO: determine a good API for setting
+// banks of parameters. Callers shouldn't have to worry about float4- rather, set one or more
+// rows of the stored params, or pass in a Block of params with nicer syntax. Look at
+// relationship to Projections. 
+
 // ----------------------------------------------------------------
 // GenBank: a bank of generator processors (no audio input).
 // FN must be a generator with the Gen<T, Derived> interface.
