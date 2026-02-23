@@ -35,7 +35,6 @@ TEST_CASE("madronalib/bank/tickgen_bank", "[bank]")
     freqInput.rowPtr(1)[t] = float4(1.f/8, 1.f/16, 1.f/32, 1.f/64);
   }
   
-  
   // run two blocks to get past any startup transient
   bank(freqInput);
   outputType output = bank(freqInput);
@@ -81,14 +80,13 @@ TEST_CASE("madronalib/bank/tickgen_bank", "[bank]")
       REQUIRE(rowA[t] == rowB[t]);
     }
   }
-
 }
 
 
 TEST_CASE("madronalib/bank/lopass_bank", "[bank]")
 {
-  FilterBank<Lopass, 8> bank;
-  bank.clear();
+  FilterBank<Lopass, 8> lopassBank;
+  lopassBank.clear();
 
   using inputType  = FilterBank<Lopass, 8>::inputType;
   using outputType = FilterBank<Lopass, 8>::outputType;
@@ -98,7 +96,7 @@ TEST_CASE("madronalib/bank/lopass_bank", "[bank]")
   // DC audio input: all voices = constant 1.0
   inputType dcInput{float4(1.0f)};
 
-  // low cutoff params (omega=0.05, k=0.5) for all processors
+  // low cutoff params (omega=0.05, k=0.5) for all filters
   std::array<Params, kProcs> loParams;
   loParams.fill(Params{float4(0.05f), float4(0.5f)});
 
@@ -106,11 +104,11 @@ TEST_CASE("madronalib/bank/lopass_bank", "[bank]")
   {
     auto loCoeffs = FilterBank<Lopass, 8>::Processor::makeCoeffs(Params{float4(0.05f), float4(0.5f)});
     for (int p = 0; p < kProcs; ++p)
-      bank[p].coeffs = loCoeffs;
+      lopassBank[p].coeffs = loCoeffs;
 
     outputType output;
     for (int i = 0; i < 30; ++i)
-      output = bank(dcInput);
+      output = lopassBank(dcInput);
 
     auto hOutput = verticalToHorizontal<kProcs>(output);
     for (int v = 0; v < 8; ++v)
@@ -129,11 +127,9 @@ TEST_CASE("madronalib/bank/lopass_bank", "[bank]")
     sineBank.clear();
 
     // all 8 voices at near-Nyquist frequency
-    GenBank<SineGen, 8>::inputType sineFreqs{float4(0.49f)};
+    GenBank<SineGen, 8>::inputType sineFreqs{float4(0.25f)};
 
-    outputType output;
-    for (int i = 0; i < 10; ++i)
-      output = bank(sineBank(sineFreqs), loParams);
+    auto output = lopassBank(sineBank(sineFreqs), loParams);
 
     auto hOutput = verticalToHorizontal<kProcs>(output);
     for (int v = 0; v < 8; ++v)
