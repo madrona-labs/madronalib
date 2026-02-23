@@ -80,9 +80,7 @@ inline float4 operator<=(float4 a, float4 b) { return float4(_mm_cmple_ps(a, b))
 
 // select using float4 mask
 inline float4 select(float4 whenTrue, float4 whenFalse, float4 conditionMask) {
-  int4 ones = set1Int(-1);
-  return orBits(andBits(conditionMask, whenTrue),
-                andBits(xorBits(conditionMask, reinterpretIntAsFloat(ones)), whenFalse));
+  return orBits(andBits(conditionMask, whenTrue), andNotBits(conditionMask, whenFalse));
 }
 
 // ----------------------------------------------------------------
