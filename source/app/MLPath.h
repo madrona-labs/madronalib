@@ -59,25 +59,46 @@ class GenericPath
 {
  public:
   constexpr GenericPath() = default;
+  GenericPath(const GenericPath&) = default;
+  GenericPath& operator=(const GenericPath&) = default;
+
+  GenericPath(GenericPath&& other) noexcept
+      : elements_(std::move(other.elements_)), size_(other.size_), copy_(other.copy_)
+  {
+    other.size_ = 0;
+  }
+
+  GenericPath& operator=(GenericPath&& other) noexcept
+  {
+    if (this != &other)
+    {
+      elements_ = std::move(other.elements_);
+      size_ = other.size_;
+      copy_ = other.copy_;
+      other.size_ = 0;
+    }
+    return *this;
+  }
+
   GenericPath(const char* str);
   GenericPath(const TextFragment& frag);
 
   // Combining paths
-  GenericPath(const GenericPath p1, const GenericPath p2)
+  GenericPath(const GenericPath& p1, const GenericPath& p2)
   {
     for (K elem : p1) addElement(elem);
     for (K elem : p2) addElement(elem);
   }
 
-  GenericPath(const GenericPath p1, const GenericPath p2, const GenericPath p3)
+  GenericPath(const GenericPath& p1, const GenericPath& p2, const GenericPath& p3)
   {
     for (K elem : p1) addElement(elem);
     for (K elem : p2) addElement(elem);
     for (K elem : p3) addElement(elem);
   }
 
-  GenericPath(const GenericPath p1, const GenericPath p2, const GenericPath p3,
-              const GenericPath p4)
+  GenericPath(const GenericPath& p1, const GenericPath& p2, const GenericPath& p3,
+              const GenericPath& p4)
   {
     for (K elem : p1) addElement(elem);
     for (K elem : p2) addElement(elem);
@@ -86,7 +107,7 @@ class GenericPath
   }
 
   // Comparison
-  bool operator==(const GenericPath b) const
+  bool operator==(const GenericPath& b) const
   {
     if (getSize() != b.getSize()) return false;
     for (int i = 0; i < getSize(); ++i)
@@ -96,7 +117,7 @@ class GenericPath
     return true;
   }
 
-  bool operator!=(const GenericPath b) const { return !(operator==(b)); }
+  bool operator!=(const GenericPath& b) const { return !(operator==(b)); }
   explicit operator bool() const { return size_ != 0; }
 
   // Accessors
@@ -112,7 +133,7 @@ class GenericPath
     }
   }
 
-  bool beginsWith(GenericPath<K> b) const
+  bool beginsWith(const GenericPath<K>& b) const
   {
     if (b.getSize() > getSize()) return false;
     for (int i = 0; i < b.getSize(); ++i)
@@ -184,49 +205,49 @@ protected:
 
 
 template <class K>
-inline K head(GenericPath<K> p)
+inline K head(const GenericPath<K>& p)
 {
   return p.getSize() > 0 ? p.getElement(0) : K();
 }
 
 template <class K>
-inline K first(GenericPath<K> p)
+inline K first(const GenericPath<K>& p)
 {
   return head(p);
 }
 
 template <class K>
-inline K second(GenericPath<K> p)
+inline K second(const GenericPath<K>& p)
 {
   return p.getSize() > 1 ? p.getElement(1) : K();
 }
 
 template <class K>
-inline K third(GenericPath<K> p)
+inline K third(const GenericPath<K>& p)
 {
   return p.getSize() > 2 ? p.getElement(2) : K();
 }
 
 template <class K>
-inline K fourth(GenericPath<K> p)
+inline K fourth(const GenericPath<K>& p)
 {
   return p.getSize() > 3 ? p.getElement(3) : K();
 }
 
 template <class K>
-inline K fifth(GenericPath<K> p)
+inline K fifth(const GenericPath<K>& p)
 {
   return p.getSize() > 4 ? p.getElement(4) : K();
 }
 
 template <class K>
-inline K nth(GenericPath<K> p, size_t n)
+inline K nth(const GenericPath<K>& p, size_t n)
 {
   return p.getSize() > n ? p.getElement(n) : K();
 }
 
 template <class K>
-inline GenericPath<K> tail(GenericPath<K> p)
+inline GenericPath<K> tail(const GenericPath<K>& p)
 {
   GenericPath<K> r;
   for (int n = 1; n < p.getSize(); ++n)
@@ -237,7 +258,7 @@ inline GenericPath<K> tail(GenericPath<K> p)
 }
 
 template <class K>
-inline GenericPath<K> butLast(GenericPath<K> p)
+inline GenericPath<K> butLast(const GenericPath<K>& p)
 {
   GenericPath<K> r;
   for (int n = 0; n < p.getSize() - 1; ++n)
@@ -248,13 +269,13 @@ inline GenericPath<K> butLast(GenericPath<K> p)
 }
 
 template <class K>
-inline K last(GenericPath<K> p)
+inline K last(const GenericPath<K>& p)
 {
   return p.getSize() > 0 ? p.getElement(p.getSize() - 1) : K();
 }
 
 template <class K>
-inline GenericPath<K> lastN(GenericPath<K> p, size_t n)
+inline GenericPath<K> lastN(const GenericPath<K>& p, size_t n)
 {
   auto len = p.getSize();
   if (len >= n)
@@ -331,7 +352,7 @@ inline Path::GenericPath(const TextFragment& frag)
 }
 
 // GenericPath<Symbol>-specific helper functions
-inline Path substitute(Path p, Symbol from, Symbol to)
+inline Path substitute(const Path& p, Symbol from, Symbol to)
 {
   Path r{p};
   for (int n = 0; n < p.getSize(); ++n)
@@ -344,7 +365,7 @@ inline Path substitute(Path p, Symbol from, Symbol to)
   return r;
 }
 
-inline Path substitute(Path p, Symbol fromSym, Path toPath)
+inline Path substitute(const Path& p, Symbol fromSym, const Path& toPath)
 {
   Path r;
   for (int n = 0; n < p.getSize(); ++n)

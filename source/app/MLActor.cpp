@@ -8,6 +8,19 @@ using namespace ml;
 
 Actor* ActorRegistry::getActor(Path actorName) { return actors_[actorName]; }
 
+Path ActorRegistry::getActorNameFromPointer(Actor* ptr)
+{
+  for (auto it = actors_.begin(); it != actors_.end(); ++it)
+  {
+    Actor* pa = *it;
+    if (pa == ptr)
+    {
+      return it.getCurrentPath();
+    }
+  }
+  return Path();
+}
+
 void ActorRegistry::doRegister(Path actorName, Actor* a) { actors_[actorName] = a; }
 
 void ActorRegistry::doRemove(Actor* actorToRemove)
@@ -28,3 +41,9 @@ void ActorRegistry::doRemove(Actor* actorToRemove)
 }
 
 void ActorRegistry::dump() { actors_.dump(); }
+
+Path Actor::self()
+{
+  SharedResourcePointer<ActorRegistry> registry;
+  return registry->getActorNameFromPointer(this);
+}

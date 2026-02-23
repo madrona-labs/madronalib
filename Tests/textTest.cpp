@@ -46,3 +46,30 @@ TEST_CASE("madronalib/core/text", "[text]")
   REQUIRE(textUtils::stripExtension(footxt) == "foo");
   REQUIRE(textUtils::getExtension(footxt) == "txt");
 }
+
+TEST_CASE("madronalib/core/text/numbers", "[text]")
+{
+  // basic round-trip: addFinalNumber then stripFinalNumber recovers original
+  textUtils::NameMaker namer;
+  for (int i = 0; i < 10; ++i)
+  {
+    int num = i * 39620;
+    TextFragment name(namer.nextName());
+    TextFragment withNum = textUtils::addFinalNumber(name, num);
+    TextFragment stripped = textUtils::stripFinalNumber(withNum);
+    int finalNumber = textUtils::getFinalNumber(withNum);
+
+    REQUIRE(name == stripped);
+    REQUIRE(num == finalNumber);
+  }
+
+  // stripping a name with no final number returns it unchanged
+  REQUIRE(textUtils::stripFinalNumber(TextFragment("hello")) == "hello");
+  REQUIRE(textUtils::stripFinalNumber(TextFragment("")) == "");
+
+  // all digits
+  REQUIRE(textUtils::stripFinalNumber(TextFragment("12345")) == "");
+
+  // single trailing digit
+  REQUIRE(textUtils::stripFinalNumber(TextFragment("foo1")) == "foo");
+}

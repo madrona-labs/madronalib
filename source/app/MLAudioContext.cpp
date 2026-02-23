@@ -132,7 +132,12 @@ SignalBlock AudioContext::getInputController(size_t n) const
   return eventsToSignals.getController(n).output;
 }
 
-void AudioContext::addInputEvent(const Event& e) { eventsToSignals.addEvent(e); }
+void AudioContext::addInputEvent(const Event& e)
+{
+  Event adjusted = e;
+  adjusted.time += eventTimeOffset_;
+  eventsToSignals.addEvent(adjusted);
+}
 
 void AudioContext::updateTime(const double ppqPos, const double bpmIn, bool isPlaying,
                               double sampleRateIn)
