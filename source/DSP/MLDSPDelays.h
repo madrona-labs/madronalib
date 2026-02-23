@@ -346,7 +346,21 @@ class FDN
  public:
   // feedback gains array is public—just copy values to set.
   std::array<float, SIZE> mFeedbackGains{{0}};
+  
+  FDN()
+  {
+    static constexpr size_t kDefaultMaxDelay{128};
+    setMaxDelayInSamples(kDefaultMaxDelay);
+  }
 
+  void setMaxDelayInSamples(size_t d)
+  {
+    for (auto& delay : mDelays)
+    {
+      delay.setMaxDelayInSamples(d);
+    }
+  }
+  
   void setDelaysInSamples(std::array<float, SIZE> times)
   {
     for (int n = 0; n < SIZE; ++n)
@@ -358,7 +372,7 @@ class FDN
       mDelays[n].setDelayInSamples(len);
     }
   }
-
+  
   void setFilterCutoffs(std::array<float, SIZE> omegas)
   {
     for (int n = 0; n < SIZE; ++n)
