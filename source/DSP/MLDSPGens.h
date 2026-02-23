@@ -224,7 +224,7 @@ struct TickGen : Gen<T, TickGen<T>>
   
   void clear() { omega_ = T{0.f}; }
   
-  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
   T nextFrame(Coeffs c)
   {
@@ -306,7 +306,7 @@ struct ImpulseGen : Gen<T, ImpulseGen<T>>
     ampStepA_ = ampStepB_ = T{0.f};
   }
   
-  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
   static float tableLookupScalar(float pos)
   {
@@ -471,7 +471,7 @@ struct PhasorGen : Gen<T, PhasorGen<T>>
   void clear() { omega_ = T{0.f}; }
   
   // just copying param to get the coefficient, needed for template compatibility
-  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
   T nextFrame(Coeffs c)
   {
@@ -497,7 +497,7 @@ struct TestSineGen : Gen<T, TestSineGen<T>>
   
   void clear() { omega_ = T{0.f}; }
   
-  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
   T nextFrame(Coeffs c)
   {
@@ -534,7 +534,7 @@ struct SineGen : Gen<T, SineGen<T>>
   // initial phase of 0.75 maps to zero-crossing of the sine approximation
   void clear() { phasor_.clear(); phasor_.omega_ = T{0.75f}; }
   
-  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
   T nextFrame(Coeffs c)
   {
@@ -556,7 +556,7 @@ struct SawGen : Gen<T, SawGen<T>>
   
   void clear() { phasor_.clear(); }
   
-  static Coeffs makeCoeffs(Params p) { return {p[freq]}; }
+  static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
   T nextFrame(Coeffs c)
   {
@@ -587,7 +587,7 @@ struct PulseGen : Gen<T, PulseGen<T>>
     coeffs = makeCoeffs(kDefaultParams);
   }
   
-  static Coeffs makeCoeffs(Params p) { return {p[freq], p[width]}; }
+  static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
   T nextFrame(Coeffs c)
   {

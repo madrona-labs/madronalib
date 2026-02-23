@@ -82,19 +82,19 @@ struct TestFixture
   }
 
   // check gate at end of most recent DSP vector
-  float gateEnd(int voice) { return gateAt(voice, kFloatsPerDSPVector - 1); }
+  float gateEnd(int voice) { return gateAt(voice, kFramesPerBlock - 1); }
 };
 
 
 TEST_CASE("madronalib/core/events/basic_note_on_off", "[events]")
 {
   TestFixture t;
-  const int bufSize = kFloatsPerDSPVector;
+  const int bufSize = kFramesPerBlock;
 
   // note on
   t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 5)});
   REQUIRE(t.gateEnd(0) > 0.f);
-  REQUIRE(t.pitchAt(0, kFloatsPerDSPVector - 1) == Approx(60.f));
+  REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(60.f));
 
   // note off
   t.callback(bufSize, {makeNoteOff(60, 60.f, 5)});
@@ -168,7 +168,7 @@ TEST_CASE("madronalib/core/events/multiple_notes_small_buffer", "[events]")
   for (int v = 0; v < kPolyphony; ++v)
   {
     float gate = t.gateEnd(v);
-    float pitch = t.pitchAt(v, kFloatsPerDSPVector - 1);
+    float pitch = t.pitchAt(v, kFramesPerBlock - 1);
     if (gate > 0.f && pitch == Approx(60.f)) foundPitch60 = true;
     if (gate > 0.f && pitch == Approx(64.f)) foundPitch64 = true;
   }
@@ -193,7 +193,7 @@ TEST_CASE("madronalib/core/events/rapid_on_off_same_buffer", "[events]")
 
 TEST_CASE("madronalib/core/events/large_buffer", "[events]")
 {
-  // regression test: 128-sample buffer (larger than kFloatsPerDSPVector)
+  // regression test: 128-sample buffer (larger than kFramesPerBlock)
   TestFixture t;
   const int bufSize = 128;
 
