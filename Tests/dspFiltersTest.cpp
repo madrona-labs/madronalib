@@ -572,7 +572,7 @@ TEST_CASE("madronalib/filters/ladder", "[filters]")
     lf.coeffs = LadderFilter<float>::makeCoeffs({0.1f, 0.0f});
     auto mag = getLadderMagnitudes(lf);
     REQUIRE(mag[0] < 0.0001f);
-    int peakBin = std::max_element(mag.begin(), mag.end()) - mag.begin();
+    size_t peakBin = std::max_element(mag.begin(), mag.end()) - mag.begin();
     REQUIRE(peakBin >= 3);
     REQUIRE(peakBin <= 12);
   }
