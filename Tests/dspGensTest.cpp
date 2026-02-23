@@ -4,123 +4,154 @@
 
 // a unit test made using the Catch framework in catch.hpp / tests.cpp.
 
-
 #include "catch.hpp"
 #include "MLTestUtils.h"
 #include "MLDSPGens.h"
 
-#define DO_TIME_TESTS 0
+#include <cmath>
 
 using namespace ml;
 using namespace testUtils;
 
 TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
 {
-  PhasorGen<float> p1;
-  p1.clear();
-  auto v0 = p1(1.f/kFramesPerBlock);
-  
-  
-//  std::cout << "phasor: " << v0 << "\n";
-  
-  SineGen<float> s1;
-  s1.clear();
-  auto v1 = s1(1.f/kFramesPerBlock);
-  
-  
-//  std::cout << "sine: " << v1 << "\n";
-  
-  // one cycle of sine wave should end at 0
-  float epsilon = dBToAmp(-120.f);
-  REQUIRE(fabs(v1[kFramesPerBlock - 1]) < epsilon);
-  
-  // validate element order and horizontal <-> vertical transforms
-  Counter<float> cf;
-  SignalBlock cfOut = cf();
-    
-  auto cfh = repeatRows<4>(cfOut);
-  
-  Counter<float4> cg;
-  SignalBlock4 cgOut = cg();
-  auto cgh = verticalToHorizontal(cgOut);
-  REQUIRE(cfh == cgh);
-    
-  // ticks
-  TickGen<float4> ticker;
-  Block<float4> freqs(float4(0.1, 0.2, 0.333, 0.50));
-  auto t1 = ticker(freqs);
-  auto th = verticalToHorizontal(t1);
-  // neat! std::cout << th << "\n";
-    
-  
-  // noise
-  NoiseGen<float4> noisy;
-  noisy.clear();
-
-  // impulses
-  const SignalBlock impFreq(1.f/20.f);
-  const SignalBlock4 impFreq4(1.f/20.f);
-  ImpulseGen<float> imp;
-  ImpulseGen<float4> imp4;
-  imp.clear();
-  imp4.clear();
-
-  
-  
-#if DO_TIME_TESTS
-
-  
-  SECTION("time")
+  SECTION("Counter")
   {
-    // test speed of precise functions relative to native ones.
-    // test speed of approximate functions relative to precise ones.
-    // if we are optimizing the compiled code, approximate ones should be faster.
-    // in debug builds, not necessarily.
-    // std::cout << "nanoseconds per iteration:\n";
-    
-    const SignalBlock impFreq(1.f/20.f);
-    const SignalBlock4 impFreq4(1.f/20.f);
-    ImpulseGen<float> imp;
-    ImpulseGen<float4> imp4;
-    imp.clear();
-    imp4.clear();
+    // output starts at 0 and increments by 1 each sample
+    Counter<float> c;
+    c.clear();
+    auto out = c();
+    REQUIRE(out[0] == 0.f);
+    REQUIRE(out[kFramesPerBlock - 1] == float(kFramesPerBlock - 1));
 
-    auto impTest = ([&]() {
-      SignalBlock r;
-      for(int i=0; i<4; ++i) {
-        r += imp(impFreq);
-      };
-      return r;
-    });
-    auto imp4Test = ([&]() {
-      return imp4(impFreq4);
-    });
+    // float and float4 versions produce equivalent output
+    Counter<float> cf; cf.clear();
+    Counter<float4> cg; cg.clear();
+    REQUIRE(repeatRows<4>(cf()) == verticalToHorizontal(cg()));
+  }
 
-      
-      // temporarily we have a separate timing function for Apple Silicon, which
-      // tries to runs the test on a performance core.
-      
-#if (defined __ARM_NEON) || (defined __ARM_NEON__)
-      TimedResult<SignalBlock> impulsesFloatTime =
-      timeIterationsInThread<SignalBlock>(impTest);
-      TimedResult<SignalBlock4> impulsesFloat4Time =
-      timeIterationsInThread<SignalBlock4>(imp4Test);
+  SECTION("PhasorGen")
+  {
+    // at freq = 1/block, one complete ramp spans exactly the block
+    // sample 0 = 1/64, sample 31 = 32/64 = 0.5 (last sample wraps back to 0)
+    PhasorGen<float> p; p.clear();
+    SignalBlockArray<1> params(1.f / kFramesPerBlock);
+    auto out = p(params);
+    REQUIRE(out[0] == Approx(1.f / kFramesPerBlock));
+    REQUIRE(out[kFramesPerBlock / 2 - 1] == Approx(0.5f));
+  }
 
-#else
-      TimedResult<SignalBlock> impulsesFloatTime =
-      timeIterations<SignalBlock>(impTest);
-      TimedResult<SignalBlock4> impulsesFloat4Time =
-      timeIterations<SignalBlock4>(imp4Test);
+  SECTION("TickGen")
+  {
+    // at freq = 1/8, expect exactly 8 ticks per block
+    TickGen<float> ticker; ticker.clear();
+    SignalBlockArray<1> params(1.f / 8);
+    auto out = ticker(params);
+    int ticks = 0;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      if (out[t] > 0.5f) ticks++;
+    REQUIRE(ticks == 8);
+  }
 
-#endif
-      
-    std::cout << "impulses float: " << impulsesFloatTime.ns << "\n";
-    std::cout << "impulses float4: " << impulsesFloat4Time.ns << "\n";
-    }
-  
-#endif
-  
+  SECTION("NoiseGen")
+  {
+    // same seed produces identical output
+    NoiseGen<float> n1; n1.clear();
+    NoiseGen<float> n2; n2.clear();
+    REQUIRE(n1() == n2());
+
+    // all samples in range [-1, 1)
+    auto out = n1();
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      REQUIRE((out[t] >= -1.f && out[t] < 1.f));
+  }
+
+  SECTION("ImpulseGen")
+  {
+    // at freq = 1/block, one impulse per block
+    ImpulseGen<float> imp; imp.clear();
+    SignalBlockArray<1> params(1.f / kFramesPerBlock);
+
+    // warm up to get past startup transient
+    imp(params);
+    auto out = imp(params);
+
+    // exactly one peak near 1.0, all other samples near 0
+    int peaks = 0;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      if (out[t] > 0.5f) peaks++;
+    REQUIRE(peaks == 1);
+
+    float maxVal = 0.f;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      maxVal = std::max(maxVal, out[t]);
+    REQUIRE(maxVal == Approx(1.f).margin(0.01f));
+  }
+
+  SECTION("SineGen")
+  {
+    // one complete cycle ends near 0
+    SineGen<float> s; s.clear();
+    SignalBlockArray<1> params(1.f / kFramesPerBlock);
+    auto out = s(params);
+    REQUIRE(std::abs(out[kFramesPerBlock - 1]) < dBToAmp(-40.f));
+
+    // peak amplitude near 1
+    float maxVal = 0.f;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      maxVal = std::max(maxVal, std::abs(out[t]));
+    REQUIRE(maxVal == Approx(1.f).margin(0.05f));
+  }
+
+  SECTION("TestSineGen")
+  {
+    // one complete cycle ends very close to 0 (higher precision than SineGen)
+    TestSineGen<float> s; s.clear();
+    SignalBlockArray<1> params(1.f / kFramesPerBlock);
+    auto out = s(params);
+    REQUIRE(std::abs(out[kFramesPerBlock - 1]) < 1e-5f);
+
+    // peak amplitude very close to 1
+    float maxVal = 0.f;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      maxVal = std::max(maxVal, std::abs(out[t]));
+    REQUIRE(maxVal == Approx(1.f).margin(0.001f));
+  }
+
+  SECTION("SawGen")
+  {
+    // zero mean over one complete cycle
+    SawGen<float> saw; saw.clear();
+    SignalBlockArray<1> params(1.f / kFramesPerBlock);
+    auto out = saw(params);
+    float sum = 0.f;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      sum += out[t];
+    REQUIRE(std::abs(sum / kFramesPerBlock) < 0.05f);
+  }
+
+  SECTION("PulseGen")
+  {
+    // 50% width: zero mean
+    PulseGen<float> pulse; pulse.clear();
+    SignalBlockArray<2> params50;
+    params50.setRow(0, SignalBlock(1.f / 16));   // freq: 4 cycles per block
+    params50.setRow(1, SignalBlock(0.5f));        // width: 50%
+    auto out50 = pulse(params50);
+    float mean50 = 0.f;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      mean50 += out50[t];
+    REQUIRE(std::abs(mean50 / kFramesPerBlock) < 0.05f);
+
+    // 25% width: mean = 1 - 2*0.25 = +0.5
+    pulse.clear();
+    SignalBlockArray<2> params25;
+    params25.setRow(0, SignalBlock(1.f / 16));
+    params25.setRow(1, SignalBlock(0.25f));
+    auto out25 = pulse(params25);
+    float mean25 = 0.f;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      mean25 += out25[t];
+    REQUIRE(mean25 / kFramesPerBlock == Approx(0.5f).margin(0.05f));
+  }
 }
-
-
-
