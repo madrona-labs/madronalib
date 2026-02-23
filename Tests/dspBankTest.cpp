@@ -16,24 +16,26 @@ using namespace testUtils;
 
 TEST_CASE("madronalib/bank/tickgen_bank", "[bank]")
 {
-  Bank<TickGen, 8> bank;
+  GenBank<TickGen, 8> bank;
   bank.clear();
-  
-  using BankBlock = Bank<TickGen, 8>::BankBlock;
-  
+
+  using inputType = GenBank<TickGen, 8>::inputType;
+  using outputType = GenBank<TickGen, 8>::outputType;
+
   // 8 voices with frequencies that divide evenly into 64 samples:
   // voices 0-3: tick every 8, 16, 32, 64 samples
   // voices 4-7: tick every 8, 16, 32, 64 samples (same pattern, second group)
-  BankBlock freqInput;
+  inputType freqInput;
   for (size_t t = 0; t < kFramesPerBlock; ++t)
   {
     freqInput.rowPtr(0)[t] = float4(1.f/8, 1.f/16, 1.f/32, 1.f/64);
     freqInput.rowPtr(1)[t] = float4(1.f/8, 1.f/16, 1.f/32, 1.f/64);
   }
   
+  
   // run two blocks to get past any startup transient
   bank(freqInput);
-  BankBlock output = bank(freqInput);
+  outputType output = bank(freqInput);
   
   // convert to horizontal for easy per-voice inspection
   auto hOutput = verticalToHorizontal<2>(output);
@@ -76,6 +78,7 @@ TEST_CASE("madronalib/bank/tickgen_bank", "[bank]")
       REQUIRE(rowA[t] == rowB[t]);
     }
   }
+   
 }
 
 

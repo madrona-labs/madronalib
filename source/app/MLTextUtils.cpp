@@ -328,41 +328,21 @@ TextFragment addFinalNumber(TextFragment t, int n)
 
 TextFragment stripFinalNumber(TextFragment frag)
 {
-  size_t points = frag.lengthInCodePoints();
+  const char* text = frag.getText();
+  size_t len = frag.lengthInBytes();
+  if (len == 0) return frag;
 
-  // TODO make more readble using random access fragment class
+  // digits are single-byte ASCII in UTF-8, so we can scan bytes directly
+  if (!textUtils::isDigit(text[len - 1])) return frag;
 
-  SmallStackBuffer<CodePoint, kShortFragmentSizeInCodePoints> temp(points + 1);
-  CodePoint* buf = temp.data();
-
-  // read into char32 array for random access
-  int i = 0;
-  for (CodePoint c : frag)
+  // scan backwards past trailing digits
+  size_t pos = len - 1;
+  while (pos > 0 && textUtils::isDigit(text[pos - 1]))
   {
-    if (!validateCodePoint(c)) return TextFragment();
-    buf[i++] = c;
+    --pos;
   }
 
-  // null terminate
-  buf[points] = 0;
-
-  // no final number? return
-  if (!textUtils::isDigit(buf[points - 1])) return frag;
-
-  // read backwards until non-digit
-  size_t firstDigitPos = 0;
-  for (size_t i = points - 2; i >= 0; --i)
-  {
-    char32_t c = buf[i];
-    if (!textUtils::isDigit(c))
-    {
-      firstDigitPos = i + 1;
-      break;
-    }
-  }
-
-  ml::TextFragment subFrag(textUtils::subText(frag, 0, firstDigitPos));
-  return subFrag;
+  return TextFragment(text, pos);
 }
 
 int getFinalNumber(TextFragment frag)
@@ -913,41 +893,21 @@ Symbol addFinalNumber(Symbol sym, int n)
 Symbol stripFinalNumber(Symbol sym)
 {
   const TextFragment& frag = sym.getTextFragment();
-  size_t points = frag.lengthInCodePoints();
+  const char* text = frag.getText();
+  size_t len = frag.lengthInBytes();
+  if (len == 0) return sym;
 
-  // TODO make more readble using random access fragment class
+  // digits are single-byte ASCII in UTF-8, so we can scan bytes directly
+  if (!textUtils::isDigit(text[len - 1])) return sym;
 
-  SmallStackBuffer<CodePoint, kShortFragmentSizeInCodePoints> temp(points + 1);
-  CodePoint* buf = temp.data();
-
-  // read into char32 array for random access
-  int i = 0;
-  for (CodePoint c : frag)
+  // scan backwards past trailing digits
+  size_t pos = len - 1;
+  while (pos > 0 && textUtils::isDigit(text[pos - 1]))
   {
-    if (!validateCodePoint(c)) return Symbol();
-    buf[i++] = c;
+    --pos;
   }
 
-  // null terminate
-  buf[points] = 0;
-
-  // no final number? return
-  if (!textUtils::isDigit(buf[points - 1])) return sym;
-
-  // read backwards until non-digit
-  size_t firstDigitPos = 0;
-  for (size_t i = points - 2; i >= 0; --i)
-  {
-    char32_t c = buf[i];
-    if (!textUtils::isDigit(c))
-    {
-      firstDigitPos = i + 1;
-      break;
-    }
-  }
-
-  ml::TextFragment subFrag(textUtils::subText(frag, 0, firstDigitPos));
-  return Symbol(subFrag.getText());
+  return Symbol(TextFragment(text, pos).getText());
 }
 
 // if the symbol's text ends in an integer, return that number.

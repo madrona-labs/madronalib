@@ -77,6 +77,7 @@ class AudioContext final
 
   void addInputEvent(const Event& e);
   void clearInputEvents() { eventsToSignals.clearEvents(); }
+  void setInputEventTimeOffset(int offset) { eventTimeOffset_ = offset; }
 
   void setInputPitchBend(float p) { eventsToSignals.setPitchBendInSemitones(p); }
   void setInputMPEPitchBend(float p) { eventsToSignals.setMPEPitchBendInSemitones(p); }
@@ -100,6 +101,7 @@ class AudioContext final
  private:
   ProcessTime currentTime;
   ml::EventsToSignals eventsToSignals;
+  int eventTimeOffset_{0};
 };
 
 }  // namespace ml
