@@ -15,6 +15,16 @@ namespace ml
 template<typename T, typename Derived>
 struct Gen
 {
+  /*
+  template<size_t N_PARAMS>
+  Gen(const std::array<T, N_PARAMS>& nextParams)
+  {
+    static_assert(N_PARAMS == Derived::nParams, "number of params must match nParams");
+    auto& self = *static_cast<Derived*>(this);
+    self.coeffs = Derived::makeCoeffs(nextParams);
+    Derived::clear();
+  }
+  */
   // Block processing with signal-rate params (one Params per frame)
   template<size_t N_PARAMS>
   Block<T> operator()(const SignalBlockArrayBase<T, N_PARAMS>& paramBlock)
@@ -444,7 +454,7 @@ struct NoiseGen : Gen<T, NoiseGen<T>>
     }
   }
   
-  T nextFrame(Coeffs)
+  T nextFrame(Coeffs) // TEMP fix!
   {
     using IntT = IntTypeFor_t<T>;
     seed_ = seed_ * IntT{0x0019660D} + IntT{0x3C6EF35F};

@@ -89,7 +89,7 @@ struct Filter
       typename Derived::Coeffs c;
       for (size_t i = 0; i < Derived::nCoeffs; ++i)
         c[i] = coeffsBlock.rowPtr(i)[t];
-      output[t] = self.nextFrame(c);
+      output[t] = self.nextFrame(input[t], c);
     }
     return output;
   }
