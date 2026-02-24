@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <ostream>
+
 // Load definitions for low-level SIMD math.
 // These define float4, int4, and a bunch of operations on them.
 // We are currently only using 4-element vectors on both SSE and NEON.
