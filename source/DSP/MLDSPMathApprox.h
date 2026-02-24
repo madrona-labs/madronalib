@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <cstring>
+#include <utility>
+
 #include "MLDSPMathSIMD.h"
 
 // cephes-derived approximate math functions adapted from code by Julien Pommier
