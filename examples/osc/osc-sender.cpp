@@ -15,6 +15,7 @@
 #include <cstdlib>
 
 #include "madronalib.h"
+#include "mldsp.h"
 #include "MLOSCSender.h"
 #include "MLAudioTask.h"
 
@@ -27,7 +28,7 @@ constexpr int kSampleRate = 48000;
 struct OSCSenderState
 {
   OSCSender sender;
-  TickGen tickGen;
+  TickGen<float> tickGen;
   Path oscAddress;
   int counter{0};
   float cyclesPerSample{0};
@@ -38,10 +39,10 @@ void oscSenderProcess(AudioContext* ctx, void* state)
   auto* s = static_cast<OSCSenderState*>(state);
 
   // Generate ticks at quarter-note rate
-  DSPVector ticks = s->tickGen(DSPVector(s->cyclesPerSample));
+  SignalBlock ticks = s->tickGen(SignalBlock(s->cyclesPerSample));
 
   // Scan for triggers and send OSC
-  for (int i = 0; i < kFloatsPerDSPVector; ++i)
+  for (int i = 0; i < kFramesPerBlock; ++i)
   {
     if (ticks[i] > 0.5f)
     {
@@ -52,7 +53,7 @@ void oscSenderProcess(AudioContext* ctx, void* state)
   }
 
   // Output silence (AudioTask requires output, but we don't use it)
-  ctx->outputs[0] = DSPVector(0.f);
+  ctx->outputs[0] = SignalBlock(0.f);
 }
 
 int main(int argc, char* argv[])

@@ -12,6 +12,7 @@
 #include <cstdlib>
 
 #include "madronalib.h"
+#include "mldsp.h"
 #include "MLOSCReceiver.h"
 #include "MLAudioTask.h"
 
@@ -66,7 +67,7 @@ void oscListenerProcess(AudioContext* ctx, void* state)
   // OSC messages are handled asynchronously by the receiver's callback.
   // This process function just keeps the AudioTask running.
   // Output silence (AudioTask requires output, but we don't use it)
-  ctx->outputs[0] = DSPVector(0.f);
+  ctx->outputs[0] = SignalBlock(0.f);
 }
 
 int main(int argc, char* argv[])
