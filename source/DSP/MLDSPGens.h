@@ -15,18 +15,9 @@ namespace ml
 template<typename T, typename Derived>
 struct Gen
 {
-  /*
-   // TEMP - should there be a ctor that takes params? nice syntax.
-  template<size_t N_PARAMS>
-  Gen(const std::array<T, N_PARAMS>& nextParams)
-  {
-    static_assert(N_PARAMS == Derived::nParams, "number of params must match nParams");
-    auto& self = *static_cast<Derived*>(this);
-    self.coeffs = Derived::makeCoeffs(nextParams);
-    Derived::clear();
-  }
-  */
   
+  Gen() = default;
+
   // Block processing with signal-rate params (one Params per frame)
   template<size_t N_PARAMS>
   Block<T> operator()(const SignalBlockArrayBase<T, N_PARAMS>& paramBlock)
@@ -245,11 +236,14 @@ struct TickGen : Gen<T, TickGen<T>>
   
   Coeffs coeffs{};
   T omega_{0.f};
-  
+
+  TickGen() = default;
+  TickGen(T freq) { coeffs = makeCoeffs(Params{freq}); }
+
   void clear() { omega_ = T{0.f}; }
-  
+
   static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
-  
+
   T nextFrame(Coeffs c)
   {
     omega_ += c[freqCoeff];
@@ -316,7 +310,10 @@ struct ImpulseGen : Gen<T, ImpulseGen<T>>
   }
   
   Coeffs coeffs{};
-  
+
+  ImpulseGen() = default;
+  ImpulseGen(T freq) { coeffs = makeCoeffs(Params{freq}); }
+
   // State: two readout voices
   T phase_{0.f};
   T posA_{kTableEnd}, ampA_{0.f}, ampStepA_{0.f};
@@ -481,9 +478,12 @@ struct PhasorGen : Gen<T, PhasorGen<T>>
   
   Coeffs coeffs{};
   T omega_{0.f};
-  
+
+  PhasorGen() = default;
+  PhasorGen(T freq) { coeffs = makeCoeffs(Params{freq}); }
+
   void clear() { omega_ = T{0.f}; }
-  
+
   // just copying param to get the coefficient, needed for template compatibility
   static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
@@ -508,11 +508,14 @@ struct TestSineGen : Gen<T, TestSineGen<T>>
   
   Coeffs coeffs{};
   T omega_{0.f};
-  
+
+  TestSineGen() = default;
+  TestSineGen(T freq) { coeffs = makeCoeffs(Params{freq}); }
+
   void clear() { omega_ = T{0.f}; }
-  
+
   static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
-  
+
   T nextFrame(Coeffs c)
   {
     omega_ += T{kTwoPi} * c[freqCoeff];
@@ -544,7 +547,10 @@ struct SineGen : Gen<T, SineGen<T>>
   
   Coeffs coeffs{};
   PhasorGen<T> phasor_;
-  
+
+  SineGen() = default;
+  SineGen(T freq) { coeffs = makeCoeffs(Params{freq}); }
+
   // initial phase of 0.75 maps to zero-crossing of the sine approximation
   void clear() { phasor_.clear(); phasor_.omega_ = T{0.75f}; }
   
@@ -567,11 +573,14 @@ struct SawGen : Gen<T, SawGen<T>>
   
   Coeffs coeffs{};
   PhasorGen<T> phasor_;
-  
+
+  SawGen() = default;
+  SawGen(T freq) { coeffs = makeCoeffs(Params{freq}); }
+
   void clear() { phasor_.clear(); }
-  
+
   static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
-  
+
   T nextFrame(Coeffs c)
   {
     T f = c[freqCoeff];
@@ -594,7 +603,10 @@ struct PulseGen : Gen<T, PulseGen<T>>
   const Params kDefaultParams{0.f, 0.5f};
   Coeffs coeffs{makeCoeffs(kDefaultParams)};
   PhasorGen<T> phasor_;
-  
+
+  PulseGen() = default;
+  PulseGen(T freq, T width = 0.5f) { coeffs = makeCoeffs(Params{freq, width}); }
+
   void clear()
   {
     phasor_.clear();
