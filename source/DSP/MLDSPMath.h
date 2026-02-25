@@ -129,7 +129,8 @@ inline float sin(float x) { return std::sinf(x); }
 inline float cos(float x) { return std::cosf(x); }
 inline std::pair<float, float> sincos(float x) { return{sin(x), cos(x)};
 }
-inline float tan(float x) { return std::tanf(x); }
+inline float  tan(float  x) { return std::tanf(x); }
+inline float4 tan(float4 x) { return sin(x) / cos(x); }
 
 // other utilities
 

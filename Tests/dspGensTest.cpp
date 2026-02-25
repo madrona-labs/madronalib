@@ -57,6 +57,62 @@ TEST_CASE("madronalib/dsp/gens-template", "[template]")
 }
 
 
+TEST_CASE("madronalib/dsp/gens-constructors", "[dsp_gens]")
+{
+  SECTION("SineGen")
+  {
+    float freq = 1.f / kFramesPerBlock;
+    SineGen<float> g(freq);
+    SineGen<float> ref;
+    ref.coeffs = SineGen<float>::makeCoeffs({freq});
+    REQUIRE(g() == ref());
+  }
+
+  SECTION("SawGen")
+  {
+    float freq = 1.f / kFramesPerBlock;
+    SawGen<float> g(freq);
+    SawGen<float> ref;
+    ref.coeffs = SawGen<float>::makeCoeffs({freq});
+    REQUIRE(g() == ref());
+  }
+
+  SECTION("PhasorGen")
+  {
+    float freq = 1.f / kFramesPerBlock;
+    PhasorGen<float> g(freq);
+    PhasorGen<float> ref;
+    ref.coeffs = PhasorGen<float>::makeCoeffs({freq});
+    REQUIRE(g() == ref());
+  }
+
+  SECTION("TickGen")
+  {
+    float freq = 1.f / 8.f;
+    TickGen<float> g(freq);
+    TickGen<float> ref;
+    ref.coeffs = TickGen<float>::makeCoeffs({freq});
+    REQUIRE(g() == ref());
+  }
+
+  SECTION("ImpulseGen")
+  {
+    float freq = 1.f / kFramesPerBlock;
+    ImpulseGen<float> g(freq);
+    ImpulseGen<float> ref;
+    ref.coeffs = ImpulseGen<float>::makeCoeffs({freq});
+    REQUIRE(g() == ref());
+  }
+
+  SECTION("PulseGen")
+  {
+    PulseGen<float> g(0.1f, 0.5f);
+    PulseGen<float> ref;
+    ref.coeffs = PulseGen<float>::makeCoeffs({0.1f, 0.5f});
+    REQUIRE(g() == ref());
+  }
+}
+
 TEST_CASE("madronalib/dsp/gens", "[dsp_gens]")
 {
   SECTION("Counter")
