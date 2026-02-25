@@ -46,6 +46,26 @@ SignalBlock makeSine(float omega, float& phase) {
   return v;
 }
 
+// Helper: run an impulse through both a float and float4 filter and verify
+// all 4 lanes of the float4 output match the float output.
+template<typename F1, typename F4>
+bool float4LanesMatchFloat(F1& f1, F4& f4, float scale = 1.0f, float eps = 1e-5f)
+{
+  SignalBlock impulse1{0.f};
+  impulse1[0] = scale;
+  Block<float4> impulse4{};
+  impulse4[0] = float4(scale);
+
+  SignalBlock out1 = f1(impulse1);
+  Block<float4> out4 = f4(impulse4);
+
+  for (int i = 0; i < kFramesPerBlock; ++i)
+    for (int lane = 0; lane < 4; ++lane)
+      if (std::fabs(getFloat4Lane(out4[i], lane) - out1[i]) > eps)
+        return false;
+  return true;
+}
+
 }
 
 // ================================================================
@@ -507,6 +527,50 @@ TEST_CASE("madronalib/filters/allpass1", "[filters]")
   }
 }
 
+TEST_CASE("madronalib/filters/allpass1_fromDelay", "[filters]")
+{
+  SECTION("fromDelay matches manual makeCoeffs")
+  {
+    float d = 1.2f;
+    auto ap1 = Allpass1<float>::fromDelay(d);
+    Allpass1<float> ap2;
+    ap2.coeffs = Allpass1<float>::makeCoeffs({d});
+
+    SignalBlock impulse{0.f};
+    impulse[0] = 1.0f;
+    REQUIRE(ap1(impulse) == ap2(impulse));
+  }
+
+  SECTION("fromDelay float4 matches float on all lanes")
+  {
+    float d = 1.2f;
+    auto ap1 = Allpass1<float>::fromDelay(d);
+    auto ap4 = Allpass1<float4>::fromDelay(float4(d));
+    REQUIRE(float4LanesMatchFloat(ap1, ap4));
+  }
+}
+
+TEST_CASE("madronalib/filters/pink_filter_constructor", "[filters]")
+{
+  SECTION("sr constructor matches init()")
+  {
+    PinkFilter<float> pf1(44100.f);
+    PinkFilter<float> pf2;
+    pf2.init(44100.f);
+
+    SignalBlock impulse{0.f};
+    impulse[0] = 1.0f;
+    REQUIRE(pf1(impulse) == pf2(impulse));
+  }
+
+  SECTION("float4 sr constructor matches float on all lanes")
+  {
+    PinkFilter<float>  pf1(44100.f);
+    PinkFilter<float4> pf4(44100.f);
+    REQUIRE(float4LanesMatchFloat(pf1, pf4, 1.0f, 1e-4f));
+  }
+}
+
 TEST_CASE("madronalib/filters/pink_filter_rolloff", "[filters]")
 {
   constexpr int kFFTOrder = 6;
@@ -653,29 +717,6 @@ TEST_CASE("madronalib/filters/constructors", "[filters]")
 // float4 equivalence tests
 // ================================================================
 
-namespace {
-
-// Run an impulse through both a float and float4 filter and verify
-// all 4 lanes of the float4 output match the float output.
-template<typename F1, typename F4>
-bool float4LanesMatchFloat(F1& f1, F4& f4, float scale = 1.0f, float eps = 1e-5f)
-{
-  SignalBlock impulse1{0.f};
-  impulse1[0] = scale;
-  Block<float4> impulse4{};
-  impulse4[0] = float4(scale);
-
-  SignalBlock out1 = f1(impulse1);
-  Block<float4> out4 = f4(impulse4);
-
-  for (int i = 0; i < kFramesPerBlock; ++i)
-    for (int lane = 0; lane < 4; ++lane)
-      if (std::fabs(getFloat4Lane(out4[i], lane) - out1[i]) > eps)
-        return false;
-  return true;
-}
-
-} // namespace
 
 TEST_CASE("madronalib/filters/float4", "[filters]")
 {

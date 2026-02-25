@@ -481,10 +481,18 @@ struct Allpass1 : Filter<T, Allpass1<T>>
   State state{};
   
   Allpass1() = default;
-  
+
   // construct with a fixed coefficient value (for HalfBandFilter etc.)
   Allpass1(float a) : coeffs{T{a}}, state{} {}
-  
+
+  // construct from a delay fraction d (in [0.618, 1.618] for low modulation noise)
+  static Allpass1 fromDelay(T d)
+  {
+    Allpass1 ap;
+    ap.coeffs = makeCoeffs(Params{d});
+    return ap;
+  }
+
   void clear()
   {
     state.fill(T{0.f});
@@ -604,9 +612,12 @@ struct PinkFilter
   std::array<T, kNumPoles> a{};
   std::array<T, kNumPoles> g{};
   std::array<T, kNumPoles> state{};
-  
+
+  PinkFilter() = default;
+  PinkFilter(float sr) { init(sr); }
+
   void clear() { state.fill(T{0.f}); }
-  
+
   void init(float sr)
   {
     // pole coefficients from absolute frequencies
