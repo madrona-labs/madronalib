@@ -16,6 +16,7 @@ template<typename T, typename Derived>
 struct Gen
 {
   /*
+   // TEMP - should there be a ctor that takes params? nice syntax.
   template<size_t N_PARAMS>
   Gen(const std::array<T, N_PARAMS>& nextParams)
   {
@@ -25,6 +26,7 @@ struct Gen
     Derived::clear();
   }
   */
+  
   // Block processing with signal-rate params (one Params per frame)
   template<size_t N_PARAMS>
   Block<T> operator()(const SignalBlockArrayBase<T, N_PARAMS>& paramBlock)
@@ -44,7 +46,7 @@ struct Gen
     return output;
   }
   
-  // Block processing with parameter interpolation from std::array argument
+  // Block processing with coefficient interpolation from std::array argument
   template<size_t N_PARAMS>
   Block<T> operator()(const std::array<T, N_PARAMS>& nextParams)
   {
@@ -67,11 +69,10 @@ struct Gen
   }
   
   
-  // Block processing with parameter interpolation — list of float arguments
+  // Block processing with coefficient interpolation — list of float arguments
   template<typename... Args,
   typename = std::enable_if_t<(std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, float> && ...)>>
   Block<T> operator()(Args&&... args)
-
   {
     std::array<std::common_type_t<Args...>, sizeof...(Args)> arr = { std::forward<Args>(args)... };
     const std::array nextParams = arr;
@@ -93,7 +94,6 @@ struct Gen
     return output;
   }
 
-  
   // Block processing with constant stored coefficients
   Block<T> operator()()
   {
@@ -101,6 +101,20 @@ struct Gen
     Block<T> output;
     for (size_t t = 0; t < kFramesPerBlock; ++t)
       output[t] = self.nextFrame(self.coeffs);
+    return output;
+  }
+};
+
+// a generator with no params.
+template<typename T, typename Derived>
+struct Gen0
+{
+  Block<T> operator()()
+  {
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+      output[t] = self.nextFrame();
     return output;
   }
 };
@@ -426,21 +440,10 @@ struct ImpulseGen : Gen<T, ImpulseGen<T>>
 // NoiseGen
 
 template<typename T>
-struct NoiseGen : Gen<T, NoiseGen<T>>
+struct NoiseGen : Gen0<T, NoiseGen<T>>
 {
-  enum { nParams = 0 };
-  enum { nCoeffs = 0 };
-  
-  using Params = std::array<T, nParams>;
-  using Coeffs = std::array<T, nCoeffs>;
   using IntState = std::conditional_t<std::is_same_v<T, float>, uint32_t, int4>;
-  
-  Coeffs coeffs{};
   IntState seed_{};
-  
-  void clear() { }
-  
-  static Coeffs makeCoeffs(Params) { return {}; }
   
   void setSeed(uint32_t x)
   {
@@ -455,7 +458,7 @@ struct NoiseGen : Gen<T, NoiseGen<T>>
     }
   }
   
-  T nextFrame(Coeffs) // TEMP fix!
+  T nextFrame()
   {
     using IntT = IntTypeFor_t<T>;
     seed_ = seed_ * IntT{0x0019660D} + IntT{0x3C6EF35F};
