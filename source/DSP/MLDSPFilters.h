@@ -130,8 +130,6 @@ struct Lopass : Filter<T, Lopass<T>>
   State state{};
   
   void clear() {
-    const Params kDefaultParams{0.f, 0.5f};
-    coeffs = makeCoeffs(kDefaultParams);
     state.fill(T{0.f});
   }
 
@@ -174,8 +172,6 @@ struct Hipass : Filter<T, Hipass<T>>
   State state{};
   
   void clear() {
-    const Params kDefaultParams{0.f, 0.5f};
-    coeffs = makeCoeffs(kDefaultParams);
     state.fill(T{0.f});
   }
   
@@ -219,8 +215,6 @@ struct Bandpass : Filter<T, Bandpass<T>>
   State state{};
   
   void clear() {
-    const Params kDefaultParams{0.f, 0.5f};
-    coeffs = makeCoeffs(kDefaultParams);
     state.fill(T{0.f});
   }
   
@@ -263,8 +257,6 @@ struct LoShelf : Filter<T, LoShelf<T>>
   State state{};
   
   void clear() {
-    const Params kDefaultParams{0.f, 0.5f, 1.f};
-    coeffs = makeCoeffs(kDefaultParams);
     state.fill(T{0.f});
   }
   
@@ -306,8 +298,6 @@ struct HiShelf : Filter<T, HiShelf<T>>
   State state{};
   
   void clear() {
-    const Params kDefaultParams{0.f, 0.5f, 1.f};
-    coeffs = makeCoeffs(kDefaultParams);
     state.fill(T{0.f});
   }
   
@@ -350,8 +340,6 @@ struct Bell : Filter<T, Bell<T>>
   State state{};
   
   void clear() {
-    const Params kDefaultParams{0.f, 0.5f, 1.f};
-    coeffs = makeCoeffs(kDefaultParams);
     state.fill(T{0.f});
   }
   
@@ -398,8 +386,6 @@ struct OnePole : Filter<T, OnePole<T>>
   static Coeffs passthru() { return {1.f, 0.f}; }
   
   void clear() {
-    const Params kDefaultParams{0.f};
-    coeffs = makeCoeffs(kDefaultParams);
     state.fill(T{0.f});
   }
   
@@ -430,12 +416,11 @@ struct DCBlocker : Filter<T, DCBlocker<T>>
   using Coeffs = std::array<T, nCoeffs>;
   using State = std::array<T, nStateVars>;
   
-  Coeffs coeffs{};
-  State state{};
+  const Params kDefaultParams{0.045f};
+  Coeffs coeffs{makeCoeffs(kDefaultParams)};
+  State state{0.f};
   
   void clear() {
-    const Params kDefaultParams{0.045f};
-    coeffs = makeCoeffs(kDefaultParams);
     state.fill(T{0.f});
   }
   

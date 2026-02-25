@@ -438,7 +438,7 @@ struct NoiseGen : Gen<T, NoiseGen<T>>
   Coeffs coeffs{};
   IntState seed_{};
   
-  void clear() { setSeed(39792); }
+  void clear() { }
   
   static Coeffs makeCoeffs(Params) { return {}; }
   
@@ -450,6 +450,7 @@ struct NoiseGen : Gen<T, NoiseGen<T>>
     }
     else
     {
+      // set different seeds for each lane
       seed_ = setrInt(x, x * 2, x * 3, x * 4);
     }
   }
@@ -587,14 +588,13 @@ struct PulseGen : Gen<T, PulseGen<T>>
   using Params = std::array<T, nParams>;
   using Coeffs = std::array<T, nCoeffs>;
   
-  Coeffs coeffs{};
+  const Params kDefaultParams{0.f, 0.5f};
+  Coeffs coeffs{makeCoeffs(kDefaultParams)};
   PhasorGen<T> phasor_;
   
   void clear()
   {
     phasor_.clear();
-    const Params kDefaultParams{0.f, 0.5f};
-    coeffs = makeCoeffs(kDefaultParams);
   }
   
   static Coeffs makeCoeffs(Params p) { return Coeffs(p); }

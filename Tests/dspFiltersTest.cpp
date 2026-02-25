@@ -56,38 +56,44 @@ TEST_CASE("madronalib/filters/template", "[filters]")
 {
   SECTION("template variations equality")
   {
-    Lopass<float> lp;
+    Lopass<float> lp1;
+    float kFreq{0.25f};
+    float kDamp{8.f};
     
     // we need to burn one buffer to allow coefficient interpolation to finish.
     // TODO make a more concise way to do this in a constructor
     SineGen<float> g1;
     SignalBlock dummy = g1(0.25f);
+    g1.clear();
+    SignalBlock sineParams{0.125f};
+    SignalBlock input = g1(sineParams);
     
     // signal-rate params
-    g1.clear();
-    SignalBlock signalParams{0.25f};
-    SignalBlock ref = g1(signalParams);
-    
+    lp1.clear();
+    // TODO SignalBlockArray ctor or construction fn
+    //SignalBlockArray<2> signalParams{kFreq, kDamp};
+    SignalBlock freq{kFreq};
+    SignalBlock damp{kDamp};
+    SignalBlockArray<2> signalParams = concatRows(freq, damp);
+    SignalBlock ref = lp1(input, signalParams);
+
     // single Params
-    g1.clear();
-    SineGen<float>::Params sineGenParams;
-    sineGenParams[SineGen<float>::freq] = 0.25f;
-    REQUIRE(g1(sineGenParams) == ref);
+    lp1.clear();
+    Lopass<float>::Params lopassParams{kFreq, kDamp};
+    REQUIRE(lp1(input, lopassParams) == ref);
     
     // single Params from std::array
-    g1.clear();
-    std::array<float, 1> arrayParams{0.25f};
-    REQUIRE(g1(arrayParams) == ref);
+    lp1.clear();
+    std::array<float, 2> arrayParams{kFreq, kDamp};
+    REQUIRE(lp1(input, arrayParams) == ref);
 
     // float params
-    g1.clear();
-    float floatParam{0.25f};
-    REQUIRE(g1(floatParam) == ref);
+    lp1.clear();
+    REQUIRE(lp1(input, kFreq, kDamp) == ref);
 
     // no params
-    g1.clear();
-    REQUIRE(g1() == ref);
-
+    lp1.clear();
+    REQUIRE(lp1(input) == ref);
   }
 }
 

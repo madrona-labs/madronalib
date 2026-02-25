@@ -13,7 +13,51 @@
 using namespace ml;
 using namespace testUtils;
 
-TEST_CASE("madronalib/core/dsp_gens", "[dsp_gens]")
+
+// ================================================================
+//  template tests
+// ================================================================
+
+TEST_CASE("madronalib/dsp/gens-template", "[template]")
+{
+  SECTION("template variations equality")
+  {
+    
+    // we need to burn one buffer to allow coefficient interpolation to finish.
+    // TODO make a more concise way to do this in a constructor
+    SineGen<float> g1;
+    SignalBlock dummy = g1(0.25f);
+    
+    // signal-rate params
+    g1.clear();
+    SignalBlock signalParams{0.25f};
+    SignalBlock ref = g1(signalParams);
+    
+    // single Params
+    g1.clear();
+    SineGen<float>::Params sineGenParams;
+    sineGenParams[SineGen<float>::freq] = 0.25f;
+    REQUIRE(g1(sineGenParams) == ref);
+    
+    // single Params from std::array
+    g1.clear();
+    std::array<float, 1> arrayParams{0.25f};
+    REQUIRE(g1(arrayParams) == ref);
+    
+    // float params
+    g1.clear();
+    float floatParam{0.25f};
+    REQUIRE(g1(floatParam) == ref);
+    
+    // no params
+    g1.clear();
+    REQUIRE(g1() == ref);
+    
+  }
+}
+
+
+TEST_CASE("madronalib/dsp/gens", "[dsp_gens]")
 {
   SECTION("Counter")
   {
