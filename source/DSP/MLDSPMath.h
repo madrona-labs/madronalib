@@ -49,7 +49,6 @@ inline float sqrt(float a)
   return sqrtf(a);
 }
 
-
 inline float select(float a, float b, float x)
 {
   return (x != 0.0f ? a : b);
@@ -226,7 +225,6 @@ public:
   uint32_t seed_;
 };
 
-
 // return the exponent of the smallest power of 2 that is >= x.
 inline size_t bitsToContain(int x)
 {
@@ -248,6 +246,5 @@ inline int modulo(int a, int b) { return a >= 0 ? (a % b) : (b - std::abs(a % b)
 
 // modulo for floats
 inline float modulo(float a, float b) { return a - b * floor(a / b); }
-
 
 }

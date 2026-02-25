@@ -100,8 +100,9 @@ TEST_CASE("madronalib/dsp/gens", "[dsp_gens]")
   SECTION("NoiseGen")
   {
     // same seed produces identical output
-    NoiseGen<float> n1; n1.clear();
-    NoiseGen<float> n2; n2.clear();
+    uint32_t testSeed{98118};
+    NoiseGen<float> n1; n1.setSeed(testSeed);
+    NoiseGen<float> n2; n2.setSeed(testSeed);
     REQUIRE(n1() == n2());
 
     // all samples in range [-1, 1)
