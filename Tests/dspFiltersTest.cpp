@@ -565,6 +565,200 @@ TEST_CASE("madronalib/filters/pink_filter_rolloff", "[filters]")
   }
 }
 
+// ================================================================
+// Constructor tests
+// ================================================================
+
+TEST_CASE("madronalib/filters/constructors", "[filters]")
+{
+  SignalBlock impulse{0.f};
+  impulse[0] = 1.0f;
+
+  SECTION("Lopass")
+  {
+    Lopass<float> f1(0.1f, 0.5f);
+    Lopass<float> f2;
+    f2.coeffs = Lopass<float>::makeCoeffs({0.1f, 0.5f});
+    REQUIRE(f1(impulse) == f2(impulse));
+  }
+
+  SECTION("Hipass")
+  {
+    Hipass<float> f1(0.1f, 0.5f);
+    Hipass<float> f2;
+    f2.coeffs = Hipass<float>::makeCoeffs({0.1f, 0.5f});
+    REQUIRE(f1(impulse) == f2(impulse));
+  }
+
+  SECTION("Bandpass")
+  {
+    Bandpass<float> f1(0.1f, 0.5f);
+    Bandpass<float> f2;
+    f2.coeffs = Bandpass<float>::makeCoeffs({0.1f, 0.5f});
+    REQUIRE(f1(impulse) == f2(impulse));
+  }
+
+  SECTION("LoShelf")
+  {
+    LoShelf<float> f1(0.1f, 0.7f, 2.0f);
+    LoShelf<float> f2;
+    f2.coeffs = LoShelf<float>::makeCoeffs({0.1f, 0.7f, 2.0f});
+    REQUIRE(f1(impulse) == f2(impulse));
+  }
+
+  SECTION("HiShelf")
+  {
+    HiShelf<float> f1(0.1f, 0.7f, 2.0f);
+    HiShelf<float> f2;
+    f2.coeffs = HiShelf<float>::makeCoeffs({0.1f, 0.7f, 2.0f});
+    REQUIRE(f1(impulse) == f2(impulse));
+  }
+
+  SECTION("Bell")
+  {
+    Bell<float> f1(0.1f, 0.5f, 2.0f);
+    Bell<float> f2;
+    f2.coeffs = Bell<float>::makeCoeffs({0.1f, 0.5f, 2.0f});
+    REQUIRE(f1(impulse) == f2(impulse));
+  }
+
+  SECTION("OnePole")
+  {
+    OnePole<float> f1(0.1f);
+    OnePole<float> f2;
+    f2.coeffs = OnePole<float>::makeCoeffs({0.1f});
+    REQUIRE(f1(impulse) == f2(impulse));
+  }
+
+  SECTION("DCBlocker")
+  {
+    DCBlocker<float> f1(0.045f);
+    DCBlocker<float> f2;
+    f2.coeffs = DCBlocker<float>::makeCoeffs({0.045f});
+    REQUIRE(f1(impulse) == f2(impulse));
+  }
+
+  SECTION("LadderFilter")
+  {
+    SignalBlock smallImpulse{0.f};
+    smallImpulse[0] = 0.01f;
+    LadderFilter<float> f1(0.1f, 0.0f);
+    LadderFilter<float> f2;
+    f2.coeffs = LadderFilter<float>::makeCoeffs({0.1f, 0.0f});
+    REQUIRE(f1(smallImpulse) == f2(smallImpulse));
+  }
+}
+
+// ================================================================
+// float4 equivalence tests
+// ================================================================
+
+namespace {
+
+// Run an impulse through both a float and float4 filter and verify
+// all 4 lanes of the float4 output match the float output.
+template<typename F1, typename F4>
+bool float4LanesMatchFloat(F1& f1, F4& f4, float scale = 1.0f, float eps = 1e-5f)
+{
+  SignalBlock impulse1{0.f};
+  impulse1[0] = scale;
+  Block<float4> impulse4{};
+  impulse4[0] = float4(scale);
+
+  SignalBlock out1 = f1(impulse1);
+  Block<float4> out4 = f4(impulse4);
+
+  for (int i = 0; i < kFramesPerBlock; ++i)
+    for (int lane = 0; lane < 4; ++lane)
+      if (std::fabs(getFloat4Lane(out4[i], lane) - out1[i]) > eps)
+        return false;
+  return true;
+}
+
+} // namespace
+
+TEST_CASE("madronalib/filters/float4", "[filters]")
+{
+  SECTION("Lopass")
+  {
+    Lopass<float>  f1(0.1f, 0.5f);
+    Lopass<float4> f4(float4(0.1f), float4(0.5f));
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("Hipass")
+  {
+    Hipass<float>  f1(0.1f, 0.5f);
+    Hipass<float4> f4(float4(0.1f), float4(0.5f));
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("Bandpass")
+  {
+    Bandpass<float>  f1(0.1f, 0.5f);
+    Bandpass<float4> f4(float4(0.1f), float4(0.5f));
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("LoShelf")
+  {
+    LoShelf<float>  f1(0.1f, 0.7f, 2.0f);
+    LoShelf<float4> f4(float4(0.1f), float4(0.7f), float4(2.0f));
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("HiShelf")
+  {
+    HiShelf<float>  f1(0.1f, 0.7f, 2.0f);
+    HiShelf<float4> f4(float4(0.1f), float4(0.7f), float4(2.0f));
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("Bell")
+  {
+    Bell<float>  f1(0.1f, 0.5f, 2.0f);
+    Bell<float4> f4(float4(0.1f), float4(0.5f), float4(2.0f));
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("OnePole")
+  {
+    OnePole<float>  f1(0.1f);
+    OnePole<float4> f4(float4(0.1f));
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("DCBlocker")
+  {
+    DCBlocker<float>  f1(0.045f);
+    DCBlocker<float4> f4(float4(0.045f));
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("LadderFilter")
+  {
+    LadderFilter<float>  f1(0.1f, 0.0f);
+    LadderFilter<float4> f4(float4(0.1f), float4(0.0f));
+    REQUIRE(float4LanesMatchFloat(f1, f4, 0.01f));
+  }
+
+  SECTION("Allpass1")
+  {
+    Allpass1<float>  f1(0.5f);
+    Allpass1<float4> f4(0.5f);
+    REQUIRE(float4LanesMatchFloat(f1, f4));
+  }
+
+  SECTION("PinkFilter")
+  {
+    PinkFilter<float>  pf1;
+    PinkFilter<float4> pf4;
+    pf1.init(44100.f);
+    pf4.init(44100.f);
+    REQUIRE(float4LanesMatchFloat(pf1, pf4, 1.0f, 1e-4f));
+  }
+}
+
 TEST_CASE("madronalib/filters/ladder", "[filters]")
 {
   // small impulse to stay in the linear region of tanh
