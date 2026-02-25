@@ -128,7 +128,10 @@ struct Lopass : Filter<T, Lopass<T>>
   
   Coeffs coeffs{};
   State state{};
-  
+
+  Lopass() = default;
+  Lopass(T omega, T k) { coeffs = makeCoeffs(Params{omega, k}); }
+
   void clear() {
     state.fill(T{0.f});
   }
@@ -144,7 +147,7 @@ struct Lopass : Filter<T, Lopass<T>>
     T cg2 = (T{2.0f} * s1 * s1) * nrm;
     return {cg0, cg1, cg2};
   }
-  
+
   T nextFrame(T x, Coeffs c)
   {
     T t0 = x - state[ic2eq];
@@ -170,11 +173,14 @@ struct Hipass : Filter<T, Hipass<T>>
   
   Coeffs coeffs{};
   State state{};
-  
+
+  Hipass() = default;
+  Hipass(T omega, T k) { coeffs = makeCoeffs(Params{omega, k}); }
+
   void clear() {
     state.fill(T{0.f});
   }
-  
+
   static Coeffs makeCoeffs(Params p)
   {
     T piOmega = T{kPi} * p[omega];
@@ -186,7 +192,7 @@ struct Hipass : Filter<T, Hipass<T>>
     T cg2 = (T{2.0f} * s1 * s1) * nrm;
     return {cg0, cg1, cg2, p[k]};
   }
-  
+
   T nextFrame(T x, Coeffs c)
   {
     T t0 = x - state[ic2eq];
@@ -213,11 +219,14 @@ struct Bandpass : Filter<T, Bandpass<T>>
   
   Coeffs coeffs{};
   State state{};
-  
+
+  Bandpass() = default;
+  Bandpass(T omega, T k) { coeffs = makeCoeffs(Params{omega, k}); }
+
   void clear() {
     state.fill(T{0.f});
   }
-  
+
   static Coeffs makeCoeffs(Params p)
   {
     T piOmega = T{kPi} * p[omega];
@@ -229,7 +238,7 @@ struct Bandpass : Filter<T, Bandpass<T>>
     T cg2 = (T{2.0f} * s1 * s1) * nrm;
     return {cg0, cg1, cg2};
   }
-  
+
   T nextFrame(T x, Coeffs c)
   {
     T t0 = x - state[ic2eq];
@@ -255,11 +264,14 @@ struct LoShelf : Filter<T, LoShelf<T>>
   
   Coeffs coeffs{};
   State state{};
-  
+
+  LoShelf() = default;
+  LoShelf(T omega, T k, T A) { coeffs = makeCoeffs(Params{omega, k, A}); }
+
   void clear() {
     state.fill(T{0.f});
   }
-  
+
   static Coeffs makeCoeffs(Params p)
   {
     T piOmega = T{kPi} * p[omega];
@@ -296,11 +308,14 @@ struct HiShelf : Filter<T, HiShelf<T>>
   
   Coeffs coeffs{};
   State state{};
-  
+
+  HiShelf() = default;
+  HiShelf(T omega, T k, T A) { coeffs = makeCoeffs(Params{omega, k, A}); }
+
   void clear() {
     state.fill(T{0.f});
   }
-  
+
   static Coeffs makeCoeffs(Params p)
   {
     T piOmega = T{kPi} * p[omega];
@@ -338,11 +353,14 @@ struct Bell : Filter<T, Bell<T>>
   
   Coeffs coeffs{};
   State state{};
-  
+
+  Bell() = default;
+  Bell(T omega, T k, T A) { coeffs = makeCoeffs(Params{omega, k, A}); }
+
   void clear() {
     state.fill(T{0.f});
   }
-  
+
   static Coeffs makeCoeffs(Params p)
   {
     T kc = p[k] / p[A];
@@ -382,9 +400,12 @@ struct OnePole : Filter<T, OnePole<T>>
   
   Coeffs coeffs{};
   State state{};
-  
+
+  OnePole() = default;
+  OnePole(T omega) { coeffs = makeCoeffs(Params{omega}); }
+
   static Coeffs passthru() { return {1.f, 0.f}; }
-  
+
   void clear() {
     state.fill(T{0.f});
   }
@@ -419,7 +440,10 @@ struct DCBlocker : Filter<T, DCBlocker<T>>
   const Params kDefaultParams{0.045f};
   Coeffs coeffs{makeCoeffs(kDefaultParams)};
   State state{0.f};
-  
+
+  DCBlocker() = default;
+  DCBlocker(T omega) { coeffs = makeCoeffs(Params{omega}); }
+
   void clear() {
     state.fill(T{0.f});
   }
@@ -509,7 +533,10 @@ struct LadderFilter : Filter<T, LadderFilter<T>>
   Coeffs coeffs{};
   State state{};
   Mode mode{kLopass};
-  
+
+  LadderFilter() = default;
+  LadderFilter(T omega, T q) { coeffs = makeCoeffs(Params{omega, q}); }
+
   void clear() { state.fill(T{0.f}); }
   
   static Coeffs makeCoeffs(Params p)
