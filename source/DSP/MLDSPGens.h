@@ -327,6 +327,8 @@ struct ImpulseGen : Gen<T, ImpulseGen<T>>
     ampStepA_ = ampStepB_ = T{0.f};
   }
   
+  // TODO verify: hopefully the compiler can get rid of this unneccessary copy. If not,
+  // we could make another base class for when no calculation is needed
   static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
   static float tableLookupScalar(float pos)
