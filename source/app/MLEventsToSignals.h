@@ -75,10 +75,10 @@ class EventsToSignals final
   void clearEvents();
 
   // process incoming events in buffer and generate output signals.
-  // events in the queue in the time range [startOffset, startOffset + kFloatsPerDSPVector) will
+  // events in the queue in the time range [startTime, startTime + kFloatsPerDSPVector) will
   // be processed. it is assumed that all events in the queue are sorted by start time. Any
   // events outside the time range will be ignored.
-  void processVector(int startOffset);
+  void processVector(int startTime);
 
   void setPitchBendInSemitones(float f);
   void setMPEPitchBendInSemitones(float f);
@@ -111,8 +111,11 @@ class EventsToSignals final
 
     // send to start processing a new buffer.
     void beginProcess();
+    
+    void writeOutputSignals(size_t endTime);
 
-    // send a note on, off update or sustain event to the voice.
+    // send a note event to the voice. Write all voice output signals for all frames
+    // prior to the event time. Update nextFrameToProcess with the event time.
     void writeNoteEvent(const Event& e, int keyIdx, bool doGlide, bool doReset);
 
     // write all current info to the end of the current buffer, scaling pitch bend
@@ -189,7 +192,12 @@ class EventsToSignals final
   const SmoothedController& getController(size_t n) const { return controllers[n]; }
 
  private:
-  size_t countHeldNotes();
+  
+  // TEMP
+  void showHeldNotes();
+  
+  size_t countHeldKeys();
+  size_t countActiveVoices();
   void processEvent(const Event& eventParam);
   void processNoteOnEvent(const Event& event);
   void processNoteOffEvent(const Event& event);
