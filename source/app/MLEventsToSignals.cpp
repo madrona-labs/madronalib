@@ -126,6 +126,8 @@ void EventsToSignals::Voice::beginProcess()
   }
 }
 
+// write current signals and continue existing glides up to the frame just before
+// the time when a new event will happen.
 void EventsToSignals::Voice::writeOutputSignals(size_t endTime)
 {
   while(nextFrameToProcess < endTime)
@@ -148,7 +150,6 @@ void EventsToSignals::Voice::writeOutputSignals(size_t endTime)
 // prior to the event time. Updates nextFrameToProcess with the event time.
 void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doGlide, bool doReset)
 {
-
   // incoming time in the event e is the sample offset into the DSPVector.
   size_t destTime = clamp((size_t)e.time, (size_t)0, (size_t)kFloatsPerDSPVector);
 
@@ -156,8 +157,6 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
   {
     case kNoteOn:
     {
-      creatorKeyIdx_ = keyIdx;
-
       if (doReset)
       {
         eventAgeInSamples = 0;
@@ -177,14 +176,13 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       writeOutputSignals(destTime);
 
       // set new values
+      creatorKeyIdx_ = keyIdx;
       currentPitch = e.value1;
       currentVelocity = e.value2;
       break;
     }
     case kNoteRetrig:
     {
-      creatorKeyIdx_ = keyIdx;
-
       if (doReset)
       {
         eventAgeInSamples = 0;
@@ -197,18 +195,17 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
         destTime++;
       }
 
+      // write previous values up to retrigger frame
       writeOutputSignals(destTime - 1);
 
       // write retrigger frame
-      outputs.row(kGate)[destTime - 1] = 0;
-      outputs.row(kPitch)[destTime - 1] = pitchGlide.nextSample(currentPitch);
-      eventAgeInSamples += eventAgeStep;
-      outputs.row(kElapsedTime)[destTime - 1] = samplesToSeconds(eventAgeInSamples, sr);
+      currentVelocity = 0;
+      writeOutputSignals(destTime);
 
       // set new values
+      creatorKeyIdx_ = keyIdx;
       currentPitch = e.value1;
       currentVelocity = e.value2;
-      nextFrameToProcess = destTime;
       break;
     }
     case kNoteSustain:
@@ -379,8 +376,8 @@ void EventsToSignals::addEvent(const Event& e)
 void EventsToSignals::clearEvents() { eventBuffer_.clear(); }
 
 // assuming the buffer is in sorted order, process all the events within
-// the vector starting at startOffset.
-void EventsToSignals::processVector(int startTime)
+// the vector starting at startTime.
+void EventsToSignals::processEventsAtOffset(int startTime)
 {
   // if we have never received an event, do nothing
   if (!awake_) return;
@@ -396,7 +393,7 @@ void EventsToSignals::processVector(int startTime)
 
   if (eventBuffer_.size() > 0)
   {
-    //std::cout << "---------------- startTime: " << startTime << "\n";
+    std::cout << "[ startTime:" << startTime << " ";
   }
 
   int nProc = 0;
@@ -404,8 +401,12 @@ void EventsToSignals::processVector(int startTime)
   // process any events in the buffer that are within this vector,
   // sending changes to voices and controller smoothers
   int endTime = startTime + kFloatsPerDSPVector;
+  
+  
   for (const auto& e : eventBuffer_)
   {
+    std::cout << getTypeStr(e) << "@" << e.time << " ";
+    
     if (within(e.time, startTime, endTime))
     {
       Event eventInThisVector = e;
@@ -414,6 +415,37 @@ void EventsToSignals::processVector(int startTime)
       nProc++;
     }
   }
+  
+  
+  /*
+  // TEMP
+  // klunky iterator-based loop allowing erase
+  for (auto it = eventBuffer_.begin(); it != eventBuffer_.end(); )
+  {
+    const auto& e = *it;
+    std::cout << getTypeStr(e) << "@" << e.time << " ";
+    
+    if (within(e.time, startTime, endTime))
+    {
+      Event eventInThisVector = e;
+      eventInThisVector.time -= startTime;
+      processEvent(eventInThisVector);
+      nProc++;
+      
+      it = eventBuffer_.erase(it);
+    }
+    else
+    {
+      it++;
+    }
+  }
+  */
+  
+  if (eventBuffer_.size() > 0)
+  {
+    std::cout << "---------------- endTime: " << endTime << "] \n\n";
+  }
+
 
   if(nProc > 0)
   {
@@ -491,7 +523,7 @@ size_t EventsToSignals::countHeldKeys()
 }
 
 // TEMP
-void EventsToSignals::showHeldNotes()
+void EventsToSignals::showHeldKeys()
 {
   std::cout << "held:\n";
   for (int i = 0; i < kMaxPhysicalKeys; ++i)
@@ -573,6 +605,10 @@ void EventsToSignals::processNoteOnEvent(const Event& e)
   keyStates_[keyIdx].noteOnIndex = currentNoteOnIndex++;
   keyStates_[keyIdx].pitch = e.value1;
 
+  
+  // std::cout << "processNoteOnEvent: " << keyIdx << "\n";
+
+  
   if (unison_)
   {
     // don't glide to first note played in unison mode.
@@ -589,17 +625,15 @@ void EventsToSignals::processNoteOnEvent(const Event& e)
     Event eventToWrite = e;
     auto v = findFreeVoice();
     
+    // if no free voice was found, steal the nearest voice.
     if (v < 1)
     {
-      v = findVoiceToSteal(e);
+      v = findNearestVoice(e.sourceIdx);
 
       // steal it with retrigger
       // TODO: this may make some clicks when the previous notes
       // are cut off. add more graceful stealing
       eventToWrite.type = kNoteRetrig;
-      
-      // TEMP
-      std::cout << "      (stealing voice " << v << ")\n";
     }
     
     voices[v].writeNoteEvent(eventToWrite, keyIdx, true, true);
@@ -607,11 +641,13 @@ void EventsToSignals::processNoteOnEvent(const Event& e)
     
     
     // TEMP
+    /*
     auto heldKeys = countHeldKeys();
     auto voicesOn = countActiveVoices();
     std::cout << "ON: voice:" << v << " key:" << keyIdx <<  " time:" << eventToWrite.time
     << " held:" << heldKeys << " active:" << voicesOn << "\n";
-    showHeldNotes();
+    showHeldKeys();
+     */
   }
 }
 
@@ -626,6 +662,9 @@ void EventsToSignals::processNoteOffEvent(const Event& e)
   {
     keyStates_[keyIdx].state = KeyState::kOff;
   }
+  
+  
+ // std::cout << "processNoteOffEvent: " << keyIdx << "\n";
 
   if (unison_)
   {
@@ -683,15 +722,17 @@ void EventsToSignals::processNoteOffEvent(const Event& e)
         voices[v].writeNoteEvent(eventToWrite, keyIdx, true, true);
 
         // TEMP
+        /*
         auto heldKeys = countHeldKeys();
         auto voicesOn = countActiveVoices();
         std::cout << "OFF: voice:" << v << " key:" << keyIdx <<  " time:" << e.time
         << " held:" << heldKeys << " active:" << voicesOn << "\n";
+         */
       }
     }
   }
 
-  showHeldNotes();
+  showHeldKeys();
 }
 
 // ?
@@ -938,8 +979,8 @@ void EventsToSignals::setUnison(bool b) { unison_ = b; }
 
 #pragma mark -
 
-// return index of free voice or -1 for none.
-// if a free voice is found, increments lastFreeVoiceFound_.
+// return (one-based) index of free voice or -1 for none.
+// if a free voice is found, lastFreeVoiceFound_ is updated.
 //
 int EventsToSignals::findFreeVoice()
 {
@@ -960,12 +1001,6 @@ int EventsToSignals::findFreeVoice()
   }
 
   return r;
-}
-
-int EventsToSignals::findVoiceToSteal(Event e)
-{
-  // just steal the voice with the nearest note.
-  return findNearestVoice(e.sourceIdx);
 }
 
 // return the index of the voice with the note nearest to the note n.

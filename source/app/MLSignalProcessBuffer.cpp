@@ -57,6 +57,7 @@ void SignalProcessBuffer::process(const float** externalInputs, float** external
   // run vector-size process until we have externalFrames of output
   bool didProcess{false};
   int startOffset{0};
+  
   while (outputBuffers_[0].getReadAvailable() < externalFrames)
   {
     // read one chunk from each input buffer
@@ -67,7 +68,8 @@ void SignalProcessBuffer::process(const float** externalInputs, float** external
     }
 
     // process one vector of the context, generating event / controller signals
-    context->processVector(startOffset);
+    context->makeContextSignalsAtOffset(startOffset);
+    
     startOffset += kFloatsPerDSPVector;
 
     // run the signal processing function

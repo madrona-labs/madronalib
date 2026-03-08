@@ -50,6 +50,13 @@ struct Event
   static const char* typeNames[kNumEventTypes];
 };
 
+// TEMP
+inline const std::string getTypeStr(const Event& e) {
+  static const std::array<std::string, kNumEventTypes> types
+  { "null", "on", "retrig", "sustain", "off", "susped", "ctrl", "pitch", "npress", "cpress", "pgm"};
+  return types[e.type];
+}
+
 inline std::ostream& operator<<(std::ostream& out, const Event& e)
 {
   std::cout << "[" << Event::typeNames[e.type] << " " << (int)e.channel << "/" << (int)e.sourceIdx
