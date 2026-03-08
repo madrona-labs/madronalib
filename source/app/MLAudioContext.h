@@ -38,10 +38,9 @@ class AudioContext final
     // clear state
     void clear();
 
-    // generate phasors from the input parameters
-    void processVector(int startOffset);
+    void makeTimeSignals();
 
-    // externally readable values updated by processVector()
+    // externally readable values
     DSPVector quarterNotesPhase_;
     double bpm{0};
     double sampleRate{0};
@@ -65,7 +64,7 @@ class AudioContext final
 
   // update everything needed to create a new vector of context signals.
   // startOffset is the start frame of the vector in the host buffer.
-  void processVector(int startOffset);
+  void makeContextSignalsAtOffset(int startOffset);
 
   void setSampleRate(int r);
 

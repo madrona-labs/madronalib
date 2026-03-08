@@ -78,7 +78,7 @@ class EventsToSignals final
   // events in the queue in the time range [startTime, startTime + kFloatsPerDSPVector) will
   // be processed. it is assumed that all events in the queue are sorted by start time. Any
   // events outside the time range will be ignored.
-  void processVector(int startTime);
+  void processEventsAtOffset(int startTime);
 
   void setPitchBendInSemitones(float f);
   void setMPEPitchBendInSemitones(float f);
@@ -194,7 +194,7 @@ class EventsToSignals final
  private:
   
   // TEMP
-  void showHeldNotes();
+  void showHeldKeys();
   
   size_t countHeldKeys();
   size_t countActiveVoices();
@@ -208,7 +208,6 @@ class EventsToSignals final
   void processChannelPressureEvent(const Event& event);
   void processSustainPedalEvent(const Event& event);
   int findFreeVoice();
-  int findVoiceToSteal(Event e);
   int findNearestVoice(int note);
 
   // voices, containing signals for clients to read directly.
