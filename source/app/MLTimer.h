@@ -4,14 +4,15 @@
 
 #pragma once
 
+// MLPlatform.h must come first on Windows to fix std::thread/_beginthreadex issue
+#include "MLPlatform.h"
+
 #include <chrono>
 #include <functional>
 #include <iostream>
 #include <mutex>
 #include <set>
 #include <thread>
-
-#include "MLPlatform.h"
 #include "MLSharedResource.h"
 
 using namespace std::chrono;

@@ -6,6 +6,10 @@
 
 #include <array>
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 #include "MLDSPBuffer.h"
 #include "MLDSPProjections.h"
 
@@ -50,7 +54,7 @@ const Projection flatTop(
 // many more CPU cycles when they decay. Only needed for Intel processors.
 struct UsingFlushDenormalsToZero
 {
-#if defined(__SSE__)
+#if defined(__SSE__) || (defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86)))
   uint32_t MXCRState;
 
   UsingFlushDenormalsToZero()
