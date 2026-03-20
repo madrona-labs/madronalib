@@ -28,9 +28,24 @@ ENDIF(APPLE)
 # project and version
 #--------------------------------------------------------------------
 
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo" CACHE STRING "" FORCE)
 
 project(madronalib)
+
+#--------------------------------------------------------------------
+# FetchContent for cJSON (source only - we compile cJSON.c directly into madronalib)
+#--------------------------------------------------------------------
+
+include(FetchContent)
+
+FetchContent_Declare(
+  cjson
+  GIT_REPOSITORY https://github.com/DaveGamble/cJSON.git
+  GIT_TAG v1.7.18
+  SOURCE_SUBDIR this_does_not_exist  # Prevents add_subdirectory, we just want the source
+)
+
+FetchContent_MakeAvailable(cjson)
 
 set(madronalib_VERSION_MAJOR "0")
 set(madronalib_VERSION_MINOR "1")
@@ -126,23 +141,19 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/aes256)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/clap)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/cJSON)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/ffft)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/utf)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/app)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/DSP)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/matrix)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/networking)
-
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-if(APPLE)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf)
-else()
-endif()
+# OSC support - cross-platform
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf)
 
 #--------------------------------------------------------------------
 # collect sources and headers
@@ -158,7 +169,9 @@ file(GLOB MATRIX_SOURCES "source/matrix/*.cpp")
 file(GLOB MATRIX_HEADERS "source/matrix/*.h")
 
 file(GLOB AES_SOURCES "external/aes256/*.cpp")
-file(GLOB JSON_SOURCES "external/cJSON/*.c")
+
+# cJSON source (fetched via FetchContent, compiled directly into madronalib)
+set(CJSON_SOURCES ${cjson_SOURCE_DIR}/cJSON.c)
 
 file(GLOB OSC_HEADERS_IP "external/oscpack/ip/*.h")
 file(GLOB OSC_HEADERS_OSC "external/oscpack/osc/*.h")
@@ -166,7 +179,10 @@ file(GLOB OSC_HEADERS_ZEROCONF "external/oscpack/zeroconf/*.h")
 
 file(GLOB OSC_SOURCES_IP "external/oscpack/ip/*.cpp")
 file(GLOB OSC_SOURCES_OSC "external/oscpack/osc/*.cpp")
-file(GLOB OSC_SOURCES_ZEROCONF "external/oscpack/zeroconf/*.cpp")
+# Zeroconf is POSIX-only (uses sys/select.h, DNS-SD)
+if(NOT WIN32)
+    file(GLOB OSC_SOURCES_ZEROCONF "external/oscpack/zeroconf/*.cpp")
+endif()
 
 file(GLOB RTAUDIO_SOURCES "external/rtaudio/*.cpp")
 file(GLOB RTAUDIO_HEADERS "external/rtaudio/*.h")
@@ -177,15 +193,12 @@ file(GLOB RTMIDI_HEADERS "external/rtmidi/*.h")
 file(GLOB EXTERNAL_HEADERS "include/*.h")
 
 
-if(APPLE)
+# Platform-specific OSC socket implementations
+if(APPLE OR UNIX)
     file(GLOB OSC_SOURCES_NATIVE "external/oscpack/ip/posix/*.cpp")
-else()
-   #TODO OSC for windows
-   file(GLOB OSC_SOURCES_NATIVE "external/oscpack/ip/win32/*.cpp")
+elseif(WIN32)
+    file(GLOB OSC_SOURCES_NATIVE "external/oscpack/ip/win32/*.cpp")
 endif()
-
-file(GLOB NETWORKING_SOURCES "source/networking/*.cpp")
-file(GLOB NETWORKING_HEADERS "source/networking/*.h")
 
 set(OSC_HEADERS
     ${OSC_HEADERS_IP}
@@ -207,8 +220,8 @@ set(madronalib_SOURCES
     ${DSP_HEADERS}
     ${MATRIX_SOURCES}
     ${MATRIX_HEADERS}
-    ${JSON_SOURCES}
     ${AES_SOURCES}
+    ${CJSON_SOURCES}
         source/app/MLMIDI.h
         source/app/MLMIDI.cpp
         source/app/MLAudioTask.cpp
@@ -222,15 +235,13 @@ set(madronalib_SOURCES
 
     message("RTMIDI_SOURCES: " ${RTMIDI_SOURCES} )
 
-if(APPLE)
-  list(APPEND madronalib_SOURCES ${NETWORKING_SOURCES} )
-  list(APPEND madronalib_SOURCES ${OSC_SOURCES_IP} )
-  list(APPEND madronalib_SOURCES ${OSC_SOURCES_OSC} )
-  list(APPEND madronalib_SOURCES ${OSC_SOURCES_ZEROCONF} )
-  list(APPEND madronalib_SOURCES ${OSC_SOURCES_NATIVE} )
-else()
-  #TODO OSC for windows
+# OSC support - cross-platform
+list(APPEND madronalib_SOURCES ${OSC_SOURCES_IP} )
+list(APPEND madronalib_SOURCES ${OSC_SOURCES_OSC} )
+if(NOT WIN32)
+    list(APPEND madronalib_SOURCES ${OSC_SOURCES_ZEROCONF} )
 endif()
+list(APPEND madronalib_SOURCES ${OSC_SOURCES_NATIVE} )
 
 # send binary output to the current build/bin
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -268,8 +279,30 @@ set_target_properties(${target} PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       FOLDER "madronalib")
 
-target_include_directories(${target} PRIVATE ${RTAUDIO_HEADERS})
+target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/rtaudio)
 
+# Define where headers are installed (needed for PUBLIC include directories below)
+if(APPLE)
+    set(HEADERS_INCLUDE_DIR "include/madronalib")
+elseif(WIN32)
+    set(HEADERS_INCLUDE_DIR "include")
+else()
+    set(HEADERS_INCLUDE_DIR "include/madronalib")  # Linux
+endif()
+
+# PUBLIC include directories for consumers - using generator expressions for build vs install paths
+target_include_directories(${target} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/app>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/DSP>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/matrix>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external>
+    $<BUILD_INTERFACE:${cjson_SOURCE_DIR}>
+    $<INSTALL_INTERFACE:${HEADERS_INCLUDE_DIR}>
+)
+
+# cJSON is now compiled directly into madronalib (no separate target)
+# cJSON.h is installed alongside madronalib headers for consumers
 
 # choose driver for Rtaudio
 if(WIN32)
@@ -281,7 +314,7 @@ elseif(LINUX_JACK)
     target_link_libraries(${target} PRIVATE jack pthread)
 elseif(LINUX_PULSE)
     target_compile_definitions(${target} PRIVATE __LINUX_PULSE__)
-    target_link_libraries(${target} PRIVATE pulse pthread)
+    target_link_libraries(${target} PRIVATE pulse-simple pulse pthread)
 elseif(LINUX_ASOUND)
     target_compile_definitions(${target} PRIVATE __LINUX_ALSA__)
     target_link_libraries(${target} PRIVATE asound pthread)
@@ -296,17 +329,45 @@ endif()
 include(GNUInstallDirs)
 
 if(WIN32)
-    set(CMAKE_INSTALL_LIBDIR "C:/Program Files/madronalib/lib")
     if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
       set(CMAKE_INSTALL_PREFIX "C:/Program Files/madronalib" CACHE PATH "..." FORCE)
     endif()
+    # Let GNUInstallDirs set CMAKE_INSTALL_LIBDIR relative to CMAKE_INSTALL_PREFIX
 endif()
 
 install(
     TARGETS ${target}
+    EXPORT madronalib-targets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+# Install CMake package config files
+include(CMakePackageConfigHelpers)
+
+install(EXPORT madronalib-targets
+    FILE madronalibTargets.cmake
+    NAMESPACE madronalib::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/madronalib
+)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/madronalibConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/madronalib
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfigVersion.cmake
+    VERSION ${madronalib_VERSION_FULL}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/madronalib
 )
 
 message("madronalib destination: " ${CMAKE_INSTALL_LIBDIR} )
@@ -315,16 +376,15 @@ message("madronalib destination: " ${CMAKE_INSTALL_LIBDIR} )
 # install headers
 #--------------------------------------------------------------------
 
-if(APPLE)
-    set(HEADERS_INCLUDE_DIR "include/madronalib")
-elseif(WIN32)
-    set(HEADERS_INCLUDE_DIR "include")
-endif()
+# HEADERS_INCLUDE_DIR is defined earlier (needed for PUBLIC include directories)
 
 install(FILES include/madronalib.h DESTINATION ${HEADERS_INCLUDE_DIR})
 install(FILES include/mldsp.h DESTINATION ${HEADERS_INCLUDE_DIR})
 
-# TODO: ideally we don't install these?
+# TODO: don't install this, wrap
+# Install cJSON header (fetched via FetchContent, consumers get it from here)
+install(FILES ${cjson_SOURCE_DIR}/cJSON.h DESTINATION ${HEADERS_INCLUDE_DIR})
+
 install(FILES
     ${APP_HEADERS}
     ${DSP_HEADERS}
@@ -335,33 +395,30 @@ install(FILES
     ${HEADERS_INCLUDE_DIR}
   )
 
-if(APPLE)
-    install(FILES ${NETWORKING_HEADERS} DESTINATION ${HEADERS_INCLUDE_DIR})
-else()
-    #TODO OSC For win / Linux
-endif()
+# OSC headers are installed as part of APP_HEADERS (now in source/app/)
 
 #--------------------------------------------------------------------
 # Add platform libraries
 #--------------------------------------------------------------------
 
 # note: ffft and utf are header-only
-# cJSON, aes256 and others added as source
+# aes256 and cJSON added as source (cJSON fetched via FetchContent)
 
 if(APPLE)
-  target_link_libraries(madronalib "-framework Carbon")
-  target_link_libraries(madronalib "-framework CoreServices")
-  target_link_libraries(madronalib "-framework CoreMIDI")
-  target_link_libraries(madronalib "-framework AudioToolbox")
-  target_link_libraries(madronalib "-framework AudioUnit")
-  target_link_libraries(madronalib "-framework CoreAudio")
-  target_link_libraries(madronalib "-framework Foundation")
-  target_link_libraries(madronalib "-framework OpenGL")
-  target_link_libraries(madronalib "-framework GLUT")
-else(APPLE)
-  # target_link_libraries(madronalib ${DNSSD_LIBRARIES})
-  target_link_libraries(madronalib winmm.lib)
+  target_link_libraries(madronalib PRIVATE "-framework Carbon")
+  target_link_libraries(madronalib PRIVATE "-framework CoreServices")
+  target_link_libraries(madronalib PRIVATE "-framework CoreMIDI")
+  target_link_libraries(madronalib PRIVATE "-framework AudioToolbox")
+  target_link_libraries(madronalib PRIVATE "-framework AudioUnit")
+  target_link_libraries(madronalib PRIVATE "-framework CoreAudio")
+  target_link_libraries(madronalib PRIVATE "-framework Foundation")
+  target_link_libraries(madronalib PRIVATE "-framework OpenGL")
+  target_link_libraries(madronalib PRIVATE "-framework GLUT")
+elseif(WIN32)
+  # winmm for multimedia timer, ws2_32 for Winsock2 (OSC networking)
+  target_link_libraries(madronalib PRIVATE winmm.lib ws2_32.lib)
 endif()
+# Linux linking handled earlier via LINUX_ASOUND/LINUX_JACK/LINUX_PULSE
 
 #--------------------------------------------------------------------
 # function to build RtAudio / RtMidi example
@@ -383,6 +440,15 @@ function(make_example EXAMPLE_APP_NAME EXAMPLE_SOURCE_FILE)
         )
 
     target_link_libraries(${EXAMPLE_APP_NAME} PRIVATE madronalib)
+
+    # Link platform audio/midi libraries for examples (needed since madronalib is static)
+    if(LINUX_JACK)
+        target_link_libraries(${EXAMPLE_APP_NAME} PRIVATE jack pthread)
+    elseif(LINUX_PULSE)
+        target_link_libraries(${EXAMPLE_APP_NAME} PRIVATE pulse-simple pulse pthread)
+    elseif(LINUX_ASOUND)
+        target_link_libraries(${EXAMPLE_APP_NAME} PRIVATE asound pthread)
+    endif()
 
     set_target_properties(${EXAMPLE_APP_NAME}
         PROPERTIES
@@ -415,6 +481,30 @@ function(make_example EXAMPLE_APP_NAME EXAMPLE_SOURCE_FILE)
     endif()
 endfunction()
 
+#--------------------------------------------------------------------
+# function to build simple console example
+#--------------------------------------------------------------------
+
+function(make_console_example EXAMPLE_APP_NAME EXAMPLE_SOURCE_FILE EXAMPLE_SUBDIR)
+
+    set(
+        EXAMPLE_SOURCES
+        ${ML_ROOT}/examples/${EXAMPLE_SUBDIR}/${EXAMPLE_SOURCE_FILE}
+    )
+
+    add_executable(${EXAMPLE_APP_NAME} ${EXAMPLE_SOURCES})
+
+    target_include_directories(${EXAMPLE_APP_NAME} PRIVATE
+        ${ML_ROOT}/external
+        )
+
+    target_link_libraries(${EXAMPLE_APP_NAME} PRIVATE madronalib)
+
+    set_target_properties(${EXAMPLE_APP_NAME}
+        PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+endfunction()
 
 #--------------------------------------------------------------------
 # build all examples
@@ -428,6 +518,10 @@ if(BUILD_EXAMPLES)
   make_example(ControllersToAudioExample controllers-to-audio.cpp)
   make_example(SineExample sine.cpp)
   make_example(Study1Example study1.cpp)
+
+  # OSC examples (simple console apps)
+  make_console_example(osc-listener osc-listener.cpp osc)
+  make_console_example(osc-sender osc-sender.cpp osc)
 endif()
 
 #--------------------------------------------------------------------
@@ -436,10 +530,9 @@ endif()
 
 if(BUILD_TESTS)
     set(target tests)
-    file(GLOB TEST_SOURCES "tests/*.*")
+    file(GLOB TEST_SOURCES "Tests/*.*")
 
     add_executable(tests ${TEST_SOURCES})
-    set_target_properties(tests PROPERTIES EXCLUDE_FROM_ALL TRUE)
     add_dependencies(tests madronalib)
 
     target_link_libraries(tests madronalib)
@@ -457,10 +550,6 @@ set(madronalib_SOURCES_internal
     ${MATRIX_SOURCES}
     ${MATRIX_HEADERS}
     )
-
-if(APPLE)
-  list(APPEND madronalib_SOURCES_internal ${NETWORKING_SOURCES} )
-endif()
 
 # Adding clang-format target if executable is found
 find_program(CLANG_FORMAT "clang-format")

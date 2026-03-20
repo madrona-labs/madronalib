@@ -5,8 +5,9 @@
 #pragma once
 
 #include "MLEvent.h"
-#include <vector>
 #include <functional>
+#include <memory>
+#include <vector>
 
 namespace ml
 {
@@ -31,15 +32,15 @@ class MIDIInput
   MIDIInput();
   ~MIDIInput();
 
-  // TODO add methods for inspecting ports before start. start() will take
-  // an additional port argument.
+  // enumerate available MIDI input ports
+  unsigned int getPortCount();
+  std::string getPortName(unsigned int portNumber);
 
   // start processing messages from the input with the given handler function.
-  bool start(MIDIMessageHandler handler);
+  bool start(MIDIMessageHandler handler, unsigned int portNumber = 0);
   void stop();
 
   std::string getAPIDisplayName();
-  std::string getPortName();
 
  private:
   struct Impl;
