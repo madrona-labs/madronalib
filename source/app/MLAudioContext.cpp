@@ -86,7 +86,7 @@ void AudioContext::ProcessTime::clear(void)
 }
 
 // generate phasors from the input parameters
-void AudioContext::ProcessTime::processVector(int startOffset)
+void AudioContext::ProcessTime::makeTimeSignals()
 {
   for (int n = 0; n < kFramesPerBlock; ++n)
   {
@@ -121,10 +121,10 @@ void AudioContext::clear()
   eventsToSignals.clear();
 }
 
-void AudioContext::processVector(int startOffset)
+void AudioContext::makeContextSignalsAtOffset(int startOffset)
 {
-  currentTime.processVector(startOffset);
-  eventsToSignals.processVector(startOffset);
+  currentTime.makeTimeSignals();
+  eventsToSignals.processEventsAtOffset(startOffset);
 }
 
 SignalBlock AudioContext::getInputController(size_t n) const
