@@ -20,7 +20,7 @@ namespace ml
 
 // Callback type for optional message logging
 // Parameters: actor name (if registered), message, is_enqueue (true) or dispatch (false)
-using ActorLogCallback = std::function<void(Path actorName, const Message&, bool isEnqueue)>;
+using ActorLogCallback = std::function<void(const Path& actorName, const Message&, bool isEnqueue)>;
 
 class Actor;
 class ActorRegistry
@@ -72,7 +72,10 @@ class Actor
   // return own name
   Path self();
 
-  // Set/clear global log callback for message debugging
+  // Set/clear global log callback for message debugging.
+  // NOTE: enabling a log callback makes enqueueMessage() non-real-time-safe,
+  // since the callback may allocate or block. Do not enable in production
+  // audio paths where enqueueMessage() is called from the audio thread.
   static void setLogCallback(ActorLogCallback cb) { logCallback_ = cb; }
   static void clearLogCallback() { logCallback_ = nullptr; }
 

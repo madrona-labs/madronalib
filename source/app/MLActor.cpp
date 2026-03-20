@@ -51,6 +51,5 @@ void ActorRegistry::dump() { actors_.dump(); }
 
 Path Actor::self()
 {
-  SharedResourcePointer<ActorRegistry> registry;
-  return registry->getActorNameFromPointer(this);
+  return registeredName_;
 }

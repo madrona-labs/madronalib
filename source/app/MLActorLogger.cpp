@@ -65,7 +65,7 @@ void ActorLogger::enableFileOutput(bool enable)
   }
 }
 
-void ActorLogger::handleLogCallback(Path actorName, const Message& m, bool isEnqueue)
+void ActorLogger::handleLogCallback(const Path& actorName, const Message& m, bool isEnqueue)
 {
   // Skip anonymous (unregistered) actors
   if (!actorName)

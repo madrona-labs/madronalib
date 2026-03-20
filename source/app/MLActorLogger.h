@@ -49,7 +49,7 @@ class ActorLogger
   bool isFileOutputEnabled() const { return fileOutputEnabled_; }
 
  private:
-  void handleLogCallback(Path actorName, const Message& m, bool isEnqueue);
+  void handleLogCallback(const Path& actorName, const Message& m, bool isEnqueue);
 
   OSCSender sender_;
   bool enabled_{false};
