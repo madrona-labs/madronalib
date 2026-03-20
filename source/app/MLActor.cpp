@@ -6,7 +6,8 @@
 
 using namespace ml;
 
-// Define static member for optional logging callback
+// Define static members for optional logging
+std::atomic<bool> Actor::logEnabled_{false};
 ActorLogCallback Actor::logCallback_{nullptr};
 
 Actor* ActorRegistry::getActor(Path actorName) { return actors_[actorName]; }

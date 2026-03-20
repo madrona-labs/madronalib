@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 
 #include "MLMessage.h"
@@ -50,7 +51,10 @@ class Actor
   Queue<Message> messageQueue_{kDefaultMessageQueueSize};
   Timer queueTimer_;
 
-  // Optional logging callback (static, shared by all actors)
+  // Optional logging callback (static, shared by all actors).
+  // logEnabled_ is an atomic guard so the hot-path check in enqueueMessage /
+  // handleMessagesInQueue is thread-safe without touching the std::function.
+  static std::atomic<bool> logEnabled_;
   static ActorLogCallback logCallback_;
 
   // Actor's registered name (for logging identification)
@@ -76,8 +80,16 @@ class Actor
   // NOTE: enabling a log callback makes enqueueMessage() non-real-time-safe,
   // since the callback may allocate or block. Do not enable in production
   // audio paths where enqueueMessage() is called from the audio thread.
-  static void setLogCallback(ActorLogCallback cb) { logCallback_ = cb; }
-  static void clearLogCallback() { logCallback_ = nullptr; }
+  static void setLogCallback(ActorLogCallback cb)
+  {
+    logCallback_ = cb;
+    logEnabled_.store(true, std::memory_order_release);
+  }
+  static void clearLogCallback()
+  {
+    logEnabled_.store(false, std::memory_order_release);
+    logCallback_ = nullptr;
+  }
 
   void resizeQueue(size_t n) { messageQueue_.resize(n); }
 
@@ -102,7 +114,7 @@ class Actor
   // enqueueMessage just pushes the message onto the queue.
   void enqueueMessage(Message m)
   {
-    if (logCallback_)
+    if (logEnabled_.load(std::memory_order_acquire))
     {
       logCallback_(registeredName_, m, true);  // true = enqueue
     }
@@ -131,7 +143,7 @@ class Actor
     for(int i=0; i<n; ++i)
     {
       Message m = messageQueue_.pop();
-      if (logCallback_)
+      if (logEnabled_.load(std::memory_order_acquire))
       {
         logCallback_(registeredName_, m, false);  // false = dispatch
       }
