@@ -151,7 +151,6 @@ void EventsToSignals::Voice::writeOutputSignals(size_t endTime)
 // prior to the event time. Updates nextFrameToProcess with the event time.
 void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doGlide, bool doReset)
 {
-
   // incoming time in the event e is the sample offset into the DSPVector.
   size_t destTime = clamp((size_t)e.time, (size_t)0, (size_t)kFramesPerBlock);
 
@@ -377,11 +376,20 @@ void EventsToSignals::addEvent(const Event& e)
   eventBuffer_.insert(it, e);
 }
 
-void EventsToSignals::clearEvents() { eventBuffer_.clear(); }
+void EventsToSignals::clearEvents() {
+  eventBuffer_.clear();
+}
 
-// assuming the buffer is in sorted order, process all the events within
-// the vector starting at startTime.
-void EventsToSignals::processEventsAtOffset(int startTime)
+void EventsToSignals::adjustEventsInBuffer(size_t startTime)
+{
+  for (auto& e : eventBuffer_)
+  {
+    e.time -= startTime;
+  }
+}
+
+
+void EventsToSignals::makeSignalBlock()
 {
   // if we have never received an event, do nothing
   if (!awake_) return;
@@ -395,29 +403,20 @@ void EventsToSignals::processEventsAtOffset(int startTime)
     v.beginProcess();
   }
 
-  int nProc = 0;
-
-  // process any events in the buffer that are within this vector,
+  // pop any events in the buffer that are within the first signal block,
   // sending changes to voices and controller smoothers
-  int endTime = startTime + kFramesPerBlock;
-
+  int eventsProcessed = 0;
   for (const auto& e : eventBuffer_)
   {
-    if (within(e.time, startTime, endTime))
+    if(within(e.time, 0, (int)kFramesPerBlock))
     {
       Event eventInThisVector = e;
-      eventInThisVector.time -= startTime;
       processEvent(eventInThisVector);
-      nProc++;
+      eventsProcessed++;
     }
   }
-  
+  eventBuffer_.erase(eventBuffer_.begin(), eventBuffer_.begin() + eventsProcessed);
 
-  if(nProc > 0)
-  {
-    //std::cout << "processVector: " << nProc << " events \n";
-  }
-  
   // end voice processing, making complete outgoing signals
   // MPE main voice (index 0) uses MIDI pitch bend setting
   //

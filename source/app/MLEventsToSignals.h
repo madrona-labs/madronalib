@@ -74,12 +74,14 @@ class EventsToSignals final
   void addEvent(const Event& e);
 
   void clearEvents();
-
+  
+  void adjustEventsInBuffer(size_t time);
+  
   // process incoming events in buffer and generate output signals.
-  // events in the queue in the time range [startTime, startTime + kFramesPerBlock) will
+  // events in the queue in the time range [0, kFramesPerBlock) will
   // be processed. it is assumed that all events in the queue are sorted by start time. Any
   // events outside the time range will be ignored.
-  void processEventsAtOffset(int startTime);
+  void makeSignalBlock();
 
   void setPitchBendInSemitones(float f);
   void setMPEPitchBendInSemitones(float f);
