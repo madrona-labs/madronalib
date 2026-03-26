@@ -56,8 +56,7 @@ static constexpr int kPolyphony = 4;
 // helper: set up context and process buffer for testing
 struct TestFixture
 {
-  AudioContext ctx{0, 2, kSampleRate, kMaxTestFrames};
-//  SignalProcessBuffer buf{0, 2, kMaxTestFrames};
+  AudioContext ctx{0, 2, kSampleRate};
   float outputData[2][kMaxTestFrames]{};
   float* outputs[2]{outputData[0], outputData[1]};
 

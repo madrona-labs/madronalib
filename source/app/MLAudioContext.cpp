@@ -104,40 +104,11 @@ void AudioContext::ProcessTime::makeTimeSignals()
 
 // AudioContext
 
-AudioContext::AudioContext(size_t nInputs, size_t nOutputs, size_t maxFrames) :
-  inputs(nInputs), outputs(nOutputs), maxFrames_(maxFrames)
+AudioContext::AudioContext(size_t nInputs, size_t nOutputs, int rate)
+    : inputs(nInputs), outputs(nOutputs)
 {
-  inputBuffers_.resize(nInputs);
-  for (int i = 0; i < nInputs; ++i)
-  {
-    inputBuffers_[i].resize((int)maxFrames_);
-  }
-  
-  outputBuffers_.resize(nOutputs);
-  for (int i = 0; i < nOutputs; ++i)
-  {
-    outputBuffers_[i].resize((int)maxFrames_);
-  }
-  
-  clear();
-}
-
-AudioContext::AudioContext(size_t nInputs, size_t nOutputs, int rate, size_t maxFrames)
-    : inputs(nInputs), outputs(nOutputs), maxFrames_(maxFrames)
-{
-  inputBuffers_.resize(nInputs);
-  for (int i = 0; i < nInputs; ++i)
-  {
-    inputBuffers_[i].resize((int)maxFrames_);
-  }
-  
-  outputBuffers_.resize(nOutputs);
-  for (int i = 0; i < nOutputs; ++i)
-  {
-    outputBuffers_[i].resize((int)maxFrames_);
-  }
+  resizeBuffers(nInputs, nOutputs, kMaxIOFramesDefault);
   setSampleRate(rate);
-  
   clear();
 }
 
@@ -147,12 +118,27 @@ void AudioContext::setSampleRate(int r)
   eventsToSignals.setSampleRate(r);
 }
 
+void AudioContext::resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames)
+{
+  inputBuffers_.resize(nInputs);
+  for (int i = 0; i < nInputs; ++i)
+  {
+    inputBuffers_[i].resize((int)maxFrames);
+  }
+  
+  outputBuffers_.resize(nOutputs);
+  for (int i = 0; i < nOutputs; ++i)
+  {
+    outputBuffers_[i].resize((int)maxFrames);
+  }
+}
+
 void AudioContext::clear()
 {
   currentTime.clear();
   eventsToSignals.clear();
   
-  // add a block of zeros to output buffer.
+  // add a block of zeros to output buffer. We have a constant one-block delay between input and output.
   SignalBlock emptyBlock(0.f);
   for (auto& buf : outputBuffers_)
   {
@@ -163,10 +149,9 @@ void AudioContext::clear()
   samplesAccumulated_ = 0;
 }
 
-
-
 // Buffer the external context and provide an internal context for the process function.
-// Then run the process function in the internal context, updating its state.
+// Then run the process function in the internal context as many times are necessary to
+// generate externalFrames of output.
 void AudioContext::process(const float** externalInputs, float** externalOutputs,
                                   int externalFrames,
                                   SignalProcessFn processFn, void* state)
@@ -180,7 +165,7 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
   // write vectors from external inputs (if any) to inputBuffers
   for (int c = 0; c < nInputs; c++)
   {
-    if (externalInputs[c])
+    if(externalInputs[c])
     {
       inputBuffers_[c].write(externalInputs[c], externalFrames);
     }
@@ -189,7 +174,6 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
   samplesAccumulated_ += externalFrames;
   
   // run vector-size process until we have externalFrames of output
-  bool didProcess{false};
   int startOffset{0};
   
   while (outputBuffers_[0].getReadAvailable() < externalFrames)
@@ -214,12 +198,10 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
     {
       outputBuffers_[c].write(outputs[c]);
     }
-    
-    didProcess = true;
   }
   
   // read from outputBuffers to external outputs
-  for (int c = 0; c < nOutputs; c++)
+  for(int c = 0; c < nOutputs; c++)
   {
     if (externalOutputs[c])
     {

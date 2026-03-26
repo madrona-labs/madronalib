@@ -229,8 +229,6 @@ set(madronalib_SOURCES
         source/app/MLEvent.h
         source/app/MLAudioContext.cpp
         source/app/MLAudioContext.h
-        source/app/MLSignalProcessBuffer.h
-        source/app/MLSignalProcessBuffer.cpp
 )
 
     message("RTMIDI_SOURCES: " ${RTMIDI_SOURCES} )
