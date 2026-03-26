@@ -64,13 +64,6 @@ class AudioContext final
 
   void clear();
 
-  // update everything needed to create a new vector of context signals.
-  // startOffset is the start frame of the vector in the host buffer.
-  void makeContextSignalsAtOffset(int startOffset);
-  
-  
-  
-
   void setSampleRate(int r);
   void resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames);
 
@@ -120,7 +113,7 @@ class AudioContext final
   
   // samples accumulated since the last process call.
   // used to remap event times from host-buffer-relative to internal timeline.
-  int samplesAccumulated_{0};
+  int inputSamplesAccumulated_{0};
 
 };
 

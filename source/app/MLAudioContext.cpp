@@ -146,7 +146,7 @@ void AudioContext::clear()
     buf.write(emptyBlock);
   }
   
-  samplesAccumulated_ = 0;
+  inputSamplesAccumulated_ = 0;
 }
 
 // Buffer the external context and provide an internal context for the process function.
@@ -171,33 +171,31 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
     }
   }
   
-  samplesAccumulated_ += externalFrames;
-  
-  // run vector-size process until we have externalFrames of output
-  int startOffset{0};
-  
-  while (outputBuffers_[0].getReadAvailable() < externalFrames)
+  inputSamplesAccumulated_ += externalFrames;
+  while (inputSamplesAccumulated_ >= kFramesPerBlock)
   {
-    // read one chunk from each input buffer
+    // read one block from each input buffer
     for (int c = 0; c < nInputs; c++)
     {
-      // read one SignalBlock from the input buffer.
       inputs[c] = inputBuffers_[c].read();
     }
     
-    // process one vector of the context, generating event / controller signals
-    makeContextSignalsAtOffset(startOffset);
-    
-    startOffset += kFramesPerBlock;
+    // generate one block of time / event / controller signals
+    currentTime.makeTimeSignals();
+    eventsToSignals.makeSignalBlock();
     
     // run the signal processing function
     processFn(this, state);
     
-    // write one vector to each output buffer
+    // write one block to each output buffer
     for (int c = 0; c < nOutputs; c++)
     {
       outputBuffers_[c].write(outputs[c]);
     }
+        
+    // shift any remaining events in buffer forward and fix accum counter
+    eventsToSignals.adjustEventsInBuffer(kFramesPerBlock);
+    inputSamplesAccumulated_ -= kFramesPerBlock;
   }
   
   // read from outputBuffers to external outputs
@@ -208,18 +206,6 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
       outputBuffers_[c].read(externalOutputs[c], externalFrames);
     }
   }
-  
-  clearInputEvents();
-  
-  // fix time offset?
-}
-
-
-
-void AudioContext::makeContextSignalsAtOffset(int startOffset)
-{
-  currentTime.makeTimeSignals();
-  eventsToSignals.processEventsAtOffset(startOffset);
 }
 
 SignalBlock AudioContext::getInputController(size_t n) const
@@ -230,7 +216,7 @@ SignalBlock AudioContext::getInputController(size_t n) const
 void AudioContext::addInputEvent(const Event& e)
 {
   Event adjusted = e;
-  adjusted.time += samplesAccumulated_;
+  adjusted.time += inputSamplesAccumulated_;
   eventsToSignals.addEvent(adjusted);
 }
 

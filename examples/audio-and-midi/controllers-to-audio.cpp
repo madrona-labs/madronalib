@@ -61,6 +61,8 @@ int main( int argc, char *argv[] )
   state.sineGens.resize(state.sineControllers.size());
 
   // define the MIDI handling callback.
+  // note that message times are all 0, in other words we are not sample-accurate.
+  
   const auto& handleMIDI = [&](MIDIMessage m)->void
   {
     ctx.addInputEvent(MIDIMessageToEvent(m));

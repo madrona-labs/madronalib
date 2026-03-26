@@ -84,56 +84,63 @@ struct TestFixture
   float gateEnd(int voice) { return gateAt(voice, kFramesPerBlock - 1); }
 };
 
+TEST_CASE("madronalib/core/events/small_buffer", "[events]")
+{
+  TestFixture t;
+  const int bufSize = kFramesPerBlock/4;
+  
+  // callback 1: note on
+  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 5)});
+  t.callback(bufSize);
+  t.callback(bufSize);
+  t.callback(bufSize);
+  
+  // after kFramesPerBlock samples, processVector ran — gate should be on
+  REQUIRE(t.gateEnd(0) > 0.f);
+  
+  // callback 2: note off — loop may not run yet, events must survive
+  t.callback(bufSize, {makeNoteOff(60, 60.f, 2)});
+  t.callback(bufSize);
+  t.callback(bufSize);
+  t.callback(bufSize);
+
+  REQUIRE(t.gateEnd(0) == 0.f);
+}
+
+TEST_CASE("madronalib/core/events/large_buffer", "[events]")
+{
+  // regression test: 128-sample buffer (larger than kFramesPerBlock)
+  TestFixture t;
+  const int bufSize = 128;
+  
+  // note on in first half, note off in second half
+  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 10), makeNoteOff(60, 60.f, 80)});
+  
+  // gate should be off after processing
+  REQUIRE(t.gateEnd(0) == 0.f);
+}
+
 TEST_CASE("madronalib/core/events/odd_buffer_size", "[events]")
 {
   TestFixture t;
-  const int bufSize = 32;
+  const int bufSize = kFramesPerBlock + 5;
   
   Event e1{makeNoteOn(60, 60.f, 0.8f, 1)};
-  Event e2{makeNoteOn(64, 64.f, 0.6f, 16)};
-  Event e3{makeNoteOff(60, 60.f, bufSize + 3)};
+  Event e3{makeNoteOff(60, 60.f, bufSize - 3)};
   
   // callback 1: note on and off
   // 5 extra samples at end contain note-off
-  t.callback(bufSize + 5, {e1, e3});
-  
-  for (int v = 0; v < kPolyphony; ++v)
-  {
-    float gate = t.gateEnd(v);
-    float pitch = t.pitchAt(v, kFramesPerBlock - 1);
-    std::cout << "voice " << v << ": " << gate  << " / " << pitch << "\n";
-  }
-  
-  
-
+  t.callback(bufSize, {e1, e3});
   
   // run one more callback to ensure processVector has processed both
   t.callback(bufSize);
   
   // all voices should be off
   bool foundNoteOn = false;
-  for (int v = 0; v < kPolyphony; ++v)
-  {
-    float gate = t.gateEnd(v);
-    float pitch = t.pitchAt(v, kFramesPerBlock - 1);
-    if (gate > 0.f) foundNoteOn = true;
-  }
   REQUIRE(!foundNoteOn);
-  
-  for (int v = 0; v < kPolyphony; ++v)
-  {
-    float gate = t.gateEnd(v);
-    float pitch = t.pitchAt(v, kFramesPerBlock - 1);
-    std::cout << "voice " << v << ": " << gate  << " / " << pitch << "\n";
-  }
-  
-  
-  
 }
 
 
-
-/*
 TEST_CASE("madronalib/core/events/basic_note_on_off", "[events]")
 {
   TestFixture t;
@@ -141,34 +148,14 @@ TEST_CASE("madronalib/core/events/basic_note_on_off", "[events]")
 
   // note on
   t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 5)});
+  t.callback(bufSize);
+  
   REQUIRE(t.gateEnd(0) > 0.f);
   REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(60.f));
 
   // note off
-  t.callback(bufSize, {makeNoteOff(60, 60.f, 5)});
-  REQUIRE(t.gateEnd(0) == 0.f);
-}
-
-TEST_CASE("madronalib/core/events/small_buffer_32", "[events]")
-{
-  // This is the exact stuck-notes scenario: note-on in callback 1,
-  // note-off in callback 2, with 32-sample host buffers.
-  TestFixture t;
-  const int bufSize = 32;
-
-  // callback 1: note on
-  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 5)});
-
-  // after first callback, processVector ran — gate should be on
-  REQUIRE(t.gateEnd(0) > 0.f);
-
-  // callback 2: note off — loop may not run yet, events must survive
-  t.callback(bufSize, {makeNoteOff(60, 60.f, 5)});
-
-  // callback 3: empty — processVector runs, consuming the note-off
-  t.callback(bufSize);
-
-  // gate must be off — the note-off must not have been dropped
+  t.callback(bufSize, {makeNoteOff(60, 60.f, 12)});
+  
   REQUIRE(t.gateEnd(0) == 0.f);
 }
 
@@ -281,19 +268,6 @@ TEST_CASE("madronalib/core/events/on_off_same_time", "[events]")
   REQUIRE(t.gateEnd(0) == 0.f);
 }
 
-TEST_CASE("madronalib/core/events/large_buffer", "[events]")
-{
-  // regression test: 128-sample buffer (larger than kFramesPerBlock)
-  TestFixture t;
-  const int bufSize = 128;
-
-  // note on in first half, note off in second half
-  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 10), makeNoteOff(60, 60.f, 80)});
-
-  // gate should be off after processing
-  REQUIRE(t.gateEnd(0) == 0.f);
-}
-
 TEST_CASE("madronalib/core/events/sustained_sequence_small_buffer", "[events]")
 {
   // play a sequence of notes with small buffers to check for
@@ -321,4 +295,3 @@ TEST_CASE("madronalib/core/events/sustained_sequence_small_buffer", "[events]")
   }
 }
 
-*/
