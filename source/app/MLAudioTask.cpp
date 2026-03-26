@@ -98,9 +98,6 @@ struct AudioProcessData
 {
   std::atomic<bool> hasQuit{false};
   
-  // buffered processing
-  std::unique_ptr<SignalProcessBuffer> buffer;
-
   // context, function and state for the process.
   AudioContext* processContext{nullptr};
   SignalProcessFn processFn{nullptr};
@@ -111,13 +108,8 @@ struct AudioTask::Impl
 {
   // native audio task
   RtAudio adac;
-
+  
   AudioProcessData processData;
-
-  Impl(size_t nInputs, size_t nOutputs, size_t kMaxBlockSize)
-  {
-    processData.buffer = std::make_unique<SignalProcessBuffer>(nInputs, nOutputs, kMaxBlockSize);
-  }
 };
 
 // adapt the RtAudio process routine to a madronalib function operating on DSPBuffers.
@@ -151,7 +143,7 @@ int RtAudioCallbackFn(void* outputBuffer, void* inputBuffer, unsigned int nBuffe
 
   // Buffer the data to and from the outside world and run the process in SignalBlock-sized chunks
   // within the context.
-  pData->buffer->process(inputs, outputs, nBufferFrames, pData->processContext, pData->processFn,
+  pData->processContext->process(inputs, outputs, nBufferFrames, pData->processFn,
                          pData->processState);
   return 0;
 }
@@ -163,7 +155,7 @@ int RtAudioCallbackFn(void* outputBuffer, void* inputBuffer, unsigned int nBuffe
 AudioTask::AudioTask(AudioContext* ctx, SignalProcessFn processFn, void* state)
 {
   // make the world -> context buffers for each channel
-  pImpl = std::make_unique<Impl>(ctx->inputs.size(), ctx->outputs.size(), kMaxBlockSize);
+  pImpl = std::make_unique<Impl>();
 
   pImpl->processData.processContext = ctx;
   pImpl->processData.processFn = processFn;

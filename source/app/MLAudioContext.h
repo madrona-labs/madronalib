@@ -6,9 +6,7 @@
 
 #include "MLDSPOps.h"
 #include "MLEventsToSignals.h"
-
-//#include <cstdlib>
-//#include <functional>
+#include "MLSignalProcessBuffer.h"
 
 using namespace ml;
 namespace ml
@@ -16,9 +14,12 @@ namespace ml
 
 // AudioContext: where our signal processors meet the rest of the world.
 // an AudioContext defines the sample rate and provides audio and event I/O.
+class AudioContext;
 
 using MainInputs = const SignalBlockDynamic&;
 using MainOutputs = SignalBlockDynamic&;
+using SignalProcessFn = void (*)(AudioContext*, void*);
+
 
 class AudioContext final
 {
@@ -57,8 +58,8 @@ class AudioContext final
     double ppqPhase1_{0};
   };
 
-  AudioContext(size_t nInputs, size_t nOutputs);
-  AudioContext(size_t nInputs, size_t nOutputs, int rate);
+  AudioContext(size_t nInputs, size_t nOutputs, size_t maxBlockSize);
+  AudioContext(size_t nInputs, size_t nOutputs, int rate, size_t maxBlockSize);
   ~AudioContext() = default;
 
   void clear();
@@ -66,6 +67,9 @@ class AudioContext final
   // update everything needed to create a new vector of context signals.
   // startOffset is the start frame of the vector in the host buffer.
   void makeContextSignalsAtOffset(int startOffset);
+  
+  
+  
 
   void setSampleRate(int r);
 
@@ -77,7 +81,6 @@ class AudioContext final
 
   void addInputEvent(const Event& e);
   void clearInputEvents() { eventsToSignals.clearEvents(); }
-  void setInputEventTimeOffset(int offset) { eventTimeOffset_ = offset; }
 
   void setInputPitchBend(float p) { eventsToSignals.setPitchBendInSemitones(p); }
   void setInputMPEPitchBend(float p) { eventsToSignals.setMPEPitchBendInSemitones(p); }
@@ -97,12 +100,29 @@ class AudioContext final
   // clients can access these directly to do processing
   SignalBlockDynamic inputs;
   SignalBlockDynamic outputs;
+  
+  void process(const float** inputs, float** outputs, int nFrames,
+               SignalProcessFn processFn, void* pState);
+  
 
  private:
   ProcessTime currentTime;
+  
   ml::EventsToSignals eventsToSignals;
-  int eventTimeOffset_{0};
+  
+  // buffers containing audio to / from outside world, in bigger chunks
+  std::vector<ml::DSPBuffer> inputBuffers_;
+  std::vector<ml::DSPBuffer> outputBuffers_;
+  
+  // max chunk size for outside I/O
+  size_t maxFrames_;
+  
+  // samples accumulated since the last process call.
+  // used to remap event times from host-buffer-relative to internal timeline.
+  int samplesAccumulated_{0};
+
 };
+
 
 }  // namespace ml
 

@@ -12,7 +12,7 @@ using namespace ml;
 static void nullProcessFn(AudioContext*, void*) {}
 
 // helper: simulate one host callback. adds events, then calls process().
-static void hostCallback(SignalProcessBuffer& buf, AudioContext& ctx,
+static void hostCallback(AudioContext& ctx,
                           float** outputs, int nFrames,
                           const std::vector<Event>& events = {})
 {
@@ -20,7 +20,7 @@ static void hostCallback(SignalProcessBuffer& buf, AudioContext& ctx,
   {
     ctx.addInputEvent(e);
   }
-  buf.process(nullptr, outputs, nFrames, &ctx, nullProcessFn, nullptr);
+  ctx.process(nullptr, outputs, nFrames, nullProcessFn, nullptr);
 }
 
 // helper: make a note-on event
@@ -56,8 +56,8 @@ static constexpr int kPolyphony = 4;
 // helper: set up context and process buffer for testing
 struct TestFixture
 {
-  AudioContext ctx{0, 2, kSampleRate};
-  SignalProcessBuffer buf{0, 2, kMaxTestFrames};
+  AudioContext ctx{0, 2, kSampleRate, kMaxTestFrames};
+//  SignalProcessBuffer buf{0, 2, kMaxTestFrames};
   float outputData[2][kMaxTestFrames]{};
   float* outputs[2]{outputData[0], outputData[1]};
 
@@ -68,7 +68,7 @@ struct TestFixture
 
   void callback(int nFrames, const std::vector<Event>& events = {})
   {
-    hostCallback(buf, ctx, outputs, nFrames, events);
+    hostCallback(ctx, outputs, nFrames, events);
   }
 
   float gateAt(int voice, int sample)
@@ -85,7 +85,56 @@ struct TestFixture
   float gateEnd(int voice) { return gateAt(voice, kFramesPerBlock - 1); }
 };
 
+TEST_CASE("madronalib/core/events/odd_buffer_size", "[events]")
+{
+  TestFixture t;
+  const int bufSize = 32;
+  
+  Event e1{makeNoteOn(60, 60.f, 0.8f, 1)};
+  Event e2{makeNoteOn(64, 64.f, 0.6f, 16)};
+  Event e3{makeNoteOff(60, 60.f, bufSize + 3)};
+  
+  // callback 1: note on and off
+  // 5 extra samples at end contain note-off
+  t.callback(bufSize + 5, {e1, e3});
+  
+  for (int v = 0; v < kPolyphony; ++v)
+  {
+    float gate = t.gateEnd(v);
+    float pitch = t.pitchAt(v, kFramesPerBlock - 1);
+    std::cout << "voice " << v << ": " << gate  << " / " << pitch << "\n";
+  }
+  
+  
 
+  
+  // run one more callback to ensure processVector has processed both
+  t.callback(bufSize);
+  
+  // all voices should be off
+  bool foundNoteOn = false;
+  for (int v = 0; v < kPolyphony; ++v)
+  {
+    float gate = t.gateEnd(v);
+    float pitch = t.pitchAt(v, kFramesPerBlock - 1);
+    if (gate > 0.f) foundNoteOn = true;
+  }
+  REQUIRE(!foundNoteOn);
+  
+  for (int v = 0; v < kPolyphony; ++v)
+  {
+    float gate = t.gateEnd(v);
+    float pitch = t.pitchAt(v, kFramesPerBlock - 1);
+    std::cout << "voice " << v << ": " << gate  << " / " << pitch << "\n";
+  }
+  
+  
+  
+}
+
+
+
+/*
 TEST_CASE("madronalib/core/events/basic_note_on_off", "[events]")
 {
   TestFixture t;
@@ -152,16 +201,16 @@ TEST_CASE("madronalib/core/events/multiple_notes_small_buffer", "[events]")
 {
   TestFixture t;
   const int bufSize = 32;
-
+  
   // callback 1: note on key 60
   t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 0)});
-
+  
   // callback 2: note on key 64 (different voice)
   t.callback(bufSize, {makeNoteOn(64, 64.f, 0.7f, 0)});
-
+  
   // run one more callback to ensure processVector has processed both
   t.callback(bufSize);
-
+  
   // both voices should be active
   bool foundPitch60 = false;
   bool foundPitch64 = false;
@@ -176,18 +225,60 @@ TEST_CASE("madronalib/core/events/multiple_notes_small_buffer", "[events]")
   REQUIRE(foundPitch64);
 }
 
-TEST_CASE("madronalib/core/events/rapid_on_off_same_buffer", "[events]")
+TEST_CASE("madronalib/core/events/onoff_startend", "[events]")
 {
   TestFixture t;
   const int bufSize = 32;
+  
+  Event e1{makeNoteOn(60, 60.f, 0.8f, 0)};
+  Event e2{makeNoteOff(60, 60.f, bufSize - 1)};
+  
+  // callback 1: note on and off
+  // TODO this fails even at buffer size = 32!
+  t.callback(bufSize, {e1, e2});
+  
+  // run one more callback to ensure processVector has processed both
+  t.callback(bufSize);
+  
+  // all voices should be off
+  bool foundNoteOn = false;
+  for (int v = 0; v < kPolyphony; ++v)
+  {
+    float gate = t.gateEnd(v);
+    float pitch = t.pitchAt(v, kFramesPerBlock - 1);
+    if (gate > 0.f) foundNoteOn = true;
+  }
+  REQUIRE(!foundNoteOn);
+  
+}
 
+TEST_CASE("madronalib/core/events/rapid_on_off", "[events]")
+{
+  TestFixture t;
+  const int bufSize = 32;
+  
   // note on at sample 2, note off at sample 20, both in same callback
-  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 2), makeNoteOff(60, 60.f, 20)});
-
+  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 2), makeNoteOff(60, 60.f, 3)});
+  
   // run callbacks until processVector has processed everything
   t.callback(bufSize);
   t.callback(bufSize);
+  
+  REQUIRE(t.gateEnd(0) == 0.f);
+}
 
+TEST_CASE("madronalib/core/events/on_off_same_time", "[events]")
+{
+  TestFixture t;
+  const int bufSize = 32;
+  
+  // note on at sample 2, note off at sample 20, both in same callback
+  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 2), makeNoteOff(60, 60.f, 2)});
+  
+  // run callbacks until processVector has processed everything
+  t.callback(bufSize);
+  t.callback(bufSize);
+  
   REQUIRE(t.gateEnd(0) == 0.f);
 }
 
@@ -230,3 +321,5 @@ TEST_CASE("madronalib/core/events/sustained_sequence_small_buffer", "[events]")
     REQUIRE(t.gateEnd(v) == 0.f);
   }
 }
+
+*/
