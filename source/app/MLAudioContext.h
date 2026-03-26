@@ -6,7 +6,6 @@
 
 #include "MLDSPOps.h"
 #include "MLEventsToSignals.h"
-#include "MLSignalProcessBuffer.h"
 
 using namespace ml;
 namespace ml
@@ -20,6 +19,7 @@ using MainInputs = const SignalBlockDynamic&;
 using MainOutputs = SignalBlockDynamic&;
 using SignalProcessFn = void (*)(AudioContext*, void*);
 
+constexpr size_t kMaxIOFramesDefault{4096};
 
 class AudioContext final
 {
@@ -58,8 +58,8 @@ class AudioContext final
     double ppqPhase1_{0};
   };
 
-  AudioContext(size_t nInputs, size_t nOutputs, size_t maxBlockSize);
-  AudioContext(size_t nInputs, size_t nOutputs, int rate, size_t maxBlockSize);
+
+  AudioContext(size_t nInputs, size_t nOutputs, int sampleRate);
   ~AudioContext() = default;
 
   void clear();
@@ -72,6 +72,7 @@ class AudioContext final
   
 
   void setSampleRate(int r);
+  void resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames);
 
   void setInputPolyphony(int voices) { eventsToSignals.setPolyphony(voices); }
   size_t getInputPolyphony() { return eventsToSignals.getPolyphony(); }
@@ -115,7 +116,7 @@ class AudioContext final
   std::vector<ml::DSPBuffer> outputBuffers_;
   
   // max chunk size for outside I/O
-  size_t maxFrames_;
+  size_t maxFrames_{kMaxIOFramesDefault};
   
   // samples accumulated since the last process call.
   // used to remap event times from host-buffer-relative to internal timeline.
