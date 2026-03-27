@@ -148,7 +148,7 @@ int RtAudioCallbackFn(void* outputBuffer, void* inputBuffer, unsigned int nBuffe
 }
 
 // the AudioTask constructor fills in the processData struct with everything needed to run audio.
-// the DSP function. processFn points to a function that will be called by the SignalProcessBuffer.
+// the DSP function. processFn points to a function that will be called by the AudioContext.
 // state points to any persistent state that needs to be sent to the function.
 
 AudioTask::AudioTask(AudioContext* ctx, SignalProcessFn processFn, void* state)
