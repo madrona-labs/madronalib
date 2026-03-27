@@ -134,26 +134,8 @@ if(CMAKE_BINARY_DIR EQUAL CMAKE_SOURCE_DIR)
   message(FATAL_ERROR "Madronalib requires an out of source build.")
 endif()
 
-#--------------------------------------------------------------------
-# Add include directories
-#--------------------------------------------------------------------
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/aes256)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/clap)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/ffft)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/utf)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/app)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/DSP)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source/matrix)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-# OSC support - cross-platform
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf)
+# Include directories are set as target_include_directories after
+# add_library below, so they propagate to add_subdirectory consumers.
 
 #--------------------------------------------------------------------
 # collect sources and headers
@@ -277,9 +259,7 @@ set_target_properties(${target} PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       FOLDER "madronalib")
 
-target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/rtaudio)
-
-# Define where headers are installed (needed for PUBLIC include directories below)
+# Headers install destination (also used by install() commands below)
 if(APPLE)
     set(HEADERS_INCLUDE_DIR "include/madronalib")
 elseif(WIN32)
@@ -288,15 +268,26 @@ else()
     set(HEADERS_INCLUDE_DIR "include/madronalib")  # Linux
 endif()
 
-# PUBLIC include directories for consumers - using generator expressions for build vs install paths
+# Public include dirs propagate to consumers via target_link_libraries.
+# BUILD_INTERFACE paths are used by add_subdirectory consumers;
+# INSTALL_INTERFACE paths are used after cmake --install.
 target_include_directories(${target} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/app>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/DSP>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/app>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/matrix>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/networking>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf>
     $<BUILD_INTERFACE:${cjson_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${HEADERS_INCLUDE_DIR}>
+)
+# aes256 and utf use flat includes (e.g. #include "aes256.h")
+target_include_directories(${target} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/aes256
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/utf
 )
 
 # cJSON is now compiled directly into madronalib (no separate target)
@@ -374,7 +365,7 @@ message("madronalib destination: " ${CMAKE_INSTALL_LIBDIR} )
 # install headers
 #--------------------------------------------------------------------
 
-# HEADERS_INCLUDE_DIR is defined earlier (needed for PUBLIC include directories)
+# HEADERS_INCLUDE_DIR is defined earlier (used here and by target_include_directories)
 
 install(FILES include/madronalib.h DESTINATION ${HEADERS_INCLUDE_DIR})
 install(FILES include/mldsp.h DESTINATION ${HEADERS_INCLUDE_DIR})
