@@ -381,7 +381,7 @@ install(FILES include/mldsp.h DESTINATION ${HEADERS_INCLUDE_DIR})
 
 # TODO: don't install this, wrap
 # Install cJSON header (fetched via FetchContent, consumers get it from here)
-install(FILES ${cjson_SOURCE_DIR}/cJSON.h DESTINATION ${HEADERS_INCLUDE_DIR})
+# install(FILES ${cjson_SOURCE_DIR}/cJSON.h DESTINATION ${HEADERS_INCLUDE_DIR})
 
 install(FILES
     ${APP_HEADERS}
