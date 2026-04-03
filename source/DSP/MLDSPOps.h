@@ -169,7 +169,6 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
   SignalBlockArrayBase(T val) : Base(val) {}
   constexpr SignalBlockArrayBase(const Base& b) : Base(b) {}
   
-
   SignalBlockArrayBase<T, 1> getRow(size_t i) const {
     return SignalBlockArrayBase<T, 1>(this->data() + i * kFramesPerBlock);
   }
@@ -201,7 +200,7 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
       }
       return *this;
     }
-
+    
     RowView& operator+=(const SignalBlockArrayBase<T, 1>& other) {
       for (size_t i = 0; i < kFramesPerBlock; ++i) {
         _data[i] += other[i];
@@ -223,6 +222,18 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
       return *this;
     }
     
+    // compare RowViews. This is a template because we need to compare
+    // rows of SignalBlockArrayBase classes with different N.
+    template<typename T2>
+    bool operator==(const T2& other) const {
+      return std::equal(_data, _data + kFramesPerBlock, other._data);
+    }
+    template<typename T2>
+    bool operator!=(const T2& other) const {
+      return !std::equal(_data, _data + kFramesPerBlock, other._data);
+    }
+
+    // conversion operator to SignalBlock (defined later)
     operator SignalBlockArrayBase<T, 1>() const {
       return SignalBlockArrayBase<T, 1>(_data);
     }
@@ -247,7 +258,6 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
   }
 };
 
-
 // ----------------------------------------------------------------
 // SignalBlockArray<ROWS> and int version
 // ROWS rows of kFramesPerBlock floats, time -> horizontal
@@ -270,17 +280,19 @@ using Block = SignalBlockArrayBase<T, 1>;
 // ----------------------------------------------------------------
 // SignalBlock4Array<ROWS>
 // ROWS rows of kFramesPerBlock/4 float4 frames.
-// In memory the float4 frames are in sequential order. Because the 4x4 transpose
-// is fundamental, we sometimes think of the frames as being arranged in 4x4 blocks:
+// In memory the float4 frames are in sequential order: A0 B0 C0 D0, A1 B1 C1 D1...
+// Because the 4x4 transpose is a fundamental operation for converting between
+// SignalBlock4Array and SignalBlockArray ordered data, we sometimes think of the
+// frames as being arranged in 4x4 blocks:
 //
-// A0 B0 C0 D0   A4 B4 C4 D4 ...
+// A0 B0 C0 D0   A4 B4 C4 D4  ...
 // A1 B1 C1 D1   A5 B5 C5 D5
 // A2 B2 C2 D2   A6 B6 C6 D6
 // A3 B3 C3 D3   A7 B7 C7 D7
 //
-// With time being vertical within each block.
-//
-// Transposing each 4x4 block and shuffling gives us four SignalBlocks.
+// With time being vertical within each block. So we call the SignalBlock4Array
+// ordering "vertical". Transposing each 4x4 block and shuffling gives us four
+// SignalBlocks one after the other and we call that "horizontal."
 
 using SignalBlock4 = SignalBlockArrayBase<float4, 1>;
 
@@ -317,7 +329,7 @@ inline void transposeRows(SignalBlock4Array<ROWS>& array) {
   }
 }
 
-// Convert ROWS of SignalBlock4 to 4*ROWS horizontal SignalBlocks.
+// Convert ROWS of vertical SignalBlock4 to 4*ROWS of horizontal SignalBlocks.
 // Transpose separates the lanes within each 4x4 block,
 // then we deinterleave to collect each lane contiguously.
 template<size_t ROWS>
@@ -349,9 +361,8 @@ inline SignalBlockArray<ROWS * 4> verticalToHorizontal(const SignalBlockArrayBas
 }
 
 
-// Convert 4 horizontal SignalBlocks to vertical SIMD (SignalBlock4).
-// Interleave the rows into ABCD blocks, then transpose to get
-// back to the vertical-SIMD layout.
+// Convert 4*ROWS of horizontal SignalBlocks to ROWS of vertical SignalBlock4.
+// Interleave the rows into blocks, then transpose to get back to the vertical layout.
 template<size_t ROWS>
 inline SignalBlockArrayBase<float4, ROWS> horizontalToVertical(const SignalBlockArray<ROWS * 4>& h)
 {
@@ -371,7 +382,6 @@ inline SignalBlockArrayBase<float4, ROWS> horizontalToVertical(const SignalBlock
     }
     transposeRow(temp.rowPtr(r));
   }
-  
   return temp;
 }
 
@@ -440,8 +450,8 @@ DEFINE_OP_F2F(exp2, exp(kLogTwoVec * x))
 // Trig, log and exp, using polynomial approximations
 DEFINE_OP_F2F(sinApprox, sinApprox(x))
 DEFINE_OP_F2F(cosApprox, cosApprox(x))
-DEFINE_OP_F2F(sigExpApprox, expApprox(x))
 DEFINE_OP_F2F(sigLogApprox, logApprox(x))
+DEFINE_OP_F2F(sigExpApprox, expApprox(x))
 
 // Lazy log2 and exp2 approximations
 DEFINE_OP_F2F(log2Approx, logApprox(x) * kLogTwoRVec)
@@ -452,7 +462,6 @@ DEFINE_OP_F2F(sigTanhApprox, tanhApprox(x))
 
 // Fractional part
 DEFINE_OP_F2F(fractionalPart, x - intToFloat(floatToIntTruncate(x)))
-
 
 // ----------------------------------------------------------------
 // Binary operations, (float, float) -> float
@@ -725,32 +734,19 @@ inline SignalBlockArray<ROWS> normalize(const SignalBlockArray<ROWS>& x)
 // ----------------------------------------------------------------
 // row-wise operations and conversions
 
-// for the given output ROWS and given an input SignalBlockArray with N rows,
-// repeat all the input rows enough times to fill the output SignalBlockArray.
-template <size_t ROWS, size_t N>
-inline SignalBlockArray<ROWS * N> repeatRows(const SignalBlockArray<N>& x)
+// Given an input SignalBlockArray with N rows repeat all its rows of M times
+// to make a M*N row SignalBlockArray.
+template <size_t M, size_t N>
+inline SignalBlockArray<M * N> repeatRows(const SignalBlockArray<N>& x)
 {
-  SignalBlockArray<ROWS * N> result;
-  for (size_t j = 0, k = 0; j < ROWS * N; ++j)
+  SignalBlockArray<M * N> result;
+  for (size_t j = 0, k = 0; j < M * N; ++j)
   {
     result.setRow(j, x.getRow(k));
     if (++k >= N) k = 0;
   }
   return result;
 }
-
-// Overload for repeating a single SignalBlock
-template <size_t ROWS>
-inline SignalBlockArray<ROWS> repeatRows(const SignalBlock& x)
-{
-  SignalBlockArray<ROWS> result;
-  for (size_t j = 0; j < ROWS; ++j)
-  {
-    result.setRow(j, x);
-  }
-  return result;
-}
-
 
 // for the given ROWS and given an input SignalBlockArray x with N rows,
 // stretch x by repeating rows as necessary to make an output SignalBlockArray
@@ -1118,7 +1114,6 @@ inline bool validate(const SignalBlock& x)
 
 // ----------------------------------------------------------------
 // interpolate float array coeffs to SignalBlockArray<T> rows
-
 
 template<typename T, size_t COEFFS_SIZE>
 SignalBlockArrayBase<T, COEFFS_SIZE> interpolateCoeffsLinear(
