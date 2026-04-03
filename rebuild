@@ -1,18 +1,26 @@
 #!/bin/bash
 set -e
 
+MADRONALIB_ROOT="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Configure if needed
+if [ ! -d "$MADRONALIB_ROOT/build/madronalib.xcodeproj" ]; then
+    cmake -S "$MADRONALIB_ROOT" -B "$MADRONALIB_ROOT/build" -GXcode
+fi
+
 # Clean installed files
-rm -rf /usr/local/include/madronalib
-rm -f /usr/local/lib/libmadrona-debug.a
-rm -f /usr/local/lib/libmadrona.a
+sudo rm -rf /usr/local/include/madronalib
+sudo rm -f /usr/local/lib/libmadrona-debug.a
+sudo rm -f /usr/local/lib/libmadrona.a
+sudo rm -rf /usr/local/lib/cmake/madronalib
 
 # Build and install Debug
-cd /Users/randy/dev/madronalib/build
+cd "$MADRONALIB_ROOT/build"
 xcodebuild build -configuration Debug -target madronalib
-cmake -DBUILD_TYPE=Debug -P cmake_install.cmake
+sudo cmake -DBUILD_TYPE=Debug -P cmake_install.cmake
 
 # Build and install Release
 xcodebuild build -configuration Release -target madronalib
-cmake -DBUILD_TYPE=Release -P cmake_install.cmake
+sudo cmake -DBUILD_TYPE=Release -P cmake_install.cmake
 
 echo "Done."
