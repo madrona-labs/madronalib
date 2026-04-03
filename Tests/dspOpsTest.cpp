@@ -325,12 +325,18 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   SECTION("row operations - repeatRows")
   {
     SignalBlock b = columnIndex();
-    auto repeated = repeatRows<4>(b);
+    auto repeated4 = repeatRows<4>(b);
     
-    REQUIRE(nearlyEqual(repeated.getRow(0), b));
-    REQUIRE(nearlyEqual(repeated.getRow(1), b));
-    REQUIRE(nearlyEqual(repeated.getRow(2), b));
-    REQUIRE(nearlyEqual(repeated.getRow(3), b));
+    REQUIRE(nearlyEqual(repeated4.getRow(0), b));
+    REQUIRE(nearlyEqual(repeated4.getRow(1), b));
+    REQUIRE(nearlyEqual(repeated4.getRow(2), b));
+    REQUIRE(nearlyEqual(repeated4.getRow(3), b));
+    
+    auto repeated2 = repeatRows<2>(b);
+    repeated2.row(1) += 0.5f;
+
+    SignalBlockArray<8> repeated8 = repeatRows<4>(repeated2);
+    REQUIRE(repeated8.row(3) == repeated2.row(1));
   }
   
   SECTION("row operations - stretchRows")
