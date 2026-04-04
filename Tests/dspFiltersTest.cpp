@@ -11,7 +11,7 @@
 #include "MLDSPFilters.h"
 #include "MLDSPMath.h"
 
-#include "FFTRealFixLen.h"
+#include "ffft/FFTRealFixLen.h"
 
 using namespace ml;
 
