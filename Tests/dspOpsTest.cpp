@@ -337,6 +337,7 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
 
     SignalBlockArray<8> repeated8 = repeatRows<4>(repeated2);
     REQUIRE(repeated8.row(3) == repeated2.row(1));
+    REQUIRE(repeated8.row(3) != repeated2.row(0));
   }
   
   SECTION("row operations - stretchRows")
