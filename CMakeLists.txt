@@ -71,8 +71,6 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-set(CMAKE_VISIBILITY_INLINES_HIDDEN OFF)
 
 #--------------------------------------------------------------------
 # Platform-specific compiler flags
@@ -256,7 +254,11 @@ set_target_properties(${target} PROPERTIES
                       VERSION ${madronalib_VERSION}
                       SOVERSION ${madronalib_VERSION_MAJOR}
                       POSITION_INDEPENDENT_CODE ON
-                      FOLDER "madronalib")
+                      FOLDER "madronalib"
+                      # Hide all symbols by default so multiple plugins using madronalib
+                      # in the same host process don't collide via the dynamic symbol table.
+                      CXX_VISIBILITY_PRESET hidden
+                      VISIBILITY_INLINES_HIDDEN ON)
 
 # Headers install destination (also used by install() commands below)
 if(APPLE)
