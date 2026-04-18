@@ -23,12 +23,12 @@ int getKeyIndex(const Event& e, Symbol protocol)
   int instigator{0};
   switch (protocol.getHash())
   {
-    case (hash("MIDI")):
+    case(hash("MIDI")):
     {
       instigator = e.sourceIdx;
       break;
     }
-    case (hash("MPE")):
+    case(hash("MPE")):
     {
       instigator = e.channel;
       break;
@@ -437,9 +437,9 @@ void EventsToSignals::makeSignalBlock()
 
   // in MIDI mode, add smoothed Channel Pressure to z output
   // in MPE mode, add main voice signals to other voices
-  switch (protocol_.getHash())
+  switch(hash(protocol_))
   {
-    case (hash("MIDI")):
+    case(hash("MIDI")):
     {
       for (int v = 1; v < polyphony_ + 1; ++v)
       {
@@ -447,7 +447,7 @@ void EventsToSignals::makeSignalBlock()
       }
       break;
     }
-    case (hash("MPE")):
+    case(hash("MPE")):
     {
       for (int v = 1; v < polyphony_ + 1; ++v)
       {
@@ -704,15 +704,15 @@ void EventsToSignals::processNoteUpdateEvent(const Event& event) {}
 
 void EventsToSignals::processChannelPressureEvent(const Event& event)
 {
-  switch (protocol_.getHash())
+  switch(hash(protocol_))
   {
-    case (hash("MIDI")):
+    case(hash("MIDI")):
     {
       float val = event.value1;
       controllers[kChannelPressureControllerIdx].inputValue = val;
       break;
     }
-    case (hash("MPE")):
+    case(hash("MPE")):
     {
       if (event.channel == 1)
       {
@@ -738,9 +738,9 @@ void EventsToSignals::processChannelPressureEvent(const Event& event)
 
 void EventsToSignals::processNotePressureEvent(const Event& event)
 {
-  switch (protocol_.getHash())
+  switch(hash(protocol_))
   {
-    case (hash("MIDI")):
+    case(hash("MIDI")):
     {
       // write any voice matching key
       for (int v = 1; v < polyphony_ + 1; ++v)
@@ -752,7 +752,7 @@ void EventsToSignals::processNotePressureEvent(const Event& event)
       }
       break;
     }
-    case (hash("MPE")):
+    case(hash("MPE")):
     {
       // note pressure is ignored in MPE mode as per the spec.
       break;
@@ -762,9 +762,9 @@ void EventsToSignals::processNotePressureEvent(const Event& event)
 
 void EventsToSignals::processPitchWheelEvent(const Event& event)
 {
-  switch (protocol_.getHash())
+  switch(hash(protocol_))
   {
-    case (hash("MIDI")):
+    case(hash("MIDI")):
     {
       for (int v = 1; v < polyphony_ + 1; ++v)
       {
@@ -772,7 +772,7 @@ void EventsToSignals::processPitchWheelEvent(const Event& event)
       }
       break;
     }
-    case (hash("MPE")):
+    case(hash("MPE")):
     {
       if (event.channel == 1)
       {
@@ -829,9 +829,9 @@ void EventsToSignals::processControllerEvent(const Event& event)
   }
   else
   {
-    switch (protocol_.getHash())
+    switch(hash(protocol_))
     {
-      case (hash("MIDI")):
+      case(hash("MIDI")):
       {
         // modulate all voices.
         for (int v = 1; v < polyphony_ + 1; ++v)
@@ -851,7 +851,7 @@ void EventsToSignals::processControllerEvent(const Event& event)
         }
         break;
       }
-      case (hash("MPE")):
+      case(hash("MPE")):
       {
         // modulate main voice
         if (event.channel == 1)
