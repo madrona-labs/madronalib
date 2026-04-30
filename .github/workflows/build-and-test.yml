@@ -1,0 +1,124 @@
+# madronalib build & test pipeline
+# Builds the library and runs the test suite on macOS, Linux, and Windows.
+#
+# Triggers:
+#   - push to main, fix/**, or ci/** branches
+#   - PRs targeting main
+#   - manual dispatch (with build type and per-platform toggles)
+
+name: build and test madronalib
+
+on:
+  push:
+    branches: [main, 'fix/**', 'ci/**', 'feature/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build-type:
+        description: 'Build type'
+        required: false
+        default: 'RelWithDebInfo'
+        type: choice
+        options:
+          - RelWithDebInfo
+          - Release
+          - Debug
+      build-macos:
+        description: 'Build for macOS'
+        required: false
+        default: true
+        type: boolean
+      build-linux:
+        description: 'Build for Linux'
+        required: false
+        default: true
+        type: boolean
+      build-windows:
+        description: 'Build for Windows'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  test-macos:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build-macos == 'true' }}
+    name: macOS
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'RelWithDebInfo' }}
+          -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET="10.15"
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build tests
+        run: cmake --build build --target tests --parallel 4
+
+      - name: Run tests
+        run: ./build/bin/tests
+
+  test-linux:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build-linux == 'true' }}
+    name: Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libasound2-dev
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'RelWithDebInfo' }}
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build tests
+        run: cmake --build build --target tests --parallel
+
+      - name: Run tests
+        run: ./build/bin/tests
+
+  test-windows:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build-windows == 'true' }}
+    name: Windows
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'RelWithDebInfo' }}
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build tests
+        run: cmake --build build --target tests --config ${{ github.event.inputs.build-type || 'RelWithDebInfo' }} --parallel
+
+      - name: Run tests
+        run: .\build\bin\${{ github.event.inputs.build-type || 'RelWithDebInfo' }}\tests.exe
+
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [test-macos, test-linux, test-windows]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## madronalib Build & Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS | ${{ needs.test-macos.result == 'success' && '✅ Success' || needs.test-macos.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linux | ${{ needs.test-linux.result == 'success' && '✅ Success' || needs.test-linux.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows | ${{ needs.test-windows.result == 'success' && '✅ Success' || needs.test-windows.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build type:** \`${{ github.event.inputs.build-type || 'RelWithDebInfo' }}\`" >> $GITHUB_STEP_SUMMARY
