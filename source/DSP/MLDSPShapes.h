@@ -172,7 +172,7 @@ struct Ramp
     mGate = 1;
   }
   
-  static constexpr float stepsPerCycle{static_cast<float>(1UL << 32UL)};
+  static constexpr float stepsPerCycle{static_cast<float>(1ULL << 32ULL)};
   static constexpr float cyclesPerStep{1.f / stepsPerCycle};
   
   SignalBlock operator()(const SignalBlock cyclesPerSample)

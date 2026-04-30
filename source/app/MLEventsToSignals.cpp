@@ -21,7 +21,7 @@ float samplesToSeconds(uint32_t samples, float sr)
 int getKeyIndex(const Event& e, Symbol protocol)
 {
   int instigator{0};
-  switch (protocol.getHash())
+  switch(hash(protocol))
   {
     case(hash("MIDI")):
     {
