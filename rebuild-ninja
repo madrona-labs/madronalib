@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+MADRONALIB_ROOT="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$MADRONALIB_ROOT/build-ninja"
+
+# Configure if needed
+if [ ! -f "$BUILD_DIR/build.ninja" ]; then
+    cmake -S "$MADRONALIB_ROOT" -B "$BUILD_DIR" \
+        -G "Ninja Multi-Config" \
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+fi
+
+# Clean installed files
+sudo rm -rf /usr/local/include/madronalib
+sudo rm -f /usr/local/lib/libmadrona-debug.a
+sudo rm -f /usr/local/lib/libmadrona.a
+sudo rm -rf /usr/local/lib/cmake/madronalib
+
+# Build and install Debug
+cmake --build "$BUILD_DIR" --config Debug --target madronalib
+sudo cmake --install "$BUILD_DIR" --config Debug
+
+# Build and install Release
+cmake --build "$BUILD_DIR" --config Release --target madronalib
+sudo cmake --install "$BUILD_DIR" --config Release
+
+echo "Done."
