@@ -339,6 +339,7 @@ install(EXPORT madronalib-targets
     FILE madronalibTargets.cmake
     NAMESPACE madronalib::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/madronalib
+    COMPONENT library
 )
 
 configure_package_config_file(
@@ -357,6 +358,7 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfig.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/madronalibConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/madronalib
+    COMPONENT library
 )
 
 message("madronalib destination: " ${CMAKE_INSTALL_LIBDIR} )
