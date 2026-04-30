@@ -271,6 +271,7 @@ target_include_directories(${target} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/matrix>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/networking>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf>
