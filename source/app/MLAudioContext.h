@@ -17,9 +17,6 @@ class AudioContext;
 
 using MainInputs = const SignalBlockDynamic&;
 using MainOutputs = SignalBlockDynamic&;
-using SignalProcessFn = std::function<void(AudioContext*)>;// void (*)(AudioContext*, void*);
-
-
 
 constexpr size_t kMaxIOFramesDefault{4096};
 
@@ -59,9 +56,8 @@ class AudioContext final
     double ppqPos1_{-1.};
     double ppqPhase1_{0};
   };
-
-
-  AudioContext(size_t nInputs, size_t nOutputs, int sampleRate);
+  
+  AudioContext(size_t nInputs, size_t nOutputs);
   ~AudioContext() = default;
 
   void clear();

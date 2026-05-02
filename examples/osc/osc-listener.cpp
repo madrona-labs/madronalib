@@ -19,7 +19,6 @@ using namespace ml;
 
 constexpr int kInputChannels = 0;
 constexpr int kOutputChannels = 1;
-constexpr int kSampleRate = 48000;
 
 void printValue(const Value& v)
 {
@@ -112,7 +111,7 @@ int main(int argc, char* argv[])
   std::cout << "---" << std::endl;
 
   // Create audio context and task
-  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask task(&ctx, oscListenerProcess, &state);
 
   // Run until user presses a key

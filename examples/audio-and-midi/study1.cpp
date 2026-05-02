@@ -10,7 +10,6 @@ using namespace ml;
 
 constexpr int kInputChannels = 0;
 constexpr int kOutputChannels = 2;
-constexpr int kSampleRate = 48000;
 constexpr float kOutputGain = 0.1f;
 
 struct Study1 : public SignalProcessor
@@ -66,10 +65,9 @@ void study1Process(AudioContext* ctx, Study1* state)
 int main()
 {
   Study1 state;
-  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask study1Task(&ctx, study1Process, &state);
   const float sr = ctx.getSampleRate();
-  
   state.init(sr);
   
   // very simple background thread for reading signals from state

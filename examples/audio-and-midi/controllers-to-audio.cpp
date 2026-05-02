@@ -10,7 +10,6 @@ using namespace ml;
 
 constexpr int kInputChannels = 0;
 constexpr int kOutputChannels = 2;
-constexpr int kSampleRate = 48000;
 constexpr float kOutputGain = 0.5f;
 
 struct ExampleState {
@@ -26,7 +25,7 @@ struct ExampleState {
 void processAudio(AudioContext* ctx, ExampleState* state)
 {
   // now do fun example stuff
-  float sr = ctx->getSampleRate() ;
+  float sr = ctx->getSampleRate();
   SignalBlock accum;
   auto ctrlToFreq = projections::unityToLogParam({110.f, 440.f});
 
@@ -51,7 +50,7 @@ void processAudio(AudioContext* ctx, ExampleState* state)
 int main( int argc, char *argv[] )
 {
   ExampleState state;
-  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask exampleTask(&ctx, processAudio, &state);
 
   // set up the state:

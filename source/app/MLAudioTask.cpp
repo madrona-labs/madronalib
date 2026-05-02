@@ -123,14 +123,13 @@ int AudioTask::startAudio()
     std::cout << "\nNo audio devices found!\n";
     return 0;
   }
-  
-  RtAudio::DeviceInfo info;
+
   uint32_t devices = adac.getDeviceCount();
   auto ids = adac.getDeviceIds();
   std::cout << "[AudioTask] Found: " << devices << " device(s)\n";
   for (uint32_t i = 0; i < devices; ++i)
   {
-    info = adac.getDeviceInfo(ids[i]);
+    auto info = adac.getDeviceInfo(ids[i]);
     std::cout << "\tDevice " << i << ": " << info.name << std::endl;
     std::cout << "\t\tinputs: " << info.inputChannels << " outputs: " << info.outputChannels
     << std::endl;
@@ -140,7 +139,6 @@ int AudioTask::startAudio()
   
   auto nInputs = processData.processContext->inputs.size();
   auto nOutputs = processData.processContext->outputs.size();
-  int sampleRate = processData.processContext->getSampleRate();
   unsigned int bufferFrames = kRtAudioCallbackFrames;
   
   RtAudio::StreamParameters iParams, oParams;
@@ -156,8 +154,11 @@ int AudioTask::startAudio()
   
   auto pInputParams = (nInputs ? &iParams : nullptr);
   
+  auto outputDeviceInfo = adac.getDeviceInfo(oParams.deviceId);
+  unsigned int deviceSampleRate = outputDeviceInfo.currentSampleRate;
+  
   if (RTAUDIO_NO_ERROR != adac.openStream(&oParams, pInputParams, RTAUDIO_FLOAT32,
-                                          sampleRate, &bufferFrames, &RtAudioCallbackFn,
+                                          deviceSampleRate, &bufferFrames, &RtAudioCallbackFn,
                                           &processData, &options))
   {
     std::cout << adac.getErrorText() << std::endl;
@@ -169,6 +170,8 @@ int AudioTask::startAudio()
     std::cout << adac.getErrorText() << std::endl;
     return 0;
   }
+  
+  processData.processContext->setSampleRate(deviceSampleRate);
   
   return 1;
 }

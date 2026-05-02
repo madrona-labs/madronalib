@@ -8,7 +8,6 @@ using namespace ml;
 
 constexpr int kInputChannels = 0;
 constexpr int kOutputChannels = 2;
-constexpr int kSampleRate = 48000;
 constexpr float kOutputGain = 0.1f;
 
 struct SineExampleState
@@ -23,14 +22,15 @@ void sineProcess(AudioContext* ctx, SineExampleState *state)
   // Running the sine generators makes SignalBlocks as output.
   // The input parameter is omega: the frequency in Hz divided by the sample rate.
   // The output sines are multiplied by the gain.
-  ctx->outputs[0] = state->s1(220.f/kSampleRate)*kOutputGain;
-  ctx->outputs[1] = state->s2(275.f/kSampleRate)*kOutputGain;
+  float sr = ctx->getSampleRate();
+  ctx->outputs[0] = state->s1(220.f/sr)*kOutputGain;
+  ctx->outputs[1] = state->s2(275.f/sr)*kOutputGain;
 }
 
 int main()
 {
   SineExampleState state;
-  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask sineExample(&ctx, sineProcess, &state);
   return sineExample.runConsoleApp();
 }

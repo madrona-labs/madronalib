@@ -31,6 +31,13 @@ public:
   {
     processData.processContext = ctx;
     processData.processFn = [fn, state](AudioContext* c) { fn(c, state); };
+    
+    if (adac.getDeviceCount() > 0)
+    {
+      auto id = adac.getDefaultOutputDevice();
+      auto info = adac.getDeviceInfo(id);
+      processData.processContext->setSampleRate(info.currentSampleRate);
+    }
   }
   
   ~AudioTask();

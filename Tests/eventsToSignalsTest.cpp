@@ -9,7 +9,7 @@
 using namespace ml;
 
 // no-op signal processing function — we're testing event routing, not DSP
-std::function<void(AudioContext*)> nullProcessFn {};
+std::function<void(AudioContext*)> nullProcessFn = [](AudioContext*){};
 
 // helper: simulate one host callback. adds events, then calls process().
 static void hostCallback(AudioContext& ctx,
@@ -50,18 +50,19 @@ static Event makeNoteOff(int key, float pitch, int time = 0)
 }
 
 static constexpr int kMaxTestFrames = 256;
-static constexpr int kSampleRate = 48000;
 static constexpr int kPolyphony = 4;
 
 // helper: set up context and process buffer for testing
 struct TestFixture
 {
-  AudioContext ctx{0, 2, kSampleRate};
+  AudioContext ctx{0, 2};
   float outputData[2][kMaxTestFrames]{};
   float* outputs[2]{outputData[0], outputData[1]};
 
   TestFixture()
   {
+    // there's no hardware so set a default rate
+    ctx.setSampleRate(48000);
     ctx.setInputPolyphony(kPolyphony);
   }
 

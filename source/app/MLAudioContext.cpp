@@ -104,11 +104,10 @@ void AudioContext::ProcessTime::makeTimeSignals()
 
 // AudioContext
 
-AudioContext::AudioContext(size_t nInputs, size_t nOutputs, int rate)
+AudioContext::AudioContext(size_t nInputs, size_t nOutputs)
     : inputs(nInputs), outputs(nOutputs)
 {
   resizeBuffers(nInputs, nOutputs, kMaxIOFramesDefault);
-  setSampleRate(rate);
   clear();
 }
 
@@ -185,7 +184,7 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
     eventsToSignals.makeSignalBlock();
     
     // run the signal processing function
-    processFn(this);
+    if(processFn) processFn(this);
     
     // write one block to each output buffer
     for (int c = 0; c < nOutputs; c++)

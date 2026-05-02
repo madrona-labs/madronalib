@@ -11,7 +11,6 @@ using namespace ml;
 // context constants
 constexpr int kInputChannels = 0;
 constexpr int kOutputChannels = 2;
-constexpr int kSampleRate = 48000;
 constexpr float kOutputGain = 0.1f;
 
 // FDTD constants
@@ -74,9 +73,9 @@ void doFDTDStep2D(FDTDSurface* uIn1, FDTDSurface* uIn2, FDTDSurface* uOut, float
 // run the FDTD model with the given input and fundamental frequency.
 // the frequency is updated every sample.
 
-SignalBlockArray< 2 > processFDTDModel(SignalBlock inputVec, SignalBlock freq, FDTDState* state)
+SignalBlockArray< 2 > processFDTDModel(AudioContext* ctx, SignalBlock inputVec, SignalBlock freq, FDTDState* state)
 {
-  const float isr = 1.0f/kSampleRate;
+  const float isr = 1.0f/ctx->getSampleRate();
   SignalBlock outLVec, outRVec;
 
   for(int i=0; i<kFramesPerBlock; ++i)
@@ -159,14 +158,15 @@ SignalBlockArray< 2 > processFDTDModel(SignalBlock inputVec, SignalBlock freq, F
 void processFDTD(AudioContext* ctx, FDTDState *state)
 {
   UsingFlushDenormalsToZero f;
+  float sr = ctx->getSampleRate();
 
   // generate ticks twice per second
-  auto ticks = state->impulse1(2.0f/kSampleRate)*kOutputGain;
+  auto ticks = state->impulse1(2.0f/sr)*kOutputGain;
 
   // run ticks through the FDTD model, modulating the pitch
-  auto modOscSignal = state->sine1(0.15f/kSampleRate);
+  auto modOscSignal = state->sine1(0.15f/sr);
   auto freq = 220.f + modOscSignal*40.f;
-  auto FDTDOutput = processFDTDModel(ticks, freq/kSampleRate, state);
+  auto FDTDOutput = processFDTDModel(ctx, ticks, freq/sr, state);
 
   // write the main outputs
   ctx->outputs[0] = FDTDOutput.getRow(0);
@@ -176,7 +176,7 @@ void processFDTD(AudioContext* ctx, FDTDState *state)
 int main()
 {
   FDTDState state;
-  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask FDTDExample(&ctx, processFDTD, &state);
   return FDTDExample.runConsoleApp();
 }

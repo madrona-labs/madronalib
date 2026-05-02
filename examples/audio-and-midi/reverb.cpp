@@ -12,7 +12,6 @@ using namespace ml;
 // Mac OS note: need to ask for microphone access if kInputChannels is nonzero!
 constexpr int kInputChannels = 2;
 constexpr int kOutputChannels = 2;
-constexpr int kSampleRate = 48000;
 
 // log projection for decay parameter
 constexpr float kDecayLo = 0.8, kDecayHi = 20;
@@ -33,41 +32,43 @@ struct AaltoverbState
   SignalBlock mvFeedbackL, mvFeedbackR;
 };
 
-void initializeReverb(AaltoverbState& r)
+void initializeReverb(AudioContext* ctx, AaltoverbState* r)
 {
+  float sr = ctx->getSampleRate();
+  
   // set fixed parameters for reverb
-  r.mSmoothFeedback.setGlideTimeInSamples(0.1f*kSampleRate);
-  r.mSmoothDelay.setGlideTimeInSamples(0.1f*kSampleRate);
-
+  r->mSmoothFeedback.setGlideTimeInSamples(0.1f*sr);
+  r->mSmoothDelay.setGlideTimeInSamples(0.1f*sr);
+  
   // set allpass filter coefficients
-  r.mAp1.mGain = 0.75f;
-  r.mAp2.mGain = 0.70f;
-  r.mAp3.mGain = 0.625f;
-  r.mAp4.mGain = 0.625f;
-  r.mAp5.mGain = r.mAp6.mGain = 0.7f;
-  r.mAp7.mGain = r.mAp8.mGain = 0.6f;
-  r.mAp9.mGain = r.mAp10.mGain = 0.5f;
-
+  r->mAp1.mGain = 0.75f;
+  r->mAp2.mGain = 0.70f;
+  r->mAp3.mGain = 0.625f;
+  r->mAp4.mGain = 0.625f;
+  r->mAp5.mGain = r->mAp6.mGain = 0.7f;
+  r->mAp7.mGain = r->mAp8.mGain = 0.6f;
+  r->mAp9.mGain = r->mAp10.mGain = 0.5f;
+  
   // allocate delay memory
-  r.mAp1.setMaxDelayInSamples(500.f);
-  r.mAp2.setMaxDelayInSamples(500.f);
-  r.mAp3.setMaxDelayInSamples(1000.f);
-  r.mAp4.setMaxDelayInSamples(1000.f);
-  r.mAp5.setMaxDelayInSamples(2600.f);
-  r.mAp6.setMaxDelayInSamples(2600.f);
-  r.mAp7.setMaxDelayInSamples(8000.f);
-  r.mAp8.setMaxDelayInSamples(8000.f);
-  r.mAp9.setMaxDelayInSamples(10000.f);
-  r.mAp10.setMaxDelayInSamples(10000.f);
-  r.mDelayL.setMaxDelayInSamples(3500.f);
-  r.mDelayR.setMaxDelayInSamples(3500.f);
+  r->mAp1.setMaxDelayInSamples(500.f);
+  r->mAp2.setMaxDelayInSamples(500.f);
+  r->mAp3.setMaxDelayInSamples(1000.f);
+  r->mAp4.setMaxDelayInSamples(1000.f);
+  r->mAp5.setMaxDelayInSamples(2600.f);
+  r->mAp6.setMaxDelayInSamples(2600.f);
+  r->mAp7.setMaxDelayInSamples(8000.f);
+  r->mAp8.setMaxDelayInSamples(8000.f);
+  r->mAp9.setMaxDelayInSamples(10000.f);
+  r->mAp10.setMaxDelayInSamples(10000.f);
+  r->mDelayL.setMaxDelayInSamples(3500.f);
+  r->mDelayR.setMaxDelayInSamples(3500.f);
 }
 
 // processVector() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
 void processVector(AudioContext* ctx, AaltoverbState* r)
 {
-  const float sr = kSampleRate;
+  float sr = ctx->getSampleRate();
   const float RT60const = 0.001f;
 
   // size and decay parameters from 0-1. It will be more interesting to change these over time in some way.
@@ -124,10 +125,11 @@ int main()
 {
   // create and initialize the reverb state.
   AaltoverbState r;
-  initializeReverb(r);
 
   // make a context and run the audio task.
-  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask reverbExample(&ctx, processVector, &r);
+  initializeReverb(&ctx, &r);
+  
   return reverbExample.runConsoleApp();
 }

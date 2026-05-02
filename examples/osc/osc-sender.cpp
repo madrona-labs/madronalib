@@ -22,7 +22,6 @@ using namespace ml;
 
 constexpr int kInputChannels = 0;
 constexpr int kOutputChannels = 1;
-constexpr int kSampleRate = 48000;
 
 struct OSCSenderState
 {
@@ -94,11 +93,6 @@ int main(int argc, char* argv[])
   // Skip leading '/' from address
   state.oscAddress = runtimePath(address + 1);
 
-  // Calculate cycles per sample for quarter notes at given BPM
-  // BPM / 60 = beats per second
-  // beats per second / sample rate = cycles per sample
-  state.cyclesPerSample = (bpm / 60.0f) / kSampleRate;
-
   std::cout << "Sending OSC to " << host << ":" << port << std::endl;
   std::cout << "Address: " << address << std::endl;
   std::cout << "Tempo: " << bpm << " BPM" << std::endl;
@@ -106,9 +100,14 @@ int main(int argc, char* argv[])
   std::cout << "---" << std::endl;
 
   // Create audio context and task
-  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask task(&ctx, oscSenderProcess, &state);
 
+  // Calculate cycles per sample for quarter notes at given BPM
+  // BPM / 60 = beats per second
+  // beats per second / sample rate = cycles per sample
+  state.cyclesPerSample = (bpm / 60.0f) / ctx.getSampleRate();
+  
   // Run until user presses a key
   return task.runConsoleApp();
 }

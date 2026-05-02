@@ -10,7 +10,6 @@ using namespace ml;
 
 constexpr int kInputChannels = 0;
 constexpr int kOutputChannels = 2;
-constexpr int kSampleRate = 48000;
 constexpr float kOutputGainMax = 0.1f;
 constexpr float kFreqLo = 40, kFreqHi = 4000;
 
@@ -48,6 +47,8 @@ public:
 
 void processParamsExample(AudioContext* ctx, ExampleProcessor *proc)
 {
+  float sr = ctx->getSampleRate();
+  
   // get params from the SignalProcessor using runtime path.
   // it will not allocate, so is audio-thread safe, but will take a bit of time
   // to parse the path.
@@ -62,13 +63,13 @@ void processParamsExample(AudioContext* ctx, ExampleProcessor *proc)
   // Running the sine generators makes SignalBlocks as output.
   // The input parameter is omega: the frequency in Hz divided by the sample rate.
   // The output sines are multiplied by the gain.
-  ctx->outputs[0] = proc->s1(f1/kSampleRate)*gain;
-  ctx->outputs[1] = proc->s2(f2/kSampleRate)*gain;
+  ctx->outputs[0] = proc->s1(f1/sr)*gain;
+  ctx->outputs[1] = proc->s2(f2/sr)*gain;
   
   // print debug stuff every second
   static int testCtr{0};
   testCtr += kFramesPerBlock;
-  if(testCtr > ctx->getSampleRate())
+  if(testCtr > sr)
   {
     testCtr = 0;
     std::cout << "gain: " << gain << "\n";
@@ -78,7 +79,7 @@ void processParamsExample(AudioContext* ctx, ExampleProcessor *proc)
 int main()
 {
   ExampleProcessor proc;
-  AudioContext ctx(kInputChannels, kOutputChannels, kSampleRate);
+  AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask exampleTask(&ctx, processParamsExample, &proc);
   
   // the processor can use a temporary ParameterDescriptionList here.
