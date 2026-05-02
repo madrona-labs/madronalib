@@ -17,7 +17,9 @@ class AudioContext;
 
 using MainInputs = const SignalBlockDynamic&;
 using MainOutputs = SignalBlockDynamic&;
-using SignalProcessFn = void (*)(AudioContext*, void*);
+using SignalProcessFn = std::function<void(AudioContext*)>;// void (*)(AudioContext*, void*);
+
+
 
 constexpr size_t kMaxIOFramesDefault{4096};
 
@@ -95,9 +97,9 @@ class AudioContext final
   SignalBlockDynamic inputs;
   SignalBlockDynamic outputs;
   
-  void process(const float** inputs, float** outputs, int nFrames,
-               SignalProcessFn processFn, void* pState);
-  
+  void process(const float** externalInputs, float** externalOutputs,
+                             int externalFrames,
+               std::function<void(AudioContext*)> processFn);
 
  private:
   ProcessTime currentTime;

@@ -46,10 +46,8 @@ public:
   SineGen<float> s1, s2;
 };
 
-void processParamsExample(AudioContext* ctx, void *untypedProcState)
+void processParamsExample(AudioContext* ctx, ExampleProcessor *proc)
 {
-  auto proc = static_cast< ExampleProcessor* >(untypedProcState);
-  
   // get params from the SignalProcessor using runtime path.
   // it will not allocate, so is audio-thread safe, but will take a bit of time
   // to parse the path.

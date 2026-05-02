@@ -65,10 +65,8 @@ void initializeReverb(AaltoverbState& r)
 
 // processVector() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
-void processVector(AudioContext* ctx, void *stateData)
+void processVector(AudioContext* ctx, AaltoverbState* r)
 {
-  AaltoverbState* r = static_cast< AaltoverbState* >(stateData);
-
   const float sr = kSampleRate;
   const float RT60const = 0.001f;
 

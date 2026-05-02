@@ -33,21 +33,19 @@ struct OSCSenderState
   float cyclesPerSample{0};
 };
 
-void oscSenderProcess(AudioContext* ctx, void* state)
+void oscSenderProcess(AudioContext* ctx, OSCSenderState* state)
 {
-  auto* s = static_cast<OSCSenderState*>(state);
-
   // Generate ticks at quarter-note rate
-  SignalBlock ticks = s->tickGen(SignalBlock(s->cyclesPerSample));
+  SignalBlock ticks = state->tickGen(SignalBlock(state->cyclesPerSample));
 
   // Scan for triggers and send OSC
   for (int i = 0; i < kFramesPerBlock; ++i)
   {
     if (ticks[i] > 0.5f)
     {
-      s->sender.send(s->oscAddress, Value(s->counter));
-      std::cout << "/" << s->oscAddress.toText() << " " << s->counter << std::endl;
-      s->counter++;
+      state->sender.send(state->oscAddress, Value(state->counter));
+      std::cout << "/" << state->oscAddress.toText() << " " << state->counter << std::endl;
+      state->counter++;
     }
   }
 

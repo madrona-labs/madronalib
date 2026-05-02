@@ -18,18 +18,13 @@ struct SineExampleState
 
 // sineProcess() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
-void sineProcess(AudioContext* ctx, void *state)
+void sineProcess(AudioContext* ctx, SineExampleState *state)
 {
-  // at the beginning of the main process function we need to cast the void* to
-  // the type of our state. Making AudioTask a template would have been an alternative
-  // to this but would have added a lot of template code behind the scenes.
-  auto procState = static_cast<SineExampleState*>(state);
-
   // Running the sine generators makes SignalBlocks as output.
   // The input parameter is omega: the frequency in Hz divided by the sample rate.
   // The output sines are multiplied by the gain.
-  ctx->outputs[0] = procState->s1(220.f/kSampleRate)*kOutputGain;
-  ctx->outputs[1] = procState->s2(275.f/kSampleRate)*kOutputGain;
+  ctx->outputs[0] = state->s1(220.f/kSampleRate)*kOutputGain;
+  ctx->outputs[1] = state->s2(275.f/kSampleRate)*kOutputGain;
 }
 
 int main()

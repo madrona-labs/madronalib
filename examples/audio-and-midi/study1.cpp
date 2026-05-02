@@ -58,9 +58,8 @@ struct Study1 : public SignalProcessor
 
 // study1Process() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
-void study1Process(AudioContext* ctx, void *untypedProcState)
+void study1Process(AudioContext* ctx, Study1* state)
 {
-  auto state = static_cast< Study1* >(untypedProcState);
   ctx->outputs[0] = ctx->outputs[1] = state->process(ctx);
 }
 

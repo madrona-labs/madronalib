@@ -61,7 +61,7 @@ struct OSCListenerState
   OSCReceiver receiver;
 };
 
-void oscListenerProcess(AudioContext* ctx, void* state)
+void oscListenerProcess(AudioContext* ctx, OSCListenerState* state)
 {
   // OSC messages are handled asynchronously by the receiver's callback.
   // This process function just keeps the AudioTask running.

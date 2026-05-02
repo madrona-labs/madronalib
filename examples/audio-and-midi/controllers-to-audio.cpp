@@ -23,10 +23,8 @@ struct ExampleState {
 
 // processAudio() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
-void processAudio(AudioContext* ctx, void *untypedState)
+void processAudio(AudioContext* ctx, ExampleState* state)
 {
-  ExampleState* state = reinterpret_cast<ExampleState*>(untypedState);
-
   // now do fun example stuff
   float sr = ctx->getSampleRate() ;
   SignalBlock accum;

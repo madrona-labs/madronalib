@@ -9,7 +9,7 @@
 using namespace ml;
 
 // no-op signal processing function — we're testing event routing, not DSP
-static void nullProcessFn(AudioContext*, void*) {}
+std::function<void(AudioContext*)> nullProcessFn {};
 
 // helper: simulate one host callback. adds events, then calls process().
 static void hostCallback(AudioContext& ctx,
@@ -20,7 +20,7 @@ static void hostCallback(AudioContext& ctx,
   {
     ctx.addInputEvent(e);
   }
-  ctx.process(nullptr, outputs, nFrames, nullProcessFn, nullptr);
+  ctx.process(nullptr, outputs, nFrames, nullProcessFn);
 }
 
 // helper: make a note-on event

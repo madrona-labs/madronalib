@@ -156,10 +156,9 @@ SignalBlockArray< 2 > processFDTDModel(SignalBlock inputVec, SignalBlock freq, F
 // processFDTD() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
 
-void processFDTD(AudioContext* ctx, void *untypedState)
+void processFDTD(AudioContext* ctx, FDTDState *state)
 {
   UsingFlushDenormalsToZero f;
-  auto state = static_cast<FDTDState*>(untypedState);
 
   // generate ticks twice per second
   auto ticks = state->impulse1(2.0f/kSampleRate)*kOutputGain;

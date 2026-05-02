@@ -9,36 +9,40 @@
 #include "MLSignalProcessor.h"
 #include "MLAudioContext.h"
 #include "mldsp.h"
+#include "rtaudio/RtAudio.h"
 
 namespace ml
 {
 
-// AudioTask: run an audio processing function in a context, with a state.
-// This is where any external audio I/O from a host or run loop is buffered into
-// kFloatsPerSignalVector-sized chunks.
+struct AudioProcessData
+{
+  std::atomic<bool> hasQuit{false};
+  AudioContext* processContext{nullptr};
+  std::function<void(AudioContext*)> processFn;
+};
 
 class AudioTask
 {
-  // the maximum amount of input frames that can be proceesed at once. This determines the
-  // maximum signal vector size of the plugin host or enclosing app.
   static constexpr int kMaxBlockSize{4096};
-
- public:
-  AudioTask(AudioContext* ctx, SignalProcessFn procFn, void* state);
-
+  
+public:
+  template<typename State>
+  AudioTask(AudioContext* ctx, void(*fn)(AudioContext*, State*), State* state)
+  {
+    processData.processContext = ctx;
+    processData.processFn = [fn, state](AudioContext* c) { fn(c, state); };
+  }
+  
   ~AudioTask();
-
+  
   int startAudio();
   void stopAudio();
   int runConsoleApp();
-  
   bool hasQuit() const;
-  void* getState();
   
- private:
-  struct Impl;
-  std::unique_ptr<Impl> pImpl;
+private:
+  RtAudio adac;
+  AudioProcessData processData;
 };
 
 }  // namespace ml
-

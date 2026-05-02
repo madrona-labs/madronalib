@@ -154,7 +154,7 @@ void AudioContext::clear()
 // generate externalFrames of output.
 void AudioContext::process(const float** externalInputs, float** externalOutputs,
                                   int externalFrames,
-                                  SignalProcessFn processFn, void* state)
+                               std::function<void(AudioContext*)> processFn)
 {
   size_t nInputs = inputBuffers_.size();
   size_t nOutputs = outputBuffers_.size();
@@ -185,7 +185,7 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
     eventsToSignals.makeSignalBlock();
     
     // run the signal processing function
-    processFn(this, state);
+    processFn(this);
     
     // write one block to each output buffer
     for (int c = 0; c < nOutputs; c++)
