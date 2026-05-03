@@ -37,7 +37,7 @@ int AudioTask::runConsoleApp()
 {
   if (startAudio())
   {
-    //std::cout << "\nStream latency = " << devs.getStreamLatency() << " frames" << std::endl;
+    std::cout << "\nStream latency = " << devs.getStreamLatency() << " frames" << std::endl;
     std::cout << "sample rate: " << processData.processContext->getSampleRate() << "\n";
     
     std::cout << "\nRunning ... press any key to quit.\n";

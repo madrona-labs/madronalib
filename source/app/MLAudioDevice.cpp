@@ -22,10 +22,6 @@ int RtAudioCallbackFn(void* outputBuffer, void* inputBuffer, unsigned int nBuffe
 {
   constexpr size_t kMaxIOChannels{64};
   
-  // TEMP
-  std::cout << "wat\n";
-  
-  
   auto pData = reinterpret_cast<AudioProcessData*>(callbackData);
   
   if (status) std::cout << "Stream over/underflow detected." << std::endl;
@@ -64,9 +60,8 @@ AudioDevice::~AudioDevice()
 
 unsigned int AudioDevice::startAudio(const AudioProcessData& processData)
 {
-  if(!pImpl) return 0;
-  if(!pImpl->deviceController_) return 0;
-  auto ctrl = *(pImpl->deviceController_);
+  if (!pImpl->deviceController_) return 0;
+  RtAudio& ctrl = *pImpl->deviceController_;
   
   uint32_t nDevices = ctrl.getDeviceCount();
   if (nDevices < 1)
@@ -129,12 +124,10 @@ unsigned int AudioDevice::startAudio(const AudioProcessData& processData)
   return deviceSampleRate;
 }
 
-
 void AudioDevice::stopAudio()
 {
-  if(!pImpl) return 0;
-  if(!pImpl->deviceController_) return 0;
-  auto ctrl = *(pImpl->deviceController_);
+  if (!pImpl->deviceController_) return 0;
+  RtAudio& ctrl = *pImpl->deviceController_;
 
   if (RTAUDIO_NO_ERROR != ctrl.stopStream())
   {
@@ -146,9 +139,8 @@ void AudioDevice::stopAudio()
 
 int AudioDevice::getOutputSampleRate()
 {
-  if(!pImpl) return 0;
-  if(!pImpl->deviceController_) return 0;
-  auto ctrl = *(pImpl->deviceController_);
+  if (!pImpl->deviceController_) return 0;
+  RtAudio& ctrl = *pImpl->deviceController_;
 
   int rate{0};
   if (ctrl.getDeviceCount() > 0)
@@ -159,6 +151,5 @@ int AudioDevice::getOutputSampleRate()
   }
   return rate;
 }
-
 
 }  // namespace ml
