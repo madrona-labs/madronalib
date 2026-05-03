@@ -10,90 +10,21 @@
 namespace ml
 {
 
-#ifdef ML_MAC
-#include <unistd.h>
-#include <termios.h>
-#include <fcntl.h>
-
-void waitForConsoleKeyPress()
-{
-  char ch{EOF};
-  struct termios oldt, newt;
-  int oldf;
-  
-  tcgetattr(STDIN_FILENO, &oldt);
-  newt = oldt;
-  newt.c_lflag &= ~(ICANON | ECHO);
-  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-  oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-  fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-  
-  while (ch == EOF)
-  {
-    ch = getchar();
-    std::this_thread::sleep_for(10ms);
-  }
-  
-  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-  fcntl(STDIN_FILENO, F_SETFL, oldf);
-}
-
-#endif  // ML_MAC
-#ifdef ML_WINDOWS
-#include <conio.h>
-
-char keyPressedAsync()
-{
-  for (int i = 0x07; i < 256; ++i)
-  {
-    if (GetAsyncKeyState(i) & 0x8000)
-    {
-      return i;
-    }
-  }
-  return false;
-}
-
-void waitForConsoleKeyPress()
-{
-  HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-  CONSOLE_CURSOR_INFO cursorInfo;
-  GetConsoleCursorInfo(hConsole, &cursorInfo);
-  cursorInfo.bVisible = false;
-  SetConsoleCursorInfo(hConsole, &cursorInfo);
-  
-  while (true)
-  {
-    if (_kbhit())
-    {
-      int ch = _getch();
-      break;
-    }
-    std::this_thread::sleep_for(10ms);
-  }
-  
-  cursorInfo.bVisible = true;
-  SetConsoleCursorInfo(hConsole, &cursorInfo);
-}
-
-#endif  // ML_WINDOWS
-
-#if !defined(ML_MAC) && !defined(ML_WINDOWS)
-void waitForConsoleKeyPress()
-{
-  std::cout << "Press Enter to continue...";
-  std::cin.get();
-}
-#endif
-
-
-
 constexpr int kRtAudioCallbackFrames{512};
+
+struct AudioDevice::Impl
+{
+  std::unique_ptr<RtAudio> deviceController_;
+};
 
 int RtAudioCallbackFn(void* outputBuffer, void* inputBuffer, unsigned int nBufferFrames,
                       double /*streamTime*/, RtAudioStreamStatus status, void* callbackData)
 {
   constexpr size_t kMaxIOChannels{64};
+  
+  // TEMP
+  std::cout << "wat\n";
+  
   
   auto pData = reinterpret_cast<AudioProcessData*>(callbackData);
   
@@ -119,31 +50,111 @@ int RtAudioCallbackFn(void* outputBuffer, void* inputBuffer, unsigned int nBuffe
   return 0;
 }
 
-struct AudioDevice::Impl
-{
-  std::unique_ptr<RtAudio> devices_;
-
-};
-
-
 AudioDevice::AudioDevice() : pImpl(std::make_unique<Impl>())
 {
-  try { pImpl->devices_ = std::make_unique<RtAudio>(); }
-  catch (...) { std::cout << "RtAudio creation error! \n"; }
-  // TODO handle with RtAudioErrorCallback
+  try { pImpl->deviceController_ = std::make_unique<RtAudio>(); }
+  catch (...) { std::cout << "AudioDevice: RtAudio creation error! \n"; }
+  // TODO handle errors with RtAudioErrorCallback
+}
+
+AudioDevice::~AudioDevice()
+{
+  stopAudio();
+}
+
+unsigned int AudioDevice::startAudio(const AudioProcessData& processData)
+{
+  if(!pImpl) return 0;
+  if(!pImpl->deviceController_) return 0;
+  auto ctrl = *(pImpl->deviceController_);
+  
+  uint32_t nDevices = ctrl.getDeviceCount();
+  if (nDevices < 1)
+  {
+    std::cout << "AudioDevice: No audio devices found!\n";
+    return 0;
+  }
+  
+  auto ids = ctrl.getDeviceIds();
+  
+  // TEMP
+  std::cout << "AudioDevice: Found: " << nDevices << " device(s)\n";
+  for (uint32_t i = 0; i < nDevices; ++i)
+  {
+    auto info = ctrl.getDeviceInfo(ids[i]);
+    std::cout << "\tDevice " << i << ": " << info.name << std::endl;
+    std::cout << "\t\tinputs: " << info.inputChannels << " outputs: " << info.outputChannels << " ID: " << info.ID << std::endl;
+    
+  }
+  
+  ctrl.showWarnings(true);
+  
+  auto nInputs = processData.processContext->inputs.size();
+  auto nOutputs = processData.processContext->outputs.size();
+  unsigned int bufferFrames = kRtAudioCallbackFrames;
+  
+  RtAudio::StreamParameters iParams, oParams;
+  iParams.deviceId = ctrl.getDefaultInputDevice();
+  iParams.nChannels = static_cast<unsigned int>(nInputs);
+  iParams.firstChannel = 0;
+  oParams.deviceId = ctrl.getDefaultOutputDevice();
+  oParams.nChannels = static_cast<unsigned int>(nOutputs);
+  oParams.firstChannel = 0;
+  
+  RtAudio::StreamOptions options;
+  options.flags |= RTAUDIO_NONINTERLEAVED;
+  
+  auto pInputParams = (nInputs ? &iParams : nullptr);
+  
+  auto outputDeviceInfo = ctrl.getDeviceInfo(oParams.deviceId);
+  unsigned int deviceSampleRate = outputDeviceInfo.currentSampleRate;
+  
+  auto processDataAsConst = const_cast< AudioProcessData* >(&processData);
+  auto processDataAsVoidPtr = static_cast< void * >(processDataAsConst);
+  
+  if (RTAUDIO_NO_ERROR != ctrl.openStream(&oParams, pInputParams, RTAUDIO_FLOAT32,
+                                          deviceSampleRate, &bufferFrames, &RtAudioCallbackFn,
+                                          processDataAsVoidPtr, &options))
+  {
+    std::cout << ctrl.getErrorText() << std::endl;
+    return 0;
+  }
+  
+  if (RTAUDIO_NO_ERROR != ctrl.startStream())
+  {
+    std::cout << ctrl.getErrorText() << std::endl;
+    return 0;
+  }
+  
+  return deviceSampleRate;
+}
+
+
+void AudioDevice::stopAudio()
+{
+  if(!pImpl) return 0;
+  if(!pImpl->deviceController_) return 0;
+  auto ctrl = *(pImpl->deviceController_);
+
+  if (RTAUDIO_NO_ERROR != ctrl.stopStream())
+  {
+    std::cout << ctrl.getErrorText() << std::endl;
+  }
+  
+  if (ctrl.isStreamOpen()) ctrl.closeStream();
 }
 
 int AudioDevice::getOutputSampleRate()
 {
   if(!pImpl) return 0;
-  if(!pImpl->devices_) return 0;
-  auto rtAudio = *(pImpl->devices_);
+  if(!pImpl->deviceController_) return 0;
+  auto ctrl = *(pImpl->deviceController_);
 
   int rate{0};
-  if (rtAudio.getDeviceCount() > 0)
+  if (ctrl.getDeviceCount() > 0)
   {
-    auto id = rtAudio.getDefaultOutputDevice();
-    auto info = rtAudio.getDeviceInfo(id);
+    auto id = ctrl.getDefaultOutputDevice();
+    auto info = ctrl.getDeviceInfo(id);
     rate = info.currentSampleRate;
   }
   return rate;

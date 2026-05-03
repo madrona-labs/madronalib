@@ -25,6 +25,14 @@ void sineProcess(AudioContext* ctx, SineExampleState *state)
   float sr = ctx->getSampleRate();
   ctx->outputs[0] = state->s1(220.f/sr)*kOutputGain;
   ctx->outputs[1] = state->s2(275.f/sr)*kOutputGain;
+  
+  // TEMP
+  static int counter{0};
+  counter += kFramesPerBlock;
+  if (counter > 48000)
+  {
+    std::cout << "HEY! " << ctx->outputs[0][0] << "\n";
+  }
 }
 
 int main()

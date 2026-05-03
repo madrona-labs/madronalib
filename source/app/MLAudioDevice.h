@@ -15,6 +15,13 @@ namespace ml
 {
 
 
+struct AudioProcessData
+{
+  std::atomic<bool> hasQuit{false};
+  AudioContext* processContext{nullptr};
+  std::function<void(AudioContext*)> processFn;
+};
+
 class AudioDevice
 {
 public:
@@ -22,6 +29,9 @@ public:
   ~AudioDevice();
 
   int getOutputSampleRate();
+  
+  unsigned int startAudio(const AudioProcessData& processData);
+  void stopAudio();
   
 private:
   struct Impl;

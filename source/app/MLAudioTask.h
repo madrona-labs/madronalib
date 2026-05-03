@@ -14,14 +14,6 @@
 namespace ml
 {
 
-
-struct AudioProcessData
-{
-  std::atomic<bool> hasQuit{false};
-  AudioContext* processContext{nullptr};
-  std::function<void(AudioContext*)> processFn;
-};
-
 class AudioTask
 {
   static constexpr int kMaxBlockSize{4096};
@@ -32,8 +24,6 @@ public:
   {
     processData.processContext = ctx;
     processData.processFn = [fn, state](AudioContext* c) { fn(c, state); };
-    
-
   }
   
   ~AudioTask();
@@ -44,8 +34,7 @@ public:
   bool hasQuit() const;
   
 private:
-  //RtAudio adac;
-  AudioDevice audioDevice;
+  AudioDevice devs;
   AudioProcessData processData;
 };
 
