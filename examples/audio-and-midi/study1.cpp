@@ -2,6 +2,9 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
+// This work in progress shows how to make a standalone example with DSP
+// code derived from SignalProcessor. This gives us utilities like storePublishedSignal.
+
 #include "madronalib.h"
 #include "mldsp.h"
 #include "MLSparkline.h"
@@ -55,8 +58,12 @@ struct Study1 : public SignalProcessor
 };
 
 
-// study1Process() does all of the audio processing, in SignalBlock-sized chunks.
-// It is called every time a new buffer of audio is needed.
+// study1Process() calls the SignalProcessor audio processing code in
+// SignalBlock-sized chunks.  It is called by the AudioTask
+// every time a new buffer of audio is needed.
+//
+// NOTE: this calls Study1::process(), not a processVector() method derived
+// from SignalProcessor. 
 void study1Process(AudioContext* ctx, Study1* state)
 {
   ctx->outputs[0] = ctx->outputs[1] = state->process(ctx);
@@ -70,7 +77,7 @@ int main()
   const float sr = ctx.getSampleRate();
   state.init(sr);
   
-  // very simple background thread for reading signals from state
+  // very simple background thread for reading signals from SignalProcessor
   std::thread ticker([&]() {
     while (!study1Task.hasQuit())
     {

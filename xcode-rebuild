@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+# Clean installed files
+rm -rf /usr/local/include/madronalib
+rm -f /usr/local/lib/libmadrona-debug.a
+rm -f /usr/local/lib/libmadrona.a
+
+# Build and install Debug
+cd /Users/randy/dev/madronalib/build
+xcodebuild build -configuration Debug -target madronalib
+cmake -DBUILD_TYPE=Debug -P cmake_install.cmake
+
+# Build and install Release
+xcodebuild build -configuration Release -target madronalib
+cmake -DBUILD_TYPE=Release -P cmake_install.cmake
+
+echo "Done."

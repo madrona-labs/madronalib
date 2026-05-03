@@ -18,6 +18,9 @@ namespace ml
 // audio as needed. It has facilities for sending audio data to outside the graph, and
 // keeping a plugin in sync with a host's time.
 
+// TODO this class is not really much about processing signals. More of a signalInfoPublisher.
+// think about rename / refactor into something we compose with whatever does processVector().
+
 class SignalProcessor
 {
  public:

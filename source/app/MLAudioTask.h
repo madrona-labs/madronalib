@@ -9,17 +9,10 @@
 #include "MLSignalProcessor.h"
 #include "MLAudioContext.h"
 #include "mldsp.h"
-#include "rtaudio/RtAudio.h"
+#include "MLAudioDevice.h"
 
 namespace ml
 {
-
-struct AudioProcessData
-{
-  std::atomic<bool> hasQuit{false};
-  AudioContext* processContext{nullptr};
-  std::function<void(AudioContext*)> processFn;
-};
 
 class AudioTask
 {
@@ -31,13 +24,6 @@ public:
   {
     processData.processContext = ctx;
     processData.processFn = [fn, state](AudioContext* c) { fn(c, state); };
-    
-    if (adac.getDeviceCount() > 0)
-    {
-      auto id = adac.getDefaultOutputDevice();
-      auto info = adac.getDeviceInfo(id);
-      processData.processContext->setSampleRate(info.currentSampleRate);
-    }
   }
   
   ~AudioTask();
@@ -48,7 +34,7 @@ public:
   bool hasQuit() const;
   
 private:
-  RtAudio adac;
+  AudioDevice devs;
   AudioProcessData processData;
 };
 

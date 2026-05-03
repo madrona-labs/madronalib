@@ -204,13 +204,6 @@ set(madronalib_SOURCES
     ${MATRIX_HEADERS}
     ${AES_SOURCES}
     ${CJSON_SOURCES}
-        source/app/MLMIDI.h
-        source/app/MLMIDI.cpp
-        source/app/MLAudioTask.cpp
-        source/app/MLEvent.cpp
-        source/app/MLEvent.h
-        source/app/MLAudioContext.cpp
-        source/app/MLAudioContext.h
 )
 
     message("RTMIDI_SOURCES: " ${RTMIDI_SOURCES} )
