@@ -103,6 +103,12 @@ elseif(WIN32)
 else()
     # GCC/Clang on Linux
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g")
+
+    # Enable SSE4.1 on x86_64 so SSE4 intrinsics in MLDSPMathSSE.h compile.
+    # GCC's default x86_64 baseline is SSE2; _mm_mullo_epi32 needs SSE4.1.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.1")
+    endif()
 endif()
 
 #--------------------------------------------------------------------
@@ -271,6 +277,7 @@ target_include_directories(${target} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/matrix>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/source/networking>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/ip>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/osc>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/oscpack/zeroconf>

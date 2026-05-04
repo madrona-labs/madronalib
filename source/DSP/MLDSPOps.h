@@ -24,6 +24,7 @@
 
 #include <array>
 #include <iostream>
+#include <vector>
 
 #include "MLDSPMath.h"
 #include "MLDSPMathApprox.h"

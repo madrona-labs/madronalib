@@ -126,7 +126,7 @@ unsigned int AudioDevice::startAudio(const AudioProcessData& processData)
 
 void AudioDevice::stopAudio()
 {
-  if (!pImpl->deviceController_) return 0;
+  if (!pImpl->deviceController_) return;
   RtAudio& ctrl = *pImpl->deviceController_;
 
   if (RTAUDIO_NO_ERROR != ctrl.stopStream())
@@ -135,6 +135,12 @@ void AudioDevice::stopAudio()
   }
   
   if (ctrl.isStreamOpen()) ctrl.closeStream();
+}
+
+long AudioDevice::getStreamLatency()
+{
+  if (!pImpl->deviceController_) return 0;
+  return pImpl->deviceController_->getStreamLatency();
 }
 
 int AudioDevice::getOutputSampleRate()

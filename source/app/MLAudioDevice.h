@@ -29,7 +29,8 @@ public:
   ~AudioDevice();
 
   int getOutputSampleRate();
-  
+  long getStreamLatency();
+
   unsigned int startAudio(const AudioProcessData& processData);
   void stopAudio();
   
