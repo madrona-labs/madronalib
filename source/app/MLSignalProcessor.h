@@ -10,6 +10,7 @@
 #include "MLPlatform.h"
 #include "madronalib.h"
 #include "mldsp.h"
+#include "MLAudioContext.h"
 
 namespace ml
 {
@@ -121,7 +122,7 @@ class SignalProcessor
     }
   };
 
-  virtual void processVector(const SignalBlockDynamic& inputs, SignalBlockDynamic& outputs, void* stateData = nullptr) {}
+  virtual void processVector(const SignalBlockDynamic& inputs, SignalBlockDynamic& outputs, AudioContext* stateData = nullptr) {}
 
   // Sample rate access (needed by all adapters)
   virtual void setSampleRate(double sr) { sampleRate_ = sr; }

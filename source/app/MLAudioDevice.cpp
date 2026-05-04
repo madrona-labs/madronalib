@@ -152,4 +152,11 @@ int AudioDevice::getOutputSampleRate()
   return rate;
 }
 
+int AudioDevice::getStreamLatency()
+{
+  if (!pImpl->deviceController_) return 0;
+  RtAudio& ctrl = *pImpl->deviceController_;
+  return static_cast<int>(ctrl.getStreamLatency());
+}
+
 }  // namespace ml

@@ -35,8 +35,7 @@ public:
   // Default implementation of processVector - handles voice iteration
   void processVector(const SignalBlockDynamic& inputs,
                     SignalBlockDynamic& outputs,
-                    void* stateData) override {
-    auto* audioContext = static_cast<AudioContext*>(stateData);
+                     AudioContext* audioContext) override {
     if (!audioContext) return;
 
     // Clear output buffers

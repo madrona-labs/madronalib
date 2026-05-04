@@ -24,7 +24,7 @@ public:
   // Default implementation: multichannel passthrough
   void processVector(const SignalBlockDynamic& inputs,
                     SignalBlockDynamic& outputs,
-                    void* stateData) override {
+                    AudioContext* stateData) override {
     int numInputs = inputs.size();
     int numOutputs = outputs.size();
 
