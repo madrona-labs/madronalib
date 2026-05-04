@@ -575,7 +575,7 @@ TEST_CASE("madronalib/filters/pink_filter_rolloff", "[filters]")
 {
   constexpr int kFFTOrder = 6;
   ffft::FFTRealFixLen<kFFTOrder> fft;
-  constexpr int N = kFramesPerBlock;
+  static constexpr int N = kFramesPerBlock;
   
   auto measureRolloff = [&](float sr) {
     PinkFilter<float> pf;

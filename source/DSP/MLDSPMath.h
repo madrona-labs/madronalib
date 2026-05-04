@@ -123,13 +123,13 @@ inline float reinterpretFloatAsInt(uint32_t f)
   return (*reinterpret_cast<float*>(&f));
 }
 
-inline float log(float x) { return std::logf(x); }
-inline float exp(float x) { return std::expf(x); }
-inline float sin(float x) { return std::sinf(x); }
-inline float cos(float x) { return std::cosf(x); }
+inline float log(float x) { return std::log(x); }
+inline float exp(float x) { return std::exp(x); }
+inline float sin(float x) { return std::sin(x); }
+inline float cos(float x) { return std::cos(x); }
 inline std::pair<float, float> sincos(float x) { return{sin(x), cos(x)};
 }
-inline float  tan(float  x) { return std::tanf(x); }
+inline float  tan(float  x) { return std::tan(x); }
 inline float4 tan(float4 x) { return sin(x) / cos(x); }
 
 // other utilities
