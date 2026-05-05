@@ -349,11 +349,11 @@ inline SignalBlockArray<ROWS * 4> verticalToHorizontal(const SignalBlockArrayBas
   {
     for (size_t lane = 0; lane < 4; ++lane)
     {
-      float4* dest = reinterpret_cast<float4*>(result.rowPtr(r * 4 + lane));
-      const float4* src = reinterpret_cast<const float4*>(temp.rowPtr(r));
+      float* dest = result.rowPtr(r * 4 + lane);
+      const float4* src = temp.rowPtr(r);
       for (size_t block = 0; block < numBlocks; ++block)
       {
-        dest[block] = src[block * 4 + lane];
+        storeFloat4(dest + block * kSIMDVectorElems, src[block * 4 + lane]);
       }
     }
   }
@@ -374,11 +374,11 @@ inline SignalBlockArrayBase<float4, ROWS> horizontalToVertical(const SignalBlock
   {
     for (size_t lane = 0; lane < 4; ++lane)
     {
-      const float4* src = reinterpret_cast<const float4*>(h.rowPtr(r * 4 + lane));
-      float4* dest = reinterpret_cast<float4*>(temp.rowPtr(r));
+      const float* src = h.rowPtr(r * 4 + lane);
+      float4* dest = temp.rowPtr(r);
       for (size_t block = 0; block < numBlocks; ++block)
       {
-        dest[block * 4 + lane] = src[block];
+        dest[block * 4 + lane] = loadFloat4(src + block * kSIMDVectorElems);
       }
     }
     transposeRow(temp.rowPtr(r));
@@ -511,13 +511,16 @@ inline AlignedArray<T, N> OpFFF2F(const AlignedArray<T, N>& a, const AlignedArra
   AlignedArray<T, N> result;
   
   constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
-  const float4* a4 = reinterpret_cast<const float4*>(a.data());
-  const float4* b4 = reinterpret_cast<const float4*>(b.data());
-  const float4* c4 = reinterpret_cast<const float4*>(c.data());
-  float4* r4 = reinterpret_cast<float4*>(result.data());
-  
+  const float* aPtr = reinterpret_cast<const float*>(a.data());
+  const float* bPtr = reinterpret_cast<const float*>(b.data());
+  const float* cPtr = reinterpret_cast<const float*>(c.data());
+  float* rPtr = reinterpret_cast<float*>(result.data());
+
   for (size_t i = 0; i < numFloat4s; ++i) {
-    r4[i] = op(a4[i], b4[i], c4[i]);
+    storeFloat4(rPtr + i * kSIMDVectorElems,
+                op(loadFloat4(aPtr + i * kSIMDVectorElems),
+                   loadFloat4(bPtr + i * kSIMDVectorElems),
+                   loadFloat4(cPtr + i * kSIMDVectorElems)));
   }
   return result;
 }
@@ -543,12 +546,14 @@ inline AlignedArray<T, N> OpII2I(const AlignedArray<T, N>& a, const AlignedArray
   AlignedArray<T, N> result;
   
   constexpr size_t numInt4s = sizeof(AlignedArray<T, N>) / sizeof(int4);
-  const int4* a4 = reinterpret_cast<const int4*>(a.data());
-  const int4* b4 = reinterpret_cast<const int4*>(b.data());
-  int4* r4 = reinterpret_cast<int4*>(result.data());
-  
+  const int32_t* aPtr = reinterpret_cast<const int32_t*>(a.data());
+  const int32_t* bPtr = reinterpret_cast<const int32_t*>(b.data());
+  int32_t* rPtr = reinterpret_cast<int32_t*>(result.data());
+
   for (size_t i = 0; i < numInt4s; ++i) {
-    r4[i] = op(a4[i], b4[i]);
+    storeInt4(rPtr + i * kSIMDVectorElems,
+              op(loadInt4(aPtr + i * kSIMDVectorElems),
+                 loadInt4(bPtr + i * kSIMDVectorElems)));
   }
   return result;
 }
@@ -605,11 +610,11 @@ inline AlignedArray<int32_t, N> OpF2I(const AlignedArray<T, N>& a, OP_F2I op) {
   AlignedArray<int32_t, N> result;
   
   constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
-  const float4* a4 = reinterpret_cast<const float4*>(a.data());
-  int4* r4 = reinterpret_cast<int4*>(result.data());
-  
+  const float* aPtr = reinterpret_cast<const float*>(a.data());
+  int32_t* rPtr = reinterpret_cast<int32_t*>(result.data());
+
   for (size_t i = 0; i < numFloat4s; ++i) {
-    r4[i] = op(a4[i]);
+    storeInt4(rPtr + i * kSIMDVectorElems, op(loadFloat4(aPtr + i * kSIMDVectorElems)));
   }
   return result;
 }
@@ -632,11 +637,11 @@ inline AlignedArray<float, N> OpI2F(const AlignedArray<T, N>& a, OP_I2F op) {
   AlignedArray<float, N> result;
   
   constexpr size_t numInt4s = sizeof(AlignedArray<T, N>) / sizeof(int4);
-  const int4* a4 = reinterpret_cast<const int4*>(a.data());
-  float4* r4 = reinterpret_cast<float4*>(result.data());
-  
+  const int32_t* aPtr = reinterpret_cast<const int32_t*>(a.data());
+  float* rPtr = reinterpret_cast<float*>(result.data());
+
   for (size_t i = 0; i < numInt4s; ++i) {
-    r4[i] = op(a4[i]);
+    storeFloat4(rPtr + i * kSIMDVectorElems, op(loadInt4(aPtr + i * kSIMDVectorElems)));
   }
   return result;
 }
@@ -852,17 +857,21 @@ inline SignalBlockArray<ROWS> rotateLeft(const SignalBlockArray<ROWS>& x)
     SignalBlock xRow = x.getRow(row);
     SignalBlock rRow;
     
-    const float4* x4 = reinterpret_cast<const float4*>(xRow.data());
-    float4* r4 = reinterpret_cast<float4*>(rRow.data());
-    
+    const float* xf = xRow.data();
+    float* rf = rRow.data();
+
     // Process all but the last float4
     for (size_t n = 0; n < kFramesPerBlock / 4 - 1; ++n)
     {
-      r4[n] = vecShuffleLeft(x4[n], x4[n + 1]);
+      storeFloat4(rf + n * kSIMDVectorElems,
+                  vecShuffleLeft(loadFloat4(xf + n * kSIMDVectorElems),
+                                 loadFloat4(xf + (n + 1) * kSIMDVectorElems)));
     }
-    
+
     // Wrap around: last float4 uses first float4 for right neighbor
-    r4[kFramesPerBlock / 4 - 1] = vecShuffleLeft(x4[kFramesPerBlock / 4 - 1], x4[0]);
+    storeFloat4(rf + (kFramesPerBlock / 4 - 1) * kSIMDVectorElems,
+                vecShuffleLeft(loadFloat4(xf + (kFramesPerBlock / 4 - 1) * kSIMDVectorElems),
+                               loadFloat4(xf)));
     
     result.setRow(row, rRow);
   }
@@ -882,16 +891,20 @@ inline SignalBlockArray<ROWS> rotateRight(const SignalBlockArray<ROWS>& x)
     SignalBlock xRow = x.getRow(row);
     SignalBlock rRow;
     
-    const float4* x4 = reinterpret_cast<const float4*>(xRow.data());
-    float4* r4 = reinterpret_cast<float4*>(rRow.data());
-    
+    const float* xf = xRow.data();
+    float* rf = rRow.data();
+
     // First output float4 wraps around with last input float4
-    r4[0] = vecShuffleRight(x4[kFramesPerBlock / 4 - 1], x4[0]);
-    
+    storeFloat4(rf,
+                vecShuffleRight(loadFloat4(xf + (kFramesPerBlock / 4 - 1) * kSIMDVectorElems),
+                                loadFloat4(xf)));
+
     // Process remaining float4s
     for (size_t n = 0; n < kFramesPerBlock / 4 - 1; ++n)
     {
-      r4[n + 1] = vecShuffleRight(x4[n], x4[n + 1]);
+      storeFloat4(rf + (n + 1) * kSIMDVectorElems,
+                  vecShuffleRight(loadFloat4(xf + n * kSIMDVectorElems),
+                                  loadFloat4(xf + (n + 1) * kSIMDVectorElems)));
     }
     
     result.setRow(row, rRow);

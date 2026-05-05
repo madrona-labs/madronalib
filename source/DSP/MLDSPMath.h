@@ -15,6 +15,13 @@
 #undef max
 #endif
 
+// Portable may_alias attribute for safe type-punning via reinterpret_cast
+#if defined(__GNUC__) || defined(__clang__)
+  #define ML_MAY_ALIAS __attribute__((may_alias))
+#else
+  #define ML_MAY_ALIAS
+#endif
+
 
 // between MLDSPMathSIMD, MLDSPMathApprox and the definitions in this file,
 // we can use the following operations with either float4 or float arguments:
@@ -115,12 +122,14 @@ inline float fracPart(float f)
 
 inline uint32_t reinterpretFloatAsInt(float f)
 {
-  return (*reinterpret_cast<uint32_t*>(&f));
+  typedef uint32_t ML_MAY_ALIAS aliased_uint32_t;
+  return *reinterpret_cast<const aliased_uint32_t*>(&f);
 }
 
 inline float reinterpretFloatAsInt(uint32_t f)
 {
-  return (*reinterpret_cast<float*>(&f));
+  typedef float ML_MAY_ALIAS aliased_float;
+  return *reinterpret_cast<const aliased_float*>(&f);
 }
 
 inline float log(float x) { return std::log(x); }
@@ -211,7 +220,8 @@ public:
     uint32_t temp = (seed_ >> 9) & 0x007FFFFF;
     temp &= 0x007FFFFF;
     temp |= 0x3F800000;
-    float* pf = reinterpret_cast<float*>(&temp);
+    typedef float ML_MAY_ALIAS aliased_float;
+    aliased_float* pf = reinterpret_cast<aliased_float*>(&temp);
     *pf *= 2.f;
     *pf -= 3.f;
     return *pf;

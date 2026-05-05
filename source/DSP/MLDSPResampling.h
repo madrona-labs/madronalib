@@ -88,7 +88,8 @@ struct Upsampler2x
   
   std::pair<Block<T>, Block<T>> operator()(const Block<T>& in)
   {
-    const auto* half = reinterpret_cast<const HalfBlock<T>*>(&in);
+    typedef HalfBlock<T> ML_MAY_ALIAS AliasedHalfBlock;
+    const AliasedHalfBlock* half = reinterpret_cast<const AliasedHalfBlock*>(&in);
     return { filter.upsample(half[0]), filter.upsample(half[1]) };
   }
   
@@ -108,7 +109,8 @@ struct Downsampler2x
     Block<T> out;
     auto lo = filter.downsample(in1);
     auto hi = filter.downsample(in2);
-    auto* half = reinterpret_cast<HalfBlock<T>*>(&out);
+    typedef HalfBlock<T> ML_MAY_ALIAS AliasedHalfBlock;
+    AliasedHalfBlock* half = reinterpret_cast<AliasedHalfBlock*>(&out);
     half[0] = lo;
     half[1] = hi;
     return out;
