@@ -411,13 +411,11 @@ public:
 template<typename T, size_t N, typename OP_F2F>
 inline AlignedArray<T, N> OpF2F(const AlignedArray<T, N>& a, OP_F2F op) {
   AlignedArray<T, N> result;
-  
   constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
-  const float4* a4 = reinterpret_cast<const float4*>(a.data());
-  float4* r4 = reinterpret_cast<float4*>(result.data());
-  
+  const float* aPtr = reinterpret_cast<const float*>(a.data());
+  float* rPtr = reinterpret_cast<float*>(result.data());
   for (size_t i = 0; i < numFloat4s; ++i) {
-    r4[i] = op(a4[i]);
+    storeFloat4(rPtr + i * kSIMDVectorElems, op(loadFloat4(aPtr + i * kSIMDVectorElems)));
   }
   return result;
 }
@@ -470,14 +468,12 @@ DEFINE_OP_F2F(fractionalPart, x - intToFloat(floatToIntTruncate(x)))
 template<typename T, size_t N, typename OP_FF2F>
 inline AlignedArray<T, N> OpFF2F(const AlignedArray<T, N>& a, const AlignedArray<T, N>& b, OP_FF2F op) {
   AlignedArray<T, N> result;
-  
   constexpr size_t numFloat4s = sizeof(AlignedArray<T, N>) / sizeof(float4);
-  const float4* a4 = reinterpret_cast<const float4*>(a.data());
-  const float4* b4 = reinterpret_cast<const float4*>(b.data());
-  float4* r4 = reinterpret_cast<float4*>(result.data());
-  
+  const float* aPtr = reinterpret_cast<const float*>(a.data());
+  const float* bPtr = reinterpret_cast<const float*>(b.data());
+  float* rPtr = reinterpret_cast<float*>(result.data());
   for (size_t i = 0; i < numFloat4s; ++i) {
-    r4[i] = op(a4[i], b4[i]);
+    storeFloat4(rPtr + i * kSIMDVectorElems, op(loadFloat4(aPtr + i * kSIMDVectorElems), loadFloat4(bPtr + i * kSIMDVectorElems)));
   }
   return result;
 }
@@ -675,44 +671,40 @@ inline void store(const SignalBlockArray<ROWS>& vecSrc, float* pDest)
 
 inline float sum(const SignalBlock& x)
 {
-  const float4* x4 = reinterpret_cast<const float4*>(x.data());
   float sum = 0;
-  for (size_t i = 0; i < kFramesPerBlock / 4; ++i)
+  for (size_t i = 0; i < kFramesPerBlock / kSIMDVectorElems; ++i)
   {
-    sum += vecSumH(x4[i]);
+    sum += vecSumH(loadFloat4(x.data() + i * kSIMDVectorElems));
   }
   return sum;
 }
 
 inline float mean(const SignalBlock& x)
 {
-  const float4* x4 = reinterpret_cast<const float4*>(x.data());
   float sum = 0;
-  for (size_t i = 0; i < kFramesPerBlock / 4; ++i)
+  for (size_t i = 0; i < kFramesPerBlock / kSIMDVectorElems; ++i)
   {
-    sum += vecSumH(x4[i]);
+    sum += vecSumH(loadFloat4(x.data() + i * kSIMDVectorElems));
   }
   return sum / kFramesPerBlock;
 }
 
 inline float max(const SignalBlock& x)
 {
-  const float4* x4 = reinterpret_cast<const float4*>(x.data());
   float fmax = FLT_MIN;
-  for (size_t i = 0; i < kFramesPerBlock / 4; ++i)
+  for (size_t i = 0; i < kFramesPerBlock / kSIMDVectorElems; ++i)
   {
-    fmax = std::max(fmax, vecMaxH(x4[i]));
+    fmax = std::max(fmax, vecMaxH(loadFloat4(x.data() + i * kSIMDVectorElems)));
   }
   return fmax;
 }
 
 inline float min(const SignalBlock& x)
 {
-  const float4* x4 = reinterpret_cast<const float4*>(x.data());
   float fmin = FLT_MAX;
-  for (size_t i = 0; i < kFramesPerBlock / 4; ++i)
+  for (size_t i = 0; i < kFramesPerBlock / kSIMDVectorElems; ++i)
   {
-    fmin = std::min(fmin, vecMinH(x4[i]));
+    fmin = std::min(fmin, vecMinH(loadFloat4(x.data() + i * kSIMDVectorElems)));
   }
   return fmin;
 }
