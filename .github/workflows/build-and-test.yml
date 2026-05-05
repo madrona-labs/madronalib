@@ -29,6 +29,11 @@ on:
         required: false
         default: true
         type: boolean
+      build-macos-intel:
+        description: 'Build for macOS (Intel / x86_64 — exercises SSE)'
+        required: false
+        default: true
+        type: boolean
       build-linux:
         description: 'Build for Linux'
         required: false
@@ -45,6 +50,30 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build-macos == 'true' }}
     name: macOS
     runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'RelWithDebInfo' }}
+          -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET="10.15"
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build tests
+        run: cmake --build build --target tests --parallel 4
+
+      - name: Run tests
+        run: ./build/bin/tests
+
+  test-macos-intel:
+    # Intel macOS runner — exercises the SSE code path natively (the macos-15
+    # Apple Silicon runner only executes the arm64/NEON slice of the universal
+    # binary).
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build-macos-intel == 'true' }}
+    name: macOS (Intel)
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
 
@@ -108,7 +137,7 @@ jobs:
   summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [test-macos, test-linux, test-windows]
+    needs: [test-macos, test-macos-intel, test-linux, test-windows]
     if: always()
     steps:
       - name: Generate summary
@@ -118,6 +147,7 @@ jobs:
           echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| macOS | ${{ needs.test-macos.result == 'success' && '✅ Success' || needs.test-macos.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS (Intel) | ${{ needs.test-macos-intel.result == 'success' && '✅ Success' || needs.test-macos-intel.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Linux | ${{ needs.test-linux.result == 'success' && '✅ Success' || needs.test-linux.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Windows | ${{ needs.test-windows.result == 'success' && '✅ Success' || needs.test-windows.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
