@@ -21,10 +21,10 @@ sudo rm -rf /usr/local/lib/cmake/madronalib
 
 # Build and install Debug
 cmake --build "$BUILD_DIR" --config Debug --target madronalib
-sudo cmake --install "$BUILD_DIR" --config Debug
+sudo cmake --install "$BUILD_DIR" --config Debug --component library
 
 # Build and install Release
 cmake --build "$BUILD_DIR" --config Release --target madronalib
-sudo cmake --install "$BUILD_DIR" --config Release
+sudo cmake --install "$BUILD_DIR" --config Release --component library
 
 echo "Done."

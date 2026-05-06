@@ -19,10 +19,10 @@ sudo rm -rf /usr/local/lib/cmake/madronalib
 # Build and install Debug
 cd "$MADRONALIB_ROOT/build"
 xcodebuild build -configuration Debug -target madronalib
-sudo cmake -DBUILD_TYPE=Debug -P cmake_install.cmake
+sudo cmake -DBUILD_TYPE=Debug -DCOMPONENT=library -P cmake_install.cmake
 
 # Build and install Release
 xcodebuild build -configuration Release -target madronalib
-sudo cmake -DBUILD_TYPE=Release -P cmake_install.cmake
+sudo cmake -DBUILD_TYPE=Release -DCOMPONENT=library -P cmake_install.cmake
 
 echo "Done."
