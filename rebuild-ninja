@@ -8,7 +8,9 @@ BUILD_DIR="$MADRONALIB_ROOT/build-ninja"
 if [ ! -f "$BUILD_DIR/build.ninja" ]; then
     cmake -S "$MADRONALIB_ROOT" -B "$BUILD_DIR" \
         -G "Ninja Multi-Config" \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+        -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+        -DCMAKE_OSX_DEPLOYMENT_TARGET="10.14"
 fi
 
 # Clean installed files
@@ -19,10 +21,10 @@ sudo rm -rf /usr/local/lib/cmake/madronalib
 
 # Build and install Debug
 cmake --build "$BUILD_DIR" --config Debug --target madronalib
-sudo cmake --install "$BUILD_DIR" --config Debug
+sudo cmake --install "$BUILD_DIR" --config Debug --component library
 
 # Build and install Release
 cmake --build "$BUILD_DIR" --config Release --target madronalib
-sudo cmake --install "$BUILD_DIR" --config Release
+sudo cmake --install "$BUILD_DIR" --config Release --component library
 
 echo "Done."

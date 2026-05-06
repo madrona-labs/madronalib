@@ -327,9 +327,9 @@ endif()
 install(
     TARGETS ${target}
     EXPORT madronalib-targets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT library
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT library
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT library
 )
 
 # Install CMake package config files
@@ -369,8 +369,8 @@ message("madronalib destination: " ${CMAKE_INSTALL_LIBDIR} )
 
 # HEADERS_INCLUDE_DIR is defined earlier (used here and by target_include_directories)
 
-install(FILES include/madronalib.h DESTINATION ${HEADERS_INCLUDE_DIR})
-install(FILES include/mldsp.h DESTINATION ${HEADERS_INCLUDE_DIR})
+install(FILES include/madronalib.h DESTINATION ${HEADERS_INCLUDE_DIR} COMPONENT library)
+install(FILES include/mldsp.h DESTINATION ${HEADERS_INCLUDE_DIR} COMPONENT library)
 
 # TODO: don't install this, wrap
 # Install cJSON header (fetched via FetchContent, consumers get it from here)
@@ -384,6 +384,7 @@ install(FILES
     DESTINATION
     # PERMISSIONS OWNER_READ GROUP_READ WORLD_READ
     ${HEADERS_INCLUDE_DIR}
+    COMPONENT library
   )
 
 # OSC headers are installed as part of APP_HEADERS (now in source/app/)
