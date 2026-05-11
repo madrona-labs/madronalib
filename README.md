@@ -5,7 +5,7 @@ Madronalib
 
 A C++ framework for DSP applications.
 
-Copyright (c) 2019–2023 Madrona Labs LLC. http://www.madronalabs.com
+Copyright (c) 2019–2026 Madrona Labs LLC. http://www.madronalabs.com
 
 Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
@@ -27,7 +27,7 @@ Madronalib comes with examples including VST3 synth and effect plugins (more for
 Status
 ------------
 
-(as of June 2024)
+(as of May 2026)
 
 The files in /source/DSP are a useful header-only DSP library and can be included without other dependencies:  `#include mldsp.h`. These provide a bunch of utilities for writing efficient and readable DSP code in a functional style. SIMD operations for sin, cos, log and exp provide a big speed gain over native math libraries and come in both precise and approximate variations. Both SSE (for Intel chips) and NEON (for Apple Silicon) are supported. Shipping products at Madrona Labs are relying on these headers and breaking changes have, for the most part, stopped. 
 
@@ -46,31 +46,31 @@ Tests exist for most modules. Very basic continuous integration exists using Git
 Building
 ----------
 
-Madronalib can be built with the default settings as follows:
+On macOS, the recommended path is the rebuild scripts at the repo root:
+
+	./rebuild-ninja    # Ninja Multi-Config, builds + installs Debug and Release
+	./rebuild-xcode    # Xcode project under build/, builds + installs Debug and Release
+
+Both scripts install to `/usr/local/include/madronalib` and `/usr/local/lib`
+(both `libmadrona.a` and `libmadrona-debug.a`). Sudo is required for the install
+step; the scripts will prompt as needed. Downstream projects (e.g. manzanita and
+its plugin examples) expect both Debug and Release configurations installed.
+
+To drive cmake by hand instead:
 
 	mkdir build
 	cd build
 	cmake ..
-	make
-    
-This will create a command-line build of all the new code.
+	make                # Release only
+	sudo make install   # /usr/local
 
-To build and install with debug symbols enabled for use with the example plugin projects:
-
-	mkdir build
-	cd build
-	cmake -DCMAKE_BUILD_TYPE=Debug ..
-	make
-	# Installation may require administrator account / sudo
-	make install
-
-To build an XCode project with JUCE support, run something like
+For an Xcode project:
 
 	mkdir build-xcode
 	cd build-xcode
 	cmake -GXcode ..
 
-To build a Visual Studio project for a 64-bit Windows app I'm currently using the command 
+For a 64-bit Windows app:
 
 	cmake .. -G "Visual Studio 17 2022"
 
