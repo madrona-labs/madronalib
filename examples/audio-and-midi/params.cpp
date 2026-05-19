@@ -54,11 +54,11 @@ void processParamsExample(AudioContext* ctx, ExampleProcessor *proc)
   // to parse the path.
   std::string runtimePathStr("freq1");
   Path freqPath(runtimePathStr.c_str());
-  float f1 = proc->getParameterTree().getRealFloatValueAtPath(freqPath);
+  float f1 = proc->getParameterStore().getRealFloatValueAtPath(freqPath);
 
   // get params from the SignalProcessor using fast compile-time hashed paths.
-  float f2 = proc->getParameterTree().getRealFloatValue("freq2");
-  float gain = proc->getParameterTree().getRealFloatValue("gain");
+  float f2 = proc->getParameterStore().getRealFloatValue("freq2");
+  float gain = proc->getParameterStore().getRealFloatValue("gain");
 
   // Running the sine generators makes SignalBlocks as output.
   // The input parameter is omega: the frequency in Hz divided by the sample rate.

@@ -129,8 +129,8 @@ class SignalProcessor
   double getSampleRate() const { return sampleRate_; }
 
   // Parameter tree access (needed for adapter initialization)
-  ParameterTree& getParameterTree() { return params_; }
-  const ParameterTree& getParameterTree() const { return params_; }
+  ParameterStore& getParameterStore() { return params_; }
+  const ParameterStore& getParameterStore() const { return params_; }
 
   // Convenience method for parameter count
   size_t getParameterCount() const { return params_.descriptions.size(); }
@@ -147,7 +147,7 @@ class SignalProcessor
 
   inline void buildParams(const ParameterDescriptionList& paramList)
   {
-    buildParameterTree(paramList, params_);
+    buildParameterStore(paramList, params_);
   };
   
   inline void setDefaultParams()
@@ -177,7 +177,7 @@ class SignalProcessor
   
  protected:
 
-  ParameterTree params_;
+  ParameterStore params_;
   Tree< std::unique_ptr<PublishedSignal> > publishedSignals_;
   SharedResourcePointer<ProcessorRegistry> registry_;
   float sampleRate_{0.f};

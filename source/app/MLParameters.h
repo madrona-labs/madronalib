@@ -90,7 +90,7 @@ inline ParameterProjection createParameterProjection(const ParameterDescription&
 }
 
 // An annotated Tree of parameters.
-class ParameterTree
+class ParameterStore
 {
 public:
   // TODO why is there not a Parameter object that contains (description, projection, valueNorm,
@@ -350,10 +350,10 @@ static constexpr HashPath path(str); \
 return path; }()).getFloatValue()
 
 
-// functions on ParameterTrees.
+// functions on ParameterStores.
 
 // set the description of the parameter paramName in the tree paramTree to paramDesc.
-inline void setParameterInfo(ParameterTree& paramTree, Path paramName,
+inline void setParameterInfo(ParameterStore& paramTree, Path paramName,
                              const ParameterDescription& paramDesc)
 {
   paramTree.projections[paramName] = createParameterProjection(paramDesc);
@@ -361,7 +361,7 @@ inline void setParameterInfo(ParameterTree& paramTree, Path paramName,
 }
 
 // get default parameter value in normalized units.
-inline Value getNormalizedDefaultValue(ParameterTree& p, Path pname)
+inline Value getNormalizedDefaultValue(ParameterStore& p, Path pname)
 {
   const auto& paramDesc = p.descriptions[pname];
   if (!paramDesc) return Value();
@@ -411,13 +411,13 @@ inline Value getNormalizedDefaultValue(ParameterTree& p, Path pname)
   }
 }
 
-inline void setDefault(ParameterTree& p, Path pname)
+inline void setDefault(ParameterStore& p, Path pname)
 {
   Value v = getNormalizedDefaultValue(p, pname);
   p.setFromNormalizedValue(pname, v);
 }
 
-inline void buildParameterTree(const ParameterDescriptionList& paramList, ParameterTree& paramTree)
+inline void buildParameterStore(const ParameterDescriptionList& paramList, ParameterStore& paramTree)
 {
   for (const auto& paramDesc : paramList)
   {
@@ -426,7 +426,7 @@ inline void buildParameterTree(const ParameterDescriptionList& paramList, Parame
   }
 }
 
-inline void setDefaults(ParameterTree& p)
+inline void setDefaults(ParameterStore& p)
 {
   for (auto& paramDesc : p.descriptions)
   {

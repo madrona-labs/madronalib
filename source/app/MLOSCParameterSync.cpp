@@ -8,7 +8,7 @@
 namespace ml
 {
 
-OSCParameterSync::OSCParameterSync(ParameterTree& params)
+OSCParameterSync::OSCParameterSync(ParameterStore& params)
     : params_(params)
 {
   // Set up OSC receiver callback

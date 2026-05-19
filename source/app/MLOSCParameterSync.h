@@ -3,7 +3,7 @@
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
 // MLOSCParameterSync.h
-// Bidirectional OSC <-> ParameterTree synchronization via Actor/Message system.
+// Bidirectional OSC <-> ParameterStore synchronization via Actor/Message system.
 
 #pragma once
 
@@ -19,7 +19,7 @@ namespace ml
 class OSCParameterSync : public Actor
 {
  public:
-  explicit OSCParameterSync(ParameterTree& params);
+  explicit OSCParameterSync(ParameterStore& params);
   ~OSCParameterSync() override;
 
   // Non-copyable
@@ -61,7 +61,7 @@ class OSCParameterSync : public Actor
   // Get parameter value for sending
   Value getParameterValue(const Path& paramName) const;
 
-  ParameterTree& params_;
+  ParameterStore& params_;
   OSCReceiver receiver_;
   OSCSender sender_;
 

@@ -40,14 +40,14 @@ TEST_CASE("madronalib/core/parameters", "[parameters]")
 {
   theSymbolTable().clear();
   
-  ParameterTree params;
+  ParameterStore params;
   ParameterDescriptionList pdl;
 
   // make parameters and projections and set defaults
   readParameterDescriptions(pdl);
   
   // build the parameter tree, creating projections
-  buildParameterTree(pdl, params);
+  buildParameterStore(pdl, params);
   
   params.setValue("linear-param", 0.88f);
   auto v1 = params.getRealFloatValue("linear-param");
