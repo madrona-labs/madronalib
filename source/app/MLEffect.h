@@ -16,7 +16,7 @@ namespace ml
 // - Override processVector() for your processing
 // - Infer number of i/o channels from SignalBlockDynamic sizes
 
-class Effect : public SignalProcessor {
+class Effect : public SignalProcessor, public Actor {
 public:
   Effect() = default;
   virtual ~Effect() = default;
@@ -37,6 +37,13 @@ public:
     // Zero any extra output channels
     for (int i = channelsToCopy; i < numOutputs; ++i) {
       outputs[i] = SignalBlock{0.f};
+    }
+  }
+  
+  
+  void onMessage(ml::Message m) override {
+    if (head(m.address) == "set_param") {
+      setParamFromNormalizedValue(ml::tail(m.address), m.value.getFloatValue());
     }
   }
 };

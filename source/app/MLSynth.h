@@ -23,7 +23,7 @@ inline float pitchToFrequency(float pitch) {
 // - Subclasses implement processVoice() for per-voice DSP
 // - No knowledge of CLAP, RtAudio, or any specific hosting environment
 
-class Synth : public SignalProcessor {
+class Synth : public SignalProcessor, public Actor {
 public:
   static constexpr int kDefaultNumVoices = 8;
   static constexpr int kNumVoices = 8;  // For adapter configuration (can be overridden by subclasses)
@@ -85,6 +85,10 @@ public:
 
   // Check if any voices are active (for adapter sleep/continue logic)
   virtual bool hasActiveVoices() const { return activeVoiceCount_ > 0; }
+  
+  void onMessage(Message msg) override
+  {
+  }
 
 protected:
   int numVoices_;

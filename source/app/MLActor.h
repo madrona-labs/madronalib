@@ -86,7 +86,6 @@ class Actor
   // handler method has a different name.
   virtual void onMessage(Message m) = 0;
 
-
   void start(size_t interval = kDefaultMessageInterval)
   {
     // we currently attempt to handle all the messages in the queue.
@@ -118,13 +117,13 @@ class Actor
     }
   }
 
+private:
   void handleMessagesInQueue()
   {
     // handle all the messages currently in the queue.
     // we don't want to handle messages that are added
     // to the queue during this function call! So count first.
     size_t n = messageQueue_.elementsAvailable();
-    
     for(int i=0; i<n; ++i)
     {
       Message m {messageQueue_.pop()};
@@ -140,6 +139,9 @@ class Actor
   void clearMessageQueue() { messageQueue_.clear(); }
 };
 
+// register the Actor so it can be found by name in the registry.
+// Not required- it's OK to skip this step and send messages directly to an
+// Actor with enqueueMessage().
 inline void registerActor(Path actorName, Actor* actorToRegister)
 {
   SharedResourcePointer<ActorRegistry> registry;
@@ -152,7 +154,7 @@ inline void removeActor(Actor* actorToRemove)
   registry->doRemove(actorToRemove);
 }
 
-// send message to an Actor.
+// send message to an Actor in the registry.
 // if the named Actor exists, its onMessage method will be called.
 //
 // TODO handle situations where getActor() can't return a pointer
