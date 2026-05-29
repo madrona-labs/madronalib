@@ -26,8 +26,9 @@ xcodebuild build -configuration Release -target madronalib
 sudo cmake -DBUILD_TYPE=Release -DCOMPONENT=library -P cmake_install.cmake
 
 # Give user ownership so Xcode IDE builds can update installed files without sudo
-sudo chown -R "$(whoami)" /usr/local/lib/cmake/madronalib
-sudo chown -R "$(whoami)" /usr/local/include/madronalib
-sudo chown "$(whoami)" /usr/local/lib/libmadrona-debug.a /usr/local/lib/libmadrona.a 2>/dev/null || true
+ACTUAL_USER=${SUDO_USER:-$USER}
+sudo chown -R $ACTUAL_USER /usr/local/lib/cmake/madronalib
+sudo chown -R $ACTUAL_USER /usr/local/include/madronalib
+sudo chown $ACTUAL_USER /usr/local/lib/libmadrona-debug.a /usr/local/lib/libmadrona.a 2>/dev/null || true
 
 echo "Done."
