@@ -11,72 +11,39 @@ namespace ml
 namespace terminalDevice
 {
 
-// TODO move to TerminalDevice
-
 #ifdef ML_MAC
 #include <unistd.h>
 #include <termios.h>
-#include <fcntl.h>
 
 void waitForConsoleKeyPress()
 {
-  char ch{EOF};
-  struct termios oldt, newt;
-  int oldf;
-  
-  tcgetattr(STDIN_FILENO, &oldt);
-  newt = oldt;
-  newt.c_lflag &= ~(ICANON | ECHO);
-  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-  oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-  fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-  
-  while (ch == EOF)
+  if (isatty(STDIN_FILENO))
   {
-    ch = getchar();
-    std::this_thread::sleep_for(10ms);
+    // Real terminal: disable canonical mode so any keypress works without Enter.
+    struct termios oldt, newt;
+    char ch;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    read(STDIN_FILENO, &ch, 1);
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+  } 
+  else
+  {
+    // IDE / piped stdin (e.g. Xcode): raw mode doesn't apply; wait for Enter.
+    std::cin.get();
   }
-  
-  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-  fcntl(STDIN_FILENO, F_SETFL, oldf);
 }
 
 #endif  // ML_MAC
 #ifdef ML_WINDOWS
 #include <conio.h>
 
-char keyPressedAsync()
-{
-  for (int i = 0x07; i < 256; ++i)
-  {
-    if (GetAsyncKeyState(i) & 0x8000)
-    {
-      return i;
-    }
-  }
-  return false;
-}
-
 void waitForConsoleKeyPress()
 {
-  HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-  CONSOLE_CURSOR_INFO cursorInfo;
-  GetConsoleCursorInfo(hConsole, &cursorInfo);
-  cursorInfo.bVisible = false;
-  SetConsoleCursorInfo(hConsole, &cursorInfo);
-  
-  while (true)
-  {
-    if (_kbhit())
-    {
-      int ch = _getch();
-      break;
-    }
-    std::this_thread::sleep_for(10ms);
-  }
-  
-  cursorInfo.bVisible = true;
-  SetConsoleCursorInfo(hConsole, &cursorInfo);
+  // _getch() blocks until one keypress without requiring Enter, no echo.
+  _getch();
 }
 
 #endif  // ML_WINDOWS

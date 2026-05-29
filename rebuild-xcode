@@ -30,5 +30,6 @@ ACTUAL_USER=${SUDO_USER:-$USER}
 sudo chown -R $ACTUAL_USER /usr/local/lib/cmake/madronalib
 sudo chown -R $ACTUAL_USER /usr/local/include/madronalib
 sudo chown $ACTUAL_USER /usr/local/lib/libmadrona-debug.a /usr/local/lib/libmadrona.a 2>/dev/null || true
+sudo chown $ACTUAL_USER build
 
 echo "Done."
