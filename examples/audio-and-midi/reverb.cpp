@@ -64,9 +64,9 @@ void initializeReverb(AudioContext* ctx, AaltoverbState* r)
   r->mDelayR.setMaxDelayInSamples(3500.f);
 }
 
-// processVector() does all of the audio processing, in SignalBlock-sized chunks.
+// processBlock() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
-void processVector(AudioContext* ctx, AaltoverbState* r)
+void processBlock(AudioContext* ctx, AaltoverbState* r)
 {
   float sr = ctx->getSampleRate();
   const float RT60const = 0.001f;
@@ -128,7 +128,7 @@ int main()
 
   // make a context and run the audio task.
   AudioContext ctx(kInputChannels, kOutputChannels);
-  AudioTask reverbExample(&ctx, processVector, &r);
+  AudioTask reverbExample(&ctx, processBlock, &r);
   initializeReverb(&ctx, &r);
   
   return reverbExample.runConsoleApp();

@@ -19,7 +19,7 @@ inline float pitchToFrequency(float pitch) {
 }
 
 // Synth: Specialized base class for polyphonic synthesizers
-// - Implements processVector() to handle voice iteration
+// - Implements processBlock() to handle voice iteration
 // - Subclasses implement processVoice() for per-voice DSP
 // - No knowledge of CLAP, RtAudio, or any specific hosting environment
 
@@ -32,8 +32,8 @@ public:
     : numVoices_(numVoices) {}
   virtual ~Synth() = default;
 
-  // Default implementation of processVector - handles voice iteration
-  void processVector(const SignalBlockDynamic& inputs,
+  // Default implementation of processBlock - handles voice iteration
+  void processBlock(const SignalBlockDynamic& inputs,
                     SignalBlockDynamic& outputs,
                      AudioContext* audioContext) override {
     if (!audioContext) return;

@@ -20,7 +20,7 @@ namespace ml
 // keeping a plugin in sync with a host's time.
 
 // TODO this class is not really much about processing signals. More of a signalInfoPublisher.
-// think about rename / refactor into something we compose with whatever does processVector().
+// think about rename / refactor into something we compose with whatever does processBlock().
 
 class SignalProcessor
 {
@@ -122,7 +122,7 @@ class SignalProcessor
     }
   };
 
-  virtual void processVector(const SignalBlockDynamic& inputs, SignalBlockDynamic& outputs, AudioContext* stateData = nullptr) {}
+  virtual void processBlock(const SignalBlockDynamic& inputs, SignalBlockDynamic& outputs, AudioContext* stateData = nullptr) {}
 
   // Sample rate access (needed by all adapters)
   virtual void setSampleRate(double sr) { sampleRate_ = sr; }

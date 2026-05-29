@@ -13,7 +13,9 @@ namespace ml
 
 // Effect: Base class for audio effects
 // - Default implementation: multichannel passthrough
-// - Override processVector() for your processing
+// - Override SignalProcessor::processVector() for processing
+// - Override Actor::onMessage() for setting parameters and
+//   anything else we want our View to control
 // - Infer number of i/o channels from SignalBlockDynamic sizes
 
 class Effect : public SignalProcessor, public Actor {
@@ -39,7 +41,6 @@ public:
       outputs[i] = SignalBlock{0.f};
     }
   }
-  
   
   void onMessage(ml::Message m) override {
     if (head(m.address) == "set_param") {

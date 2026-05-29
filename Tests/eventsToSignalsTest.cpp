@@ -96,7 +96,7 @@ TEST_CASE("madronalib/core/events/small_buffer", "[events]")
   t.callback(bufSize);
   t.callback(bufSize);
   
-  // after kFramesPerBlock samples, processVector ran — gate should be on
+  // after kFramesPerBlock samples, processBlock ran — gate should be on
   REQUIRE(t.gateEnd(0) > 0.f);
   
   // callback 2: note off — loop may not run yet, events must survive
@@ -133,7 +133,7 @@ TEST_CASE("madronalib/core/events/odd_buffer_size", "[events]")
   // 5 extra samples at end contain note-off
   t.callback(bufSize, {e1, e3});
   
-  // run one more callback to ensure processVector has processed both
+  // run one more callback to ensure processBlock has processed both
   t.callback(bufSize);
   
   // all voices should be off
@@ -175,7 +175,7 @@ TEST_CASE("madronalib/core/events/small_buffer_16", "[events]")
   // callback 4: note off
   t.callback(bufSize, {makeNoteOff(60, 60.f, 2)});
 
-  // run enough empty callbacks to ensure processVector processes the note-off
+  // run enough empty callbacks to ensure processBlock processes the note-off
   for (int i = 0; i < 4; ++i)
   {
     t.callback(bufSize);
@@ -195,7 +195,7 @@ TEST_CASE("madronalib/core/events/multiple_notes_small_buffer", "[events]")
   // callback 2: note on key 64 (different voice)
   t.callback(bufSize, {makeNoteOn(64, 64.f, 0.7f, 0)});
   
-  // run one more callback to ensure processVector has processed both
+  // run one more callback to ensure processBlock has processed both
   t.callback(bufSize);
   
   // both voices should be active
@@ -224,7 +224,7 @@ TEST_CASE("madronalib/core/events/onoff_startend", "[events]")
   // TODO this fails even at buffer size = 32!
   t.callback(bufSize, {e1, e2});
   
-  // run one more callback to ensure processVector has processed both
+  // run one more callback to ensure processBlock has processed both
   t.callback(bufSize);
   
   // all voices should be off
@@ -247,7 +247,7 @@ TEST_CASE("madronalib/core/events/rapid_on_off", "[events]")
   // note on at sample 2, note off at sample 20, both in same callback
   t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 2), makeNoteOff(60, 60.f, 3)});
   
-  // run callbacks until processVector has processed everything
+  // run callbacks until processBlock has processed everything
   t.callback(bufSize);
   t.callback(bufSize);
   
@@ -262,7 +262,7 @@ TEST_CASE("madronalib/core/events/on_off_same_time", "[events]")
   // note on at sample 2, note off at sample 20, both in same callback
   t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 2), makeNoteOff(60, 60.f, 2)});
   
-  // run callbacks until processVector has processed everything
+  // run callbacks until processBlock has processed everything
   t.callback(bufSize);
   t.callback(bufSize);
   

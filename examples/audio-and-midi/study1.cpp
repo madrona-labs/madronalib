@@ -62,7 +62,7 @@ struct Study1 : public SignalProcessor
 // SignalBlock-sized chunks.  It is called by the AudioTask
 // every time a new buffer of audio is needed.
 //
-// NOTE: this calls Study1::process(), not a processVector() method derived
+// NOTE: this calls Study1::process(), not a processBlock() method derived
 // from SignalProcessor. 
 void study1Process(AudioContext* ctx, Study1* state)
 {
