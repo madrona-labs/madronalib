@@ -23,7 +23,7 @@ void readParameterDescriptions(ParameterDescriptionList& params)
     { "name", "log-param" },
     { "range", {0.001, 1} },
     { "log", true },
-    { "plaindefault", 0.05 }
+    { "real_default", 0.05 }
   } ) );
   
   params.push_back( std::make_unique< ParameterDescription >(WithValues{
@@ -31,7 +31,7 @@ void readParameterDescriptions(ParameterDescriptionList& params)
     { "range", {1, 6} },
     { "log", true },
     { "offset", -1.f },
-    { "plaindefault", 0.0 }
+    { "real_default", 0.0 }
   } ) );
 }
 

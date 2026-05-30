@@ -394,9 +394,9 @@ inline Value getNormalizedDefaultValue(ParameterStore& p, Path pname)
       return defaultVal;
     }
   }
-  else if (paramDesc->hasProperty("plaindefault"))
+  else if (paramDesc->hasProperty("real_default"))
   {
-    Value defaultVal = paramDesc->getProperty("plaindefault");
+    Value defaultVal = paramDesc->getProperty("real_default");
     return Value(p.convertRealToNormalizedFloatValue(pname, defaultVal));  // TODO clean up API
   }
   else if (paramDesc->hasProperty("range"))
