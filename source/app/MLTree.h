@@ -487,6 +487,7 @@ class Tree
 
 // Utility functions
 
+// return a tree containing only the elements in the input tree whose paths are present in pList.
 template <class V, class K = Symbol, class C = std::less<K>>
 const Tree<V, K, C> filterByPathList(const Tree<V, K, C>& t, std::vector<GenericPath<K>> pList)
 {
