@@ -333,9 +333,9 @@ struct HexCharStruct
   HexCharStruct(unsigned char _c) : c(_c) {}
 };
 
-inline std::ostream& operator<<(std::ostream& o, const HexCharStruct& hs)
+inline std::ostream& operator<<(std::ostream& out, const HexCharStruct& hs)
 {
-  return (o << std::hex << (int)hs.c << std::dec);
+  return (out << std::hex << (int)hs.c << std::dec);
 }
 
 inline HexCharStruct hexchar(unsigned char _c) { return HexCharStruct(_c); }
