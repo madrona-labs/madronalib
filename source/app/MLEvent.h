@@ -53,7 +53,7 @@ struct Event
 
 inline std::ostream& operator<<(std::ostream& out, const Event& e)
 {
-  std::cout << "[" << Event::typeNames[e.type] << " " << (int)e.channel << "/" << (int)e.sourceIdx
+  out << "[" << Event::typeNames[e.type] << " " << (int)e.channel << "/" << (int)e.sourceIdx
             << "/" << (int)e.time << " " << e.value1 << ", " << e.value2 << "]";
   return out;
 }

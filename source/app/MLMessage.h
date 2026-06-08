@@ -134,7 +134,7 @@ inline void sendMessageToEach(typename Collection<T>::TreeType& collRef, Message
 
 inline std::ostream& operator<<(std::ostream& out, const Message& r)
 {
-  std::cout << "[" << r.address << ": " << r.value << "]";
+  out << "[" << r.address << ": " << r.value << "]";
   return out;
 }
 

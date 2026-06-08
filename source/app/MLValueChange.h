@@ -44,6 +44,6 @@ struct ValueChange
 
 inline std::ostream& operator<<(std::ostream& out, const ml::ValueChange& r)
 {
-  std::cout << "[" << r.name << ": " << r.oldValue << " -> " << r.newValue << "]";
+  out << "[" << r.name << ": " << r.oldValue << " -> " << r.newValue << "]";
   return out;
 }
