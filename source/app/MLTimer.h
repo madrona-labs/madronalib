@@ -125,7 +125,7 @@ class Timer
 
   SharedResourcePointer<Timers> timers_;
   int counter_{0};
-  std::function<void(void)> func_;
+  std::function<void(void)> func_{nullptr};
   milliseconds period_{};
   milliseconds additionalTime_{};
   time_point<system_clock> previousCall_{};

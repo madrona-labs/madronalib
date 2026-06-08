@@ -143,7 +143,7 @@ template <class T> struct TimedResult
 
 template <class T> struct WorkerData
 {
-  std::function<T(void)>* workFn;
+  std::function<T(void)>* workFn {nullptr};
   Stats< double > stats;
   TimedResult< T > result;
 };

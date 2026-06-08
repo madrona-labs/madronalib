@@ -3,7 +3,6 @@
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
 #include "MLValue.h"
-
 #include "MLTextUtils.h"
 
 namespace ml
