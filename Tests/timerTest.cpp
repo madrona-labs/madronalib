@@ -96,3 +96,16 @@ TEST_CASE("madronalib/core/timer/basic", "[timer][basic]")
   system("pause");
 #endif
 }
+
+
+TEST_CASE("madronalib/core/timer/startup", "[timer][startup]")
+{
+  // call this once in an application.
+  bool deferToMainThread = false;
+  SharedResourcePointer<ml::Timers> t;
+  t->start(deferToMainThread);
+  
+  // but here it's called twice! oh no!
+  t->start(deferToMainThread);
+}
+
