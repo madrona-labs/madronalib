@@ -175,12 +175,19 @@ class SignalProcessor
     return params_.getNormalizedFloatValueAtPath(pname);
   }
   
+  // view message handler
+  std::function<void(Message)> sendMessageToView {nullptr};
+  void setViewMessageHandler(std::function<void(Message)> fn) { sendMessageToView = std::move(fn); }
+
  protected:
 
   ParameterStore params_;
   Tree< std::unique_ptr<PublishedSignal> > publishedSignals_;
   SharedResourcePointer<ProcessorRegistry> registry_;
   float sampleRate_{0.f};
+  
+  // published signal routines - for realtime displays
+  
   bool publishedSignalsAreActive_{false};
   
   inline void publishSignal(Path signalName, int maxFrames, int maxVoices, int channels, int octavesDown)

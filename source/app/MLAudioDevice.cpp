@@ -71,17 +71,6 @@ unsigned int AudioDevice::startAudio(const AudioProcessData& processData)
   }
   
   auto ids = ctrl.getDeviceIds();
-  
-  // TEMP
-  std::cout << "AudioDevice: Found: " << nDevices << " device(s)\n";
-  for (uint32_t i = 0; i < nDevices; ++i)
-  {
-    auto info = ctrl.getDeviceInfo(ids[i]);
-    std::cout << "\tDevice " << i << ": " << info.name << std::endl;
-    std::cout << "\t\tinputs: " << info.inputChannels << " outputs: " << info.outputChannels << " ID: " << info.ID << std::endl;
-    
-  }
-  
   ctrl.showWarnings(true);
   
   auto nInputs = processData.processContext->inputs.size();
