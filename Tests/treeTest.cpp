@@ -342,7 +342,19 @@ TEST_CASE("madronalib/core/tree", "[tree]")
       melodies.push_back(*it);
     }
   }
-
+  
+  // setCurrentPath test
+  auto iterator = properties.begin();
+  if(iterator.setCurrentPath(p))
+  {
+    for(iterator.firstChild(); iterator.hasMoreChildren(); iterator.nextChild())
+    {
+      auto curPath = iterator.getCurrentPath();
+      REQUIRE (head(curPath) == "melodies");
+      REQUIRE (curPath.getSize() == 2);
+    }
+  }
+  
   //  Empty Tree test
   Tree< Value > emptyTree;
   int count{0};

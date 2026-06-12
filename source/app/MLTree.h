@@ -408,15 +408,22 @@ class Tree
     bool setCurrentPath(GenericPath<K> p)
     {
       setCurrentPathToRoot();
-      const Tree<V, K, C>* nextNode = nodeStack_[0];
-      for (K key : p)
+      const Tree<V, K, C>* currentNode = nodeStack_[0];
+      int pathSize = p.getSize();
+
+      for (int i = 0; i < pathSize; ++i)
       {
-        auto it = nextNode->children_.find(key);
-        if (it != nextNode->children_.end())
+        K key = p.getElement(i);
+        auto it = currentNode->children_.find(key);
+        if (it != currentNode->children_.end())
         {
-          nodeStack_.push_back(nextNode);
-          iteratorStack_.push_back(it);
-          nextNode = &(it->second);
+          iteratorStack_.back() = it;
+          if (i < pathSize - 1)
+          {
+            currentNode = &(it->second);
+            nodeStack_.push_back(currentNode);
+            iteratorStack_.push_back(currentNode->children_.end());
+          }
         }
         else
         {
