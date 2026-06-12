@@ -345,7 +345,7 @@ TEST_CASE("madronalib/core/tree", "[tree]")
   
   // setCurrentPath test
   auto iterator = properties.begin();
-  if(iterator.setCurrentPath(p))
+  if(iterator.setCurrentPath("melodies"))
   {
     for(iterator.firstChild(); iterator.hasMoreChildren(); iterator.nextChild())
     {
