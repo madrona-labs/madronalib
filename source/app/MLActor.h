@@ -127,7 +127,6 @@ private:
     for(int i=0; i<n; ++i)
     {
       Message m {messageQueue_.pop()};
-
       if (logCallback_)
       {
         logCallback_(registeredName_, m, false);  // false = dispatch
