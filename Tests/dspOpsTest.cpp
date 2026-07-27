@@ -302,6 +302,15 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     
     float maxVal = max(a);
     REQUIRE(maxVal == Approx(63.0f));
+
+    // max() and min() must work on blocks that don't straddle zero.
+    SignalBlock negative = rangeClosed(-63.0f, -1.0f);
+    REQUIRE(max(negative) == Approx(-1.0f));
+    REQUIRE(min(negative) == Approx(-63.0f));
+
+    SignalBlock zeros(0.0f);
+    REQUIRE(max(zeros) == Approx(0.0f));
+    REQUIRE(min(zeros) == Approx(0.0f));
   }
   
   SECTION("map operations")
