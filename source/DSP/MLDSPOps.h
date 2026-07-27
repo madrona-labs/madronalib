@@ -696,7 +696,7 @@ inline float mean(const SignalBlock& x)
 
 inline float max(const SignalBlock& x)
 {
-  float fmax = FLT_MIN;
+  float fmax = -FLT_MAX;
   for (size_t i = 0; i < kFramesPerBlock / kSIMDVectorElems; ++i)
   {
     fmax = std::max(fmax, vecMaxH(loadFloat4(x.data() + i * kSIMDVectorElems)));
