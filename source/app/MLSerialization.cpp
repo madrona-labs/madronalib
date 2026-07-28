@@ -108,7 +108,17 @@ Value readBinaryToValue(const uint8_t*& readPtr)
   readPtr += header.size;
 
   // Use the private constructor via friend access
-  return Value(header.type, header.size, dataPtr);
+  Value v(header.type, header.size, dataPtr);
+
+  // text values from external binary data can carry invalid UTF-8, which the
+  // code point iterators cannot handle safely (a truncated multi-byte tail
+  // makes them run past the end of the buffer). Sanitize on the way in.
+  if (v.getType() == Value::kText)
+  {
+    v = Value(sanitizeUTF8(v.getTextValue()));
+  }
+
+  return v;
 }
 
 Value binaryToValue(const std::vector<uint8_t>& dataVec)

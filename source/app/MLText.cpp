@@ -342,6 +342,61 @@ std::vector<CodePoint> textToCodePoints(TextFragment frag)
   return r;
 }
 
+TextFragment sanitizeUTF8(const TextFragment& frag)
+{
+  // byte-bounded walk: copy valid UTF-8 sequences through, replace anything
+  // invalid (bad lead, bad continuation, truncated tail, surrogate/out-of-range
+  // code point) with U+FFFD. Never trusts the code point iterators, which are
+  // unsafe on invalid input.
+  const char* p = frag.getText();
+  const char* e = p + frag.lengthInBytes();
+  std::vector<char> out;
+  out.reserve(frag.lengthInBytes());
+
+  auto pushReplacement = [&]() {
+    out.push_back(char(0xef)); out.push_back(char(0xbf)); out.push_back(char(0xbd));
+  };
+
+  while (p < e)
+  {
+    unsigned char lead = static_cast<unsigned char>(*p);
+    size_t len = 0;
+    uint32_t c = 0;
+    if (lead < 0x80) { len = 1; c = lead; }
+    else if ((lead & 0xe0) == 0xc0) { len = 2; c = lead & 0x1f; }
+    else if ((lead & 0xf0) == 0xe0) { len = 3; c = lead & 0x0f; }
+    else if ((lead & 0xf8) == 0xf0) { len = 4; c = lead & 0x07; }
+
+    bool ok = (len > 0) && (p + len <= e);
+    if (ok)
+    {
+      for (size_t i = 1; i < len; ++i)
+      {
+        unsigned char cont = static_cast<unsigned char>(p[i]);
+        if ((cont & 0xc0) != 0x80) { ok = false; break; }
+        c = (c << 6) | (cont & 0x3f);
+      }
+    }
+    if (ok)
+    {
+      // reject surrogates and out-of-range code points
+      ok = (c < 0xd800) || ((c >= 0xe000) && (c < 0x110000));
+    }
+
+    if (ok)
+    {
+      for (size_t i = 0; i < len; ++i) out.push_back(p[i]);
+      p += len;
+    }
+    else
+    {
+      pushReplacement();
+      p += 1;
+    }
+  }
+  return TextFragment(out.data(), out.size());
+}
+
 TextFragment codePointsToText(std::vector<CodePoint> cv)
 {
   // utf::encode writes out of bounds for invalid code points (surrogates and

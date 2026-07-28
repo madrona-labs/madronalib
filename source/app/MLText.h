@@ -209,6 +209,12 @@ TextFragment byteVectorToText(const std::vector<uint8_t>& v);
 std::vector<CodePoint> textToCodePoints(TextFragment frag);
 TextFragment codePointsToText(std::vector<CodePoint> cv);
 
+// return a copy of the fragment with any invalid UTF-8 replaced by U+FFFD.
+// The code point iterators are only safe on valid UTF-8 (a truncated
+// multi-byte tail makes them run past the end), so any text arriving from
+// external data must be sanitized before iteration.
+TextFragment sanitizeUTF8(const TextFragment& frag);
+
 inline bool operator==(const TextFragment& a, const char* b) { return a == TextFragment(b); }
 inline bool operator==(const char* a, const TextFragment& b) { return TextFragment(a) == b; }
 inline bool operator!=(const TextFragment& a, const char* b) { return !(a == b); }
