@@ -344,6 +344,18 @@ std::vector<CodePoint> textToCodePoints(TextFragment frag)
 
 TextFragment codePointsToText(std::vector<CodePoint> cv)
 {
+  // utf::encode writes out of bounds for invalid code points (surrogates and
+  // values >= 0x110000): write_length() returns 0 and its fill loop underflows.
+  // Replace anything invalid with U+FFFD before conversion.
+  for (auto& c : cv)
+  {
+    uint32_t u = static_cast<uint32_t>(c);
+    if (!((u < 0xd800) || ((u >= 0xe000) && (u < 0x110000))))
+    {
+      c = 0xfffd;
+    }
+  }
+
   auto sv = utf::make_stringview(cv.begin(), cv.end());
   std::vector<char> outVec;
   sv.to<utf::utf8>(std::back_inserter(outVec));
