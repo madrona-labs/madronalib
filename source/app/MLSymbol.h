@@ -70,7 +70,8 @@ class SymbolTable
 
 inline SymbolTable& theSymbolTable()
 {
-  static std::unique_ptr<SymbolTable> t(new SymbolTable());
+  // leaks by design, avoiding prio inversions on teardown
+  static SymbolTable* t = new SymbolTable();
   return *t;
 }
 

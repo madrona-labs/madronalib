@@ -95,3 +95,57 @@ TEST_CASE("madronalib/core/path/init-list", "[path]")
   REQUIRE(sum.getSize() == 12);
 }
 
+
+TEST_CASE("madronalib/core/path/hash-only", "[path]")
+{
+  // hashOnlyPath() must produce exactly the hashes runtimePath() produces,
+  // so that it finds nodes created with registered Symbols.
+  const char* cases[] = {
+    "hello/world",
+    "osc/amp",
+    "a",
+    "/leading/separator",
+    "trailing/separator/",
+    "double//separator",
+    "///",
+    "",
+    "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o",   // kPathMaxSymbols segments
+    "été/日本語/café"        // multi-byte UTF-8 segments
+  };
+
+  for(const char* c : cases)
+  {
+    REQUIRE(hashOnlyPath(c) == runtimePath(c));
+    REQUIRE(hashOnlyPath(c).getSize() == runtimePath(c).getSize());
+  }
+
+  REQUIRE(hashOnlyPath(nullptr) == Path());
+
+  // hashOnlyPath must not register anything in the SymbolTable.
+  auto initialSize = theSymbolTable().getSize();
+  hashOnlyPath("some/name/never/registered/anywhere/else");
+  REQUIRE(theSymbolTable().getSize() == initialSize);
+}
+
+TEST_CASE("madronalib/core/tree/hash-only-lookup", "[tree]")
+{
+  // a Tree populated through operator[] must be findable by hash-only lookup,
+  // and the node names must still be recoverable as text.
+  Tree< int > t;
+  t["alpha/beta"] = 23;
+  t["alpha/gamma"] = 42;
+
+  REQUIRE(t.getNode(hashOnlyPath("alpha/beta"))->getValue() == 23);
+  REQUIRE(t.getNode(hashOnlyPath("alpha/gamma"))->getValue() == 42);
+  REQUIRE(t.getNode(hashOnlyPath("alpha/delta")) == nullptr);
+
+  // creating a node registers its symbols, so names still print as text
+  REQUIRE(Symbol("beta").getTextFragment() == "beta");
+  REQUIRE(Symbol("gamma").getTextFragment() == "gamma");
+
+  // reading an existing node through the const operator[] must not insert
+  const Tree< int >& ct(t);
+  REQUIRE(ct["alpha/beta"] == 23);
+  REQUIRE(ct["alpha/delta"] == 0);
+  REQUIRE(t.getNode(hashOnlyPath("alpha/delta")) == nullptr);
+}

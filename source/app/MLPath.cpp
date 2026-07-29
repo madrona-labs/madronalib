@@ -36,6 +36,29 @@ Path runtimePath(const Symbol& sym) { return runtimePath(sym.getUTF8Ptr()); }
 Path runtimePath(const TextFragment& frag) { return runtimePath(frag.getText()); }
 
 
+// Path creation for lookup only - hashes segments without registering Symbols.
+// Same scan as runtimePath() above, but using the constexpr Symbol(hash) ctor,
+// so the SymbolTable is never touched: no allocation, no lock, no global state.
+
+Path hashOnlyPath(const char* str)
+{
+  Path p;
+  if (!str) return p;
+
+  const char separator = '/';
+  const char* q = str;
+  while (*q)
+  {
+    while (*q == separator) ++q;
+    const char* segStart = q;
+    while (*q && (*q != separator)) ++q;
+    size_t len = q - segStart;
+    if (len > 0) p.addElement(Symbol(fnv1aRuntime(segStart, len)));
+  }
+  return p;
+}
+
+
 // Runtime TextPath creation - parses string and creates TextFragments
 
 

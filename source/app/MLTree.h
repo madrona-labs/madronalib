@@ -134,8 +134,28 @@ class Tree
     return pNode;
   }
 
-  // operator[] from string literals registers symbols in the Path
-  V& operator[](const char* pathStr) { return operator[](runtimePath(pathStr)); }
+  // operator[] from a string.
+  //
+  // The lookup uses hashOnlyPath(), which never touches the SymbolTable: no
+  // allocation, no global mutex, no global state. So reading an existing node
+  // through this operator is safe on an audio thread.
+  //
+  // Only when a node has to be created do we pay for runtimePath(), which
+  // registers the symbols so the new node's name still prints as text.
+  V& operator[](const char* pathStr)
+  {
+    auto pNode = getMutableNode(hashOnlyPath(pathStr));
+    if (pNode) return pNode->value_;
+    return add(runtimePath(pathStr), V())->value_;
+  }
+
+  // const version never creates, so it never needs registered symbols.
+  const V& operator[](const char* pathStr) const
+  {
+    static const V nullValue{};
+    auto pNode = getNode(hashOnlyPath(pathStr));
+    return pNode ? pNode->value_ : nullValue;
+  }
 
   V& operator[](GenericPath<K> p)
   {

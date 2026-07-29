@@ -339,6 +339,22 @@ Path runtimePath(const char* str);
 Path runtimePath(const Symbol& sym);
 Path runtimePath(const TextFragment& frag);
 
+// Runtime path creation for LOOKUP ONLY - hashes the segments without
+// registering them in the SymbolTable.
+//
+// A Path holds only 64-bit hashes, and Tree is keyed by those hashes, so a
+// lookup never needs the SymbolTable. Skipping registration means no
+// allocation, no global mutex and no global state, which makes this safe to
+// call from an audio thread.
+//
+// The hashes are identical to the ones runtimePath() produces, so a Path built
+// this way matches nodes that were created with registered Symbols.
+//
+// Do NOT create tree nodes from a Path built this way: the resulting keys have
+// no text in the SymbolTable and would print as "?". Use runtimePath() when
+// adding.
+Path hashOnlyPath(const char* str);
+
 template <>
 inline Path::GenericPath(const char* str)
 {
