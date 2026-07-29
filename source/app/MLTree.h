@@ -152,9 +152,7 @@ class Tree
   // const version never creates, so it never needs registered symbols.
   const V& operator[](const char* pathStr) const
   {
-    static const V nullValue{};
-    auto pNode = getNode(hashOnlyPath(pathStr));
-    return pNode ? pNode->value_ : nullValue;
+    return operator[](hashOnlyPath(pathStr));
   }
 
   V& operator[](GenericPath<K> p)
