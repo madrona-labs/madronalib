@@ -46,6 +46,68 @@ on:
         type: boolean
 
 jobs:
+  # Reject commit messages carrying AI-assistant attribution trailers. These are
+  # added by default by some tooling and are preserved verbatim by merge commits,
+  # so they must be caught before landing rather than scrubbed from history after.
+  check-commit-messages:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject Co-Authored-By trailers
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT" = "pull_request" ]; then
+            head="$PR_HEAD"
+            base="$(git merge-base "$PR_BASE" "$PR_HEAD")"
+          else
+            head="$PUSH_AFTER"
+            # github.event.before is all-zeros for a new branch, and may point at
+            # a discarded commit after a force-push; fall back to the tip alone.
+            base="$PUSH_BEFORE"
+            if [ -z "${base//0/}" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              base=""
+            fi
+          fi
+
+          if [ -n "$base" ]; then
+            commits="$(git rev-list "$base..$head")"
+          else
+            echo "No usable base commit; checking tip commit only."
+            commits="$(git rev-list -1 "$head")"
+          fi
+
+          failed=0
+          for sha in $commits; do
+            if git log -1 --format='%B' "$sha" | grep -qiE '^Co-Authored-By:'; then
+              subject="$(git log -1 --format='%s' "$sha")"
+              echo "::error::$sha has a Co-Authored-By trailer: $subject"
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo ""
+            echo "Remove the trailer with:  git commit --amend   (or: git rebase -i <base>)"
+            echo "To stop Claude Code adding it, this repo ships .claude/settings.json"
+            echo "with an empty attribution byline; make sure your local settings do"
+            echo "not override it."
+            exit 1
+          fi
+
+          echo "No attribution trailers found in $(echo "$commits" | grep -c .) commit(s)."
+
   test-macos:
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build-macos == 'true' }}
     name: macOS
