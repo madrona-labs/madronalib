@@ -13,41 +13,21 @@ namespace ml
 
 // Runtime Path creation - parses string and registers Symbols
 
-
 Path runtimePath(const char* str)
 {
   Path p;
   if (!str) return p;
-
-  auto it = TextFragment::Iterator(str);
-  const char* segmentStartPtr = str;
+  
   const char separator = '/';
-
-  do
+  const char* q = str;
+  while (*q)
   {
-    size_t segmentSizeInBytes = 0;
-
-    // Skip separators
-    while (*it == separator)
-    {
-      segmentStartPtr++;
-      ++it;
-    }
-
-    // Advance to end of segment
-    while ((*it != separator) && (*it != '\0'))
-    {
-      segmentSizeInBytes += utf::internal::utf_traits<utf::utf8>::write_length(*it);
-      ++it;
-    }
-
-    // Create Symbol (registers it) and add its hash to path
-    if (segmentSizeInBytes > 0)
-    {
-      p.addElement(Symbol(segmentStartPtr, segmentSizeInBytes));
-      segmentStartPtr += segmentSizeInBytes;
-    }
-  } while (*it != '\0');
+    while (*q == separator) ++q;
+    const char* segStart = q;
+    while (*q && (*q != separator)) ++q;
+    size_t len = q - segStart;
+    if (len > 0) p.addElement(Symbol(segStart, len));
+  }
   return p;
 }
 
