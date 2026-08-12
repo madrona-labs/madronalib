@@ -377,6 +377,39 @@ TEST_CASE("madronalib/core/tree", "[tree]")
   REQUIRE(floatTree["pink"] == 1.f);
 }
 
+
+TEST_CASE("madronalib/core/tree/hash-only-lookup", "[tree]")
+{
+  // a Tree populated through operator[] must be findable by hash-only lookup,
+  // and the node names must still be recoverable as text.
+  Tree< int > t;
+  t["alpha/beta"] = 23;
+  t["alpha/gamma"] = 42;
+  
+  REQUIRE(t.getNode(hashOnlyPath("alpha/beta"))->getValue() == 23);
+  REQUIRE(t.getNode(hashOnlyPath("alpha/gamma"))->getValue() == 42);
+  REQUIRE(t.getNode(hashOnlyPath("alpha/delta")) == nullptr);
+  
+  // creating a node registers its symbols, so names still print as text
+  REQUIRE(Symbol("beta").getTextFragment() == "beta");
+  REQUIRE(Symbol("gamma").getTextFragment() == "gamma");
+  
+  // reading an existing node through the const operator[] must not insert
+  const Tree< int >& ct(t);
+  
+  // a held reference and an immediate copy must agree. If they ever disagree,
+  // operator[] is returning a reference to storage that dies with the call.
+  int v = ct["alpha/beta"];
+  const int& r = ct["alpha/beta"];
+  REQUIRE(v == 23);
+  REQUIRE(r == 23);
+  REQUIRE(ct["alpha/beta"] == 23);
+  
+  REQUIRE(ct["alpha/delta"] == 0);
+  REQUIRE(t.getNode(hashOnlyPath("alpha/delta")) == nullptr);
+}
+
+
 #if 0 // TEMP
 TEST_CASE("madronalib/core/textutils", "[textutils]")
 {
