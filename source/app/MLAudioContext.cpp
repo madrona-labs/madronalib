@@ -119,6 +119,8 @@ void AudioContext::setSampleRate(int r)
 
 void AudioContext::resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames)
 {
+  maxFrames_ = maxFrames;
+
   inputBuffers_.resize(nInputs);
   for (int i = 0; i < nInputs; ++i)
   {
