@@ -296,3 +296,58 @@ TEST_CASE("madronalib/core/events/sustained_sequence_small_buffer", "[events]")
   }
 }
 
+
+// CLAP addresses "all keys" / "all channels" with -1. ml::Event stores both
+// fields unsigned (sourceIdx is uint16_t, channel is uint8_t), so a -1 that
+// reaches here has already become 65535 or 255 -- and keyStates_ only has
+// kMaxPhysicalKeys entries. Before getKeyIndex clamped, this wrote about a
+// megabyte past the end of the array and segfaulted.
+TEST_CASE("madronalib/core/events/out_of_range_key", "[events]")
+{
+  TestFixture t;
+  const int bufSize = kFramesPerBlock;
+
+  // what a CLAP wildcard key (-1) looks like by the time it arrives
+  const uint16_t wildcardKey = (uint16_t)-1;
+  REQUIRE(wildcardKey == 65535);
+
+  Event wild;
+  wild.type = kNoteOn;
+  wild.channel = 1;
+  wild.sourceIdx = wildcardKey;
+  wild.value1 = 60.f;
+  wild.value2 = 0.8f;
+
+  // must not write outside keyStates_
+  t.callback(bufSize, {wild});
+
+  Event wildOff = wild;
+  wildOff.type = kNoteOff;
+  t.callback(bufSize, {wildOff});
+
+  // a normal note still behaves after the clamped one
+  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 0)});
+  REQUIRE(t.gateEnd(1) > 0.f);
+  t.callback(bufSize, {makeNoteOff(60, 60.f, 0)});
+  t.callback(bufSize);
+  REQUIRE(t.gateEnd(1) == 0.f);
+}
+
+// the MPE path indexes keyStates_ by channel instead, so a wildcard channel
+// reaches the same array by a different route.
+TEST_CASE("madronalib/core/events/out_of_range_channel", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputProtocol(Symbol("MPE"));
+
+  Event wild;
+  wild.type = kNoteOn;
+  wild.channel = (uint8_t)-1;  // CLAP wildcard channel
+  wild.sourceIdx = 60;
+  wild.value1 = 60.f;
+  wild.value2 = 0.8f;
+
+  REQUIRE(wild.channel == 255);
+
+  t.callback(kFramesPerBlock, {wild});
+}
