@@ -108,3 +108,19 @@ TEST_CASE("madronalib/core/audiocontext/delay_is_block_size_independent",
   REQUIRE(measurePrimedZeros((int)kMaxIOFramesDefault) == (int)kFramesPerBlock);
   REQUIRE(measurePrimedZeros(16384) == (int)kFramesPerBlock);
 }
+
+// setSampleRate() used to take an int, so a host running at a fractional rate
+// left the context and the DSP class disagreeing: AudioContext saw 1234 while
+// the plugin's own setSampleRate(double) saw 1234.5678. currentTime.sampleRate
+// was already a double, so the truncation bought nothing. clap-validator
+// exercises 1234.5678, 12345.678, 45678.901 and 123456.78.
+TEST_CASE("madronalib/core/audiocontext/fractional_sample_rate", "[audiocontext]")
+{
+  AudioContext ctx(2, 2);
+
+  for (double r : {1234.5678, 12345.678, 45678.901, 123456.78})
+  {
+    ctx.setSampleRate(r);
+    REQUIRE(ctx.getSampleRate() == Approx(r));
+  }
+}

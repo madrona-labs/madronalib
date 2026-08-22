@@ -111,7 +111,7 @@ AudioContext::AudioContext(size_t nInputs, size_t nOutputs)
   clear();
 }
 
-void AudioContext::setSampleRate(int r)
+void AudioContext::setSampleRate(double r)
 {
   currentTime.sampleRate = r;
   eventsToSignals.setSampleRate(r);

@@ -62,7 +62,7 @@ class AudioContext final
 
   void clear();
 
-  void setSampleRate(int r);
+  void setSampleRate(double r);
   void resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames);
 
   void setInputPolyphony(int voices) { eventsToSignals.setPolyphony(voices); }
