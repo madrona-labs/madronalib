@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <list>
 #include <map>
 #include <string>
@@ -95,13 +96,19 @@ class Value
   bool getBoolValue() const;
 
   // Returns the float array if of type kFloatArray, otherwise an empty array.
+  // Copies at most N floats: the Value's size comes from whatever data built it,
+  // which for a deserialized Value means an untrusted stream. A well-formed
+  // patch can legitimately carry a longer array than a given caller expects --
+  // callers like valueToPoint ask for 2 -- and without the clamp the extra
+  // floats are written past the end of the caller's array, usually on the stack.
   template <size_t N>
   std::array<float, N> getFloatArray() const
   {
     std::array<float, N> r{0.f};
     if (type_ == kFloatArray)
     {
-      memcpy(r.data(), dataPtr_, sizeInBytes_);
+      size_t bytesToCopy = std::min(static_cast<size_t>(sizeInBytes_), N * sizeof(float));
+      memcpy(r.data(), dataPtr_, bytesToCopy);
     }
     return r;
   }
