@@ -42,12 +42,15 @@ struct BinaryChunkHeader
 {
   unsigned int type : 8;
   unsigned int dataBytes : 24;
+  BinaryChunkHeader() : type(0), dataBytes(0) {}
   BinaryChunkHeader(int t, size_t bytes)
   {
     type = t;
     dataBytes = static_cast<unsigned int>(bytes) & 0x00FFFFFF;
   }
 };
+
+static_assert(sizeof(BinaryChunkHeader) == 4);
 
 // Values
 
@@ -64,6 +67,62 @@ struct ValueBinaryHeader
 
 // make sure all the values in our Type enum fit into the type field
 static_assert((2 << ValueBinaryHeader::kTypeBits) >= Value::kNumTypes);
+
+static_assert(sizeof(ValueBinaryHeader) == 4);
+
+// A bounded view over bytes being deserialized.
+//
+// Binary reaching the readers below is untrusted: it arrives from host state,
+// from preset files, and from the system clipboard. Every length in the format
+// is stored in the data itself, so a reader that advances by a length it has
+// not checked will walk off the end. This cursor makes that impossible by
+// construction -- each read either lands inside the buffer or fails, and a
+// failure is sticky, so callers can check once at the end instead of at every
+// step.
+class BinaryCursor
+{
+  const uint8_t* ptr_;
+  const uint8_t* end_;
+  bool ok_{true};
+
+ public:
+  BinaryCursor(const uint8_t* data, size_t sizeInBytes)
+      : ptr_(data), end_(data ? data + sizeInBytes : nullptr)
+  {
+    if (!data) ok_ = false;
+  }
+
+  bool ok() const { return ok_; }
+  void fail() { ok_ = false; }
+  size_t remaining() const { return ok_ ? static_cast<size_t>(end_ - ptr_) : 0; }
+
+  // Copy out a fixed-size header and advance past it.
+  template <typename T>
+  bool read(T& destination)
+  {
+    if (!ok_ || (remaining() < sizeof(T)))
+    {
+      ok_ = false;
+      return false;
+    }
+    memcpy(&destination, ptr_, sizeof(T));
+    ptr_ += sizeof(T);
+    return true;
+  }
+
+  // Claim nBytes of payload and advance past it. Returns nullptr on overrun.
+  const uint8_t* take(size_t nBytes)
+  {
+    if (!ok_ || (remaining() < nBytes))
+    {
+      ok_ = false;
+      return nullptr;
+    }
+    const uint8_t* r = ptr_;
+    ptr_ += nBytes;
+    return r;
+  }
+};
 
 size_t getBinarySize(const Value& v) { return sizeof(ValueBinaryHeader) + v.size(); }
 
@@ -96,6 +155,68 @@ void writeValueToBinary(Value v, uint8_t*& writePtr)
   writePtr += v.size();
 }
 
+// Is a payload of this many bytes possible for this type? Checking this is what
+// makes a parsed Value meaningful and not merely in-bounds: a kFloat carrying
+// three bytes would leave toFixedSizeType() reading uninitialized local storage.
+Value makeValueFromBinaryData(unsigned int type, unsigned int sizeInBytes,
+                              const uint8_t* dataPtr)
+{
+  return Value(type, sizeInBytes, dataPtr);
+}
+
+static bool valueSizeIsValidForType(unsigned int type, size_t size)
+{
+  switch (type)
+  {
+    case Value::kUndefined:
+      return size == 0;
+    case Value::kFloat:
+      return size == sizeof(float);
+    case Value::kInt:
+      return size == sizeof(int32_t);
+    case Value::kFloatArray:
+      return (size % sizeof(float)) == 0;
+    case Value::kText:
+    case Value::kBlob:
+      return true;
+    default:
+      // types outside the enum are encodable in the 4-bit field but not legal
+      return false;
+  }
+}
+
+static bool readValueFromBinary(BinaryCursor& cursor, Value& outValue)
+{
+  ValueBinaryHeader header{};
+  if (!cursor.read(header)) return false;
+
+  const size_t size = header.size;
+  if (!valueSizeIsValidForType(header.type, size))
+  {
+    cursor.fail();
+    return false;
+  }
+
+  const uint8_t* dataPtr = cursor.take(size);
+  if (!dataPtr) return false;
+
+  Value v = makeValueFromBinaryData(header.type, static_cast<unsigned int>(size), dataPtr);
+
+  // text values from external binary data can carry invalid UTF-8, which the
+  // code point iterators cannot handle safely (a truncated multi-byte tail
+  // makes them run past the end of the buffer). Sanitize on the way in.
+  if (v.getType() == Value::kText)
+  {
+    v = Value(sanitizeUTF8(v.getTextValue()));
+  }
+
+  outValue = v;
+  return true;
+}
+
+// Unchecked. Only safe on bytes this process just wrote -- it trusts the length
+// in the data and cannot see where the buffer ends. For anything from a file, a
+// host, a network or the clipboard, use binaryToValue(data, size) instead.
 Value readBinaryToValue(const uint8_t*& readPtr)
 {
   // read header
@@ -107,12 +228,8 @@ Value readBinaryToValue(const uint8_t*& readPtr)
   const uint8_t* dataPtr = readPtr;
   readPtr += header.size;
 
-  // Use the private constructor via friend access
-  Value v(header.type, header.size, dataPtr);
+  Value v = makeValueFromBinaryData(header.type, header.size, dataPtr);
 
-  // text values from external binary data can carry invalid UTF-8, which the
-  // code point iterators cannot handle safely (a truncated multi-byte tail
-  // makes them run past the end of the buffer). Sanitize on the way in.
   if (v.getType() == Value::kText)
   {
     v = Value(sanitizeUTF8(v.getTextValue()));
@@ -121,12 +238,17 @@ Value readBinaryToValue(const uint8_t*& readPtr)
   return v;
 }
 
+Value binaryToValue(const uint8_t* data, size_t sizeInBytes)
+{
+  BinaryCursor cursor(data, sizeInBytes);
+  Value v;
+  if (!readValueFromBinary(cursor, v)) return Value();
+  return v;
+}
+
 Value binaryToValue(const std::vector<uint8_t>& dataVec)
 {
-  const uint8_t* readPtr = dataVec.data();
-
-  // Use the private constructor via friend access
-  return readBinaryToValue(readPtr);
+  return binaryToValue(dataVec.data(), dataVec.size());
 }
 
 // Paths
@@ -140,22 +262,29 @@ size_t getBinarySize(GenericPath<K> p)
   return headerSize + dataSize;
 }
 
-Path readPathFromBinary(const uint8_t*& readPtr)
+static bool readPathFromBinary(BinaryCursor& cursor, Path& outPath)
 {
-  Path r;
-  auto headerSize = sizeof(BinaryChunkHeader);
-  size_t pathSize;
-  BinaryChunkHeader pathHeader{*reinterpret_cast<const BinaryChunkHeader*>(readPtr)};
+  BinaryChunkHeader pathHeader{};
+  if (!cursor.read(pathHeader)) return false;
 
-  auto pathType = pathHeader.type;
-  if (pathType == 'P')
+  // A chunk that is not a path means the stream is not the shape it claims.
+  // This used to fall through and advance the read pointer by an uninitialized
+  // pathSize, which a single wrong byte in the input was enough to reach.
+  if (pathHeader.type != kPathType)
   {
-    pathSize = pathHeader.dataBytes;
-    const char* pChars = reinterpret_cast<const char*>(readPtr + headerSize);
-    r = runtimePath(TextFragment(pChars, pathSize));
+    cursor.fail();
+    return false;
   }
-  readPtr += (headerSize + pathSize);
-  return r;
+
+  const size_t pathSize = pathHeader.dataBytes;
+  const uint8_t* pChars = cursor.take(pathSize);
+  if (!pChars) return false;
+
+  // Sanitize for the same reason text Values are: runtimePath walks the text by
+  // code point, and invalid UTF-8 makes that walk run past the end.
+  outPath = runtimePath(
+      sanitizeUTF8(TextFragment(reinterpret_cast<const char*>(pChars), pathSize)));
+  return true;
 }
 
 // write the binary representation of the Path and increment the destination pointer.
@@ -224,140 +353,176 @@ std::vector<unsigned char> valueTreeToBinary(const Tree<Value>& t)
   return returnVector;
 }
 
+// The largest element count this many bytes could honestly describe. Every
+// element costs at least a path chunk header and a value header, so a count
+// above this is a lie regardless of what the rest of the stream looks like.
+// Deriving the bound from the input beats picking a constant: it needs no
+// tuning and cannot drift away from the format.
+static size_t maxPlausibleElements(size_t payloadBytes)
+{
+  constexpr size_t kMinBytesPerElement =
+      sizeof(BinaryChunkHeader) + sizeof(ValueBinaryHeader);
+  return payloadBytes / kMinBytesPerElement;
+}
+
 Tree<Value> binaryToValueTreeNew(const std::vector<uint8_t>& binaryData)
 {
   Tree<Value> outputTree;
   const size_t inputSize = binaryData.size();
   constexpr size_t headerSize = sizeof(BinaryGroupHeader);
 
-  if (inputSize > headerSize * 2)
-  {
-    const uint8_t* readPtr = binaryData.data();
-    readPtr += headerSize;
-    auto mainHeader{reinterpret_cast<const BinaryGroupHeader*>(readPtr)};
-    auto elements = mainHeader->elements;
-    auto totalSize = mainHeader->size;
+  if (inputSize < headerSize * 2) return outputTree;
 
-    if (inputSize >= totalSize)
-    {
-      readPtr += headerSize;
-      for (int i = 0; i < elements; ++i)
-      {
-        auto path = readPathFromBinary(readPtr);
-        outputTree[path] = readBinaryToValue(readPtr);
-      }
-    }
+  BinaryGroupHeader mainHeader{};
+  memcpy(&mainHeader, binaryData.data() + headerSize, headerSize);
+
+  const size_t elements = mainHeader.elements;
+  const size_t totalSize = mainHeader.size;
+
+  // totalSize is the extent the writer claims, so it is what we parse within --
+  // but only once we know it is inside the buffer we actually have.
+  if ((totalSize < headerSize * 2) || (totalSize > inputSize)) return outputTree;
+  if (elements > maxPlausibleElements(totalSize - headerSize * 2)) return outputTree;
+
+  BinaryCursor cursor(binaryData.data() + headerSize * 2, totalSize - headerSize * 2);
+
+  Tree<Value> parsedTree;
+  for (size_t i = 0; i < elements; ++i)
+  {
+    Path path;
+    Value value;
+    if (!readPathFromBinary(cursor, path)) return outputTree;
+    if (!readValueFromBinary(cursor, value)) return outputTree;
+    parsedTree[path] = value;
   }
-  return outputTree;
+
+  // Only publish a fully parsed tree. A half-applied parameter set is its own
+  // hazard -- it leaves the plugin in a state that is neither the old patch nor
+  // the new one, which is harder to diagnose than an outright failure to load.
+  return parsedTree;
 }
 
 // deprecated code maintained for now to read older binaries of patches etc.
 
-Path binaryToPathOld(const uint8_t* p)
+// Reads a path chunk in the pre-V2 layout. Bounded like its V2 counterpart --
+// this format is still reached for every preset written before the V2 sentinel
+// existed, so it gets the same treatment rather than being trusted.
+static bool readPathFromBinaryOld(BinaryCursor& cursor, Path& outPath)
 {
-  BinaryChunkHeader pathHeader{*reinterpret_cast<const BinaryChunkHeader*>(p)};
-  auto headerSize = sizeof(BinaryChunkHeader);
-  auto pathType = pathHeader.type;
-  if (pathType == 'P')
+  BinaryChunkHeader pathHeader{};
+  if (!cursor.read(pathHeader)) return false;
+
+  const size_t pathSize = pathHeader.dataBytes;
+  const uint8_t* pChars = cursor.take(pathSize);
+  if (!pChars) return false;
+
+  if (pathHeader.type != kPathType)
   {
-    auto pathSizeInBytes = pathHeader.dataBytes;
-    const char* pChars = reinterpret_cast<const char*>(p + headerSize);
-    return runtimePath(TextFragment(pChars, pathSizeInBytes));
+    cursor.fail();
+    return false;
   }
-  else
-  {
-    return Path();
-  }
+
+  outPath = runtimePath(
+      sanitizeUTF8(TextFragment(reinterpret_cast<const char*>(pChars), pathSize)));
+  return true;
 }
 
-Value binaryToValueOld(const uint8_t* p)
+// Legacy value chunk. Note the type tags here are ASCII characters, not the
+// Value::Type enum used by the V2 format. 'F' and 'L' carry a fixed four bytes
+// while the chunk still advances by dataBytes, so both have to be checked.
+static bool readValueFromBinaryOld(BinaryCursor& cursor, Value& outValue)
 {
-  Value returnValue{};
-  auto header{reinterpret_cast<const BinaryChunkHeader*>(p)};
-  switch (header->type)
+  BinaryChunkHeader header{};
+  if (!cursor.read(header)) return false;
+
+  const size_t dataBytes = header.dataBytes;
+  const unsigned int type = header.type;
+
+  if (((type == 'F') || (type == 'L')) && (dataBytes < 4))
   {
-    default:
+    cursor.fail();
+    return false;
+  }
+
+  const uint8_t* pData = cursor.take(dataBytes);
+  if (!pData) return false;
+
+  switch (type)
+  {
     case 'U':  // undefined
     {
+      outValue = Value();
       break;
     }
     case 'F':  // float
     {
-      const unsigned char* pData = p + sizeof(BinaryChunkHeader);
-      auto* pFloatData{reinterpret_cast<const float*>(pData)};
-      float f = *pFloatData;
-      returnValue = Value(f);
+      float f;
+      memcpy(&f, pData, sizeof(float));
+      outValue = Value(f);
       break;
     }
     case 'T':  // text
     {
-      const unsigned char* pData = p + sizeof(BinaryChunkHeader);
-      auto* p{reinterpret_cast<const char*>(pData)};
-      returnValue = Value(Text(p, header->dataBytes));
+      outValue = Value(sanitizeUTF8(
+          TextFragment(reinterpret_cast<const char*>(pData), dataBytes)));
       break;
     }
     case 'L':  // long
     {
-      const unsigned char* pData = p + sizeof(BinaryChunkHeader);
-      auto* pLongData{reinterpret_cast<const uint32_t*>(pData)};
-      int ul = *pLongData;
-      returnValue = Value(ul);
+      uint32_t ul;
+      memcpy(&ul, pData, sizeof(uint32_t));
+      outValue = Value(static_cast<int>(ul));
       break;
     }
     case 'B':  // blob
     {
-      const uint8_t* pData = p + sizeof(BinaryChunkHeader);
-      returnValue = Value(pData, header->dataBytes);
+      outValue = Value(pData, dataBytes);
       break;
     }
+    default:
+    {
+      cursor.fail();
+      return false;
+    }
   }
-  return returnValue;
+  return true;
 }
 
 Tree<Value> binaryToValueTreeOld(const std::vector<uint8_t>& binaryData)
 {
   Tree<Value> outputTree;
-  const uint8_t* pData{binaryData.data()};
-  if (binaryData.size() > sizeof(BinaryGroupHeader))
+  const size_t inputSize = binaryData.size();
+  constexpr size_t headerSize = sizeof(BinaryGroupHeader);
+
+  if (inputSize <= headerSize) return outputTree;
+
+  BinaryGroupHeader groupHeader{};
+  memcpy(&groupHeader, binaryData.data(), headerSize);
+
+  const size_t elements = groupHeader.elements;
+  const size_t size = groupHeader.size;
+
+  if ((size < headerSize) || (size > inputSize)) return outputTree;
+  if (elements > maxPlausibleElements(size - headerSize)) return outputTree;
+
+  BinaryCursor cursor(binaryData.data() + headerSize, size - headerSize);
+
+  Tree<Value> parsedTree;
+  for (size_t i = 0; i < elements; ++i)
   {
-    BinaryGroupHeader groupHeader{*reinterpret_cast<const BinaryGroupHeader*>(pData)};
-    size_t elements = groupHeader.elements;
-    size_t size = groupHeader.size;
-    if (binaryData.size() >= size)
-    {
-      size_t idx{sizeof(BinaryGroupHeader)};
-      for (int i = 0; i < elements; ++i)
-      {
-        // get path
-        BinaryChunkHeader pathHeader{*reinterpret_cast<const BinaryChunkHeader*>(pData + idx)};
-        auto pathSize = pathHeader.dataBytes;
-        auto pathHeaderSize = sizeof(BinaryChunkHeader);
-        auto path = binaryToPathOld(pData + idx);
+    Path path;
+    Value value;
+    if (!readPathFromBinaryOld(cursor, path)) return outputTree;
+    if (!readValueFromBinaryOld(cursor, value)) return outputTree;
 
-        idx += pathSize + pathHeaderSize;
+    // An undefined value here means we have lost sync with the stream; older
+    // writers never emitted one. Stop rather than filling the tree with junk.
+    if (value.getType() == Value::kUndefined) return outputTree;
 
-        // get value
-        BinaryChunkHeader valueHeader{*reinterpret_cast<const BinaryChunkHeader*>(pData + idx)};
-
-        auto valueType = valueHeader.type;
-        auto valueSize = valueHeader.dataBytes;
-        auto valueHeaderSize = sizeof(BinaryChunkHeader);
-        auto val = binaryToValueOld(pData + idx);
-
-        // TEMP
-        if (val.getType() == Value::kUndefined)
-        {
-          std::cout << "binaryToValueTreeOld: undefined value for " << path << "! exiting. \n";
-          return outputTree;
-        }
-
-        idx += valueSize + valueHeaderSize;
-        // write to tree
-        outputTree[path] = val;
-      }
-    }
+    parsedTree[path] = value;
   }
-  return outputTree;
+
+  return parsedTree;
 }
 
 Tree<Value> binaryToValueTree(const std::vector<uint8_t>& binaryData)
@@ -366,9 +531,14 @@ Tree<Value> binaryToValueTree(const std::vector<uint8_t>& binaryData)
   const uint8_t* pData{binaryData.data()};
   size_t inputBytes = binaryData.size();
 
-  if (inputBytes > sizeof(BinaryGroupHeader))
+  // The legacy reader's first act is to read a 4-byte chunk header just past the
+  // group header, so it needs that much to exist -- the old `> headerSize` test
+  // let a 17-byte buffer through and over-read by three bytes before any of the
+  // length fields came into it.
+  if (inputBytes >= sizeof(BinaryGroupHeader) + sizeof(BinaryChunkHeader))
   {
-    BinaryGroupHeader groupHeader{*reinterpret_cast<const BinaryGroupHeader*>(pData)};
+    BinaryGroupHeader groupHeader{};
+    memcpy(&groupHeader, pData, sizeof(BinaryGroupHeader));
     if (groupHeader == kBinaryGroupHeaderV2)
     {
       outputTree = binaryToValueTreeNew(binaryData);

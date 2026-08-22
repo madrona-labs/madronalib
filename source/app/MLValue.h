@@ -164,8 +164,11 @@ class Value
   // private constructor for deserialization
   Value(unsigned int type, unsigned int sizeInBytes, const uint8_t* dataPtr);
 
-  // friend in MLSerialization
-  friend Value readBinaryToValue(const uint8_t*& readPtr);
+  // friend in MLSerialization: the single point where deserialized bytes become
+  // a Value. Callers are responsible for having checked that sizeInBytes of
+  // data actually exist at dataPtr.
+  friend Value makeValueFromBinaryData(unsigned int type, unsigned int sizeInBytes,
+                                       const uint8_t* dataPtr);
 };
 
 static_assert(sizeof(Value) == Value::kStructSizeInBytes);

@@ -35,17 +35,19 @@ std::vector<uint8_t> valueToBinary(Value v);
 // Return the Value represented by the vector of bytes.
 Value binaryToValue(const std::vector<uint8_t>& v);
 
+// Return the Value represented by sizeInBytes bytes at data. Bounded: use this
+// for any bytes not written by this process -- host state, files, the network,
+// the clipboard. Returns an undefined Value if the data does not describe one.
+Value binaryToValue(const uint8_t* data, size_t sizeInBytes);
+
 // Write the binary representation of the Value and increment the write pointer.
 void writeValueToBinary(Value v, uint8_t*& writePtr);
 
 // Read the binary representation of the Value and increment the read pointer.
+// Unchecked: this trusts the length stored in the data and cannot see where the
+// buffer ends, so it is only safe on bytes this process just wrote. For
+// untrusted input use binaryToValue(data, sizeInBytes) above.
 Value readBinaryToValue(const uint8_t*& readPtr);
-
-// Paths
-
-std::vector<unsigned char> pathToBinary(Path p);
-Path binaryDataToPath(const unsigned char* p);
-Path binaryToPath(const std::vector<unsigned char>& p);
 
 // Value Trees
 

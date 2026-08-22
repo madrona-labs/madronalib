@@ -434,3 +434,190 @@ TEST_CASE("madronalib/core/value_serialization/stress", "[serialization][values]
 }
 
 
+
+// Binary reaching binaryToValueTree is untrusted: it arrives from host state,
+// from preset files, and from the system clipboard. Every length in the format
+// is stored in the data itself, so before the bounded cursor these readers
+// would advance by counts they had never checked -- an unbounded element loop,
+// a 24-bit path advance, a 28-bit value size handed to malloc+memcpy from a
+// source that might be five bytes long, and an uninitialized pathSize added to
+// the read pointer whenever a chunk was not a path.
+//
+// These failures are invisible to REQUIRE: a heap over-read returns plausible
+// bytes and carries on. Run this file under ASan/UBSan for it to mean anything.
+// What is asserted here is only "returns, and does not claim success on junk".
+TEST_CASE("madronalib/core/serialization/corrupt", "[serialization][fuzz]")
+{
+  // a small, entirely ordinary tree to corrupt
+  auto makeValidStream = []() {
+    Tree<Value> t;
+    t["alpha"] = Value(1.5f);
+    t["beta/gamma"] = Value("some text");
+    t["delta"] = Value(42);
+    return valueTreeToBinary(t);
+  };
+
+  const auto valid = makeValidStream();
+  REQUIRE(valid.size() > 32);
+
+  // sanity: the thing we are corrupting does parse
+  {
+    auto t = binaryToValueTree(valid);
+    size_t n = 0;
+    for (auto it = t.begin(); it != t.end(); ++it) n++;
+    REQUIRE(n == 3);
+  }
+
+  SECTION("truncation at every prefix length")
+  {
+    for (size_t len = 0; len < valid.size(); ++len)
+    {
+      std::vector<uint8_t> truncated(valid.begin(), valid.begin() + len);
+      auto t = binaryToValueTree(truncated);
+      // a truncated stream must not yield a complete tree
+      size_t n = 0;
+      for (auto it = t.begin(); it != t.end(); ++it) n++;
+      INFO("truncated to " << len << " bytes");
+      REQUIRE(n < 3);
+    }
+  }
+
+  SECTION("hostile group header fields")
+  {
+    // mainHeader sits at offset 16: { size_t elements; size_t size; }
+    const std::vector<size_t> hostileElements{
+      SIZE_MAX, SIZE_MAX / 2, size_t(INT_MAX) + 1, 1000000, 0};
+    for (size_t e : hostileElements)
+    {
+      auto data = valid;
+      memcpy(data.data() + sizeof(size_t) * 2, &e, sizeof(size_t));
+      auto t = binaryToValueTree(data);
+      size_t n = 0;
+      for (auto it = t.begin(); it != t.end(); ++it) n++;
+      INFO("elements = " << e);
+      REQUIRE(n <= 3);
+    }
+
+    const std::vector<size_t> hostileSizes{0, 1, SIZE_MAX, SIZE_MAX / 2, valid.size() * 4};
+    for (size_t sz : hostileSizes)
+    {
+      auto data = valid;
+      memcpy(data.data() + sizeof(size_t) * 3, &sz, sizeof(size_t));
+      auto t = binaryToValueTree(data);
+      size_t n = 0;
+      for (auto it = t.begin(); it != t.end(); ++it) n++;
+      INFO("totalSize = " << sz);
+      REQUIRE(n <= 3);
+    }
+  }
+
+  SECTION("hostile chunk headers")
+  {
+    // first path chunk header lives at offset 32
+    const size_t chunkOffset = sizeof(size_t) * 4;
+
+    // a chunk claiming not to be a path: this is the uninitialized-pathSize case
+    {
+      auto data = valid;
+      data[chunkOffset + 3] = 'X';  // type byte (bitfield: low 8 bits)
+      auto t = binaryToValueTree(data);
+      size_t n = 0;
+      for (auto it = t.begin(); it != t.end(); ++it) n++;
+      REQUIRE(n == 0);
+    }
+
+    // maximal 24-bit dataBytes on the path chunk
+    {
+      auto data = valid;
+      data[chunkOffset + 0] = 0xFF;
+      data[chunkOffset + 1] = 0xFF;
+      data[chunkOffset + 2] = 0xFF;
+      auto t = binaryToValueTree(data);
+      size_t n = 0;
+      for (auto it = t.begin(); it != t.end(); ++it) n++;
+      REQUIRE(n == 0);
+    }
+  }
+
+  SECTION("hostile value headers")
+  {
+    // walk the whole buffer flipping each byte to a few extreme values; any
+    // single-byte corruption must be survivable
+    const std::vector<uint8_t> pokes{0x00, 0x01, 0x7F, 0x80, 0xFF};
+    for (size_t i = sizeof(size_t) * 2; i < valid.size(); ++i)
+    {
+      for (uint8_t v : pokes)
+      {
+        auto data = valid;
+        data[i] = v;
+        auto t = binaryToValueTree(data);
+        size_t n = 0;
+        for (auto it = t.begin(); it != t.end(); ++it) n++;
+        INFO("byte " << i << " set to " << (int)v);
+        REQUIRE(n <= 3);
+      }
+    }
+  }
+
+  SECTION("a valid stream cannot smuggle an oversized float array")
+  {
+    // getFloatArray<N> must not copy more than N floats out, however many the
+    // Value carries. This is reachable with a perfectly well-formed stream:
+    // view_size is read back as a 2-float array by the CLAP wrapper.
+    std::array<float, 1024> big;
+    big.fill(3.0f);
+    Tree<Value> t;
+    t["view_size"] = Value(big);
+    auto bin = valueTreeToBinary(t);
+    auto parsed = binaryToValueTree(bin);
+    auto v = parsed["view_size"];
+    REQUIRE(v.getType() == Value::kFloatArray);
+    auto pair = v.getFloatArray<2>();
+    REQUIRE(pair[0] == 3.0f);
+    REQUIRE(pair[1] == 3.0f);
+  }
+
+  SECTION("short buffers and the legacy path")
+  {
+    for (size_t len : {size_t(0), size_t(1), size_t(15), size_t(16), size_t(17),
+                       size_t(19), size_t(20), size_t(31)})
+    {
+      std::vector<uint8_t> junk(len, 0xAB);
+      auto t = binaryToValueTree(junk);
+      size_t n = 0;
+      for (auto it = t.begin(); it != t.end(); ++it) n++;
+      INFO("junk buffer of " << len << " bytes");
+      REQUIRE(n == 0);
+    }
+  }
+
+  SECTION("random bytes, both dispatch branches")
+  {
+    uint32_t seed = 12345;
+    auto nextByte = [&seed]() {
+      seed = seed * 1664525u + 1013904223u;
+      return uint8_t(seed >> 24);
+    };
+
+    for (int trial = 0; trial < 400; ++trial)
+    {
+      size_t len = 17 + (nextByte() % 200);
+      std::vector<uint8_t> data(len);
+      for (auto& b : data) b = nextByte();
+
+      // half the trials wear the V2 sentinel so the new reader is exercised too
+      if (trial % 2)
+      {
+        size_t zero = 0, one = 1;
+        memcpy(data.data(), &zero, sizeof(size_t));
+        memcpy(data.data() + sizeof(size_t), &one, sizeof(size_t));
+      }
+
+      auto t = binaryToValueTree(data);
+      size_t n = 0;
+      for (auto it = t.begin(); it != t.end(); ++it) n++;
+      (void)n;  // only crash-freedom and OOB-freedom are meaningful here
+    }
+    SUCCEED("random fuzz completed without crashing");
+  }
+}
