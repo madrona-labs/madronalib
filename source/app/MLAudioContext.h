@@ -107,7 +107,7 @@ class AudioContext final
   std::vector<ml::DSPBuffer> outputBuffers_;
   
   // max chunk size for outside I/O
-  size_t maxFrames_{kMaxIOFramesDefault};
+  size_t maxFramesPerBlock_{kMaxIOFramesDefault};
   
   // samples accumulated since the last process call.
   // used to remap event times from host-buffer-relative to internal timeline.
