@@ -59,6 +59,20 @@ option(BUILD_TESTS "Build the tests" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(ML_BUILD_DOCS "Build the documentation" OFF)
 option(ML_DOCUMENT_INTERNALS "Include internals in documentation" OFF)
+option(ML_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+# The deserialization tests assert on behaviour that a plain build cannot see:
+# a heap over-read returns plausible bytes and carries on, so REQUIRE passes
+# while the bug is still there. Configure a second build directory with
+# -DML_SANITIZE=ON to make those failures visible.
+if(ML_SANITIZE)
+    if(MSVC)
+        add_compile_options(/fsanitize=address)
+    else()
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
+endif()
 
 if (ML_BUILD_DOCS)
     set(DOXYGEN_SKIP_DOT TRUE)
