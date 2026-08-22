@@ -145,6 +145,11 @@ class RMS
 
   static Coeffs passthru() { return {1.f, 0.f}; }
 
+  // y1 is a running average that never fully decays, so without this a meter
+  // that has seen a non-finite sample stays stuck on it for good. Every other
+  // filter in the library offers clear(); this one was missing it.
+  void clear() { y1 = 0.f; }
+
   inline SignalBlock operator()(const SignalBlock vx)
   {
     SignalBlock vy;
