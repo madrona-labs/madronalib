@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <vector>
 
 #include "MLDSPOps.h"
@@ -41,10 +42,16 @@ class IntegerDelay
   }
   ~IntegerDelay() = default;
 
-  // for efficiency, no bounds checking is done. Because mLengthMask is used to
-  // constrain all reads, bad values here may make bad sounds (buffer wraps) but
-  // will not attempt to read from outside the buffer.
-  inline void setDelayInSamples(int d) { mIntDelayInSamples = d; }
+  // Reads are always in bounds -- mLengthMask constrains them -- but a delay
+  // longer than the buffer used to wrap round to a near-zero delay, which is a
+  // strange failure to debug by ear: the delay time jumps discontinuously and
+  // a size control built on it stops being monotonic. Saturating instead costs
+  // one instruction and fails in a direction that sounds like what it is.
+  // Allocate enough delay memory and this never engages.
+  inline void setDelayInSamples(int d)
+  {
+    mIntDelayInSamples = std::min(d, static_cast<int>(mLengthMask));
+  }
 
   void setMaxDelayInSamples(float d)
   {
@@ -110,8 +117,8 @@ class IntegerDelay
       // write
       mBuffer[mWriteIndex] = x[n];
 
-      // read
-      mIntDelayInSamples = static_cast<int>(delay[n]);
+      // read -- via the setter, so this path saturates like every other one
+      setDelayInSamples(static_cast<int>(delay[n]));
       uintptr_t readIndex = (mWriteIndex - mIntDelayInSamples) & mLengthMask;
 
       y[n] = mBuffer[readIndex];
