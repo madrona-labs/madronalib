@@ -899,3 +899,91 @@ TEST_CASE("madronalib/filters/ladder", "[filters]")
     REQUIRE(magLadder[N / 2 - 1] < magSVF[N / 2 - 1]);
   }
 }
+
+// Filter coefficients come from omega = frequency / sample rate, so a host at a
+// low sample rate can ask for a cutoff above Nyquist. Aaltoverb's 1000 Hz tone
+// default is omega = 0.81 at a 1234 Hz rate. Before clampOmega() the tan() warp
+// went negative there, putting the shelf SVF poles outside the unit circle; the
+// state ran away to infinity and then to NaN, which clap-validator reported as
+// "process-varying-sample-rates ... sample index 140 is NaN".
+TEST_CASE("madronalib/dsp/filters/omega_past_nyquist", "[filters]")
+{
+  // at and beyond Nyquist: the exact tan() pole at 0.5, the 0.75 point where
+  // (1 + g*(g + k)) is zero for k = 2, and the ratios Aaltoverb produces at a
+  // 1234 Hz sample rate -- 1000/1234, 1400/1234, 5000/1234, 20000/1234.
+  const std::vector<float> omegas{
+    0.4f, 0.49f, 0.5f, 0.6f, 0.75f, 0.8104f, 1.0f, 1.134f, 4.05f, 16.2f};
+
+  // an unstable pole needs a few blocks to blow up, so keep running after the
+  // impulse rather than trusting a single block
+  auto isStable = [](auto& filter) {
+    SignalBlock x{0.f};
+    x[0] = 1.0f;
+    for (int block = 0; block < 8; ++block)
+    {
+      SignalBlock y = filter(x);
+      for (int i = 0; i < kFramesPerBlock; ++i)
+      {
+        if (!std::isfinite(y[i])) return false;
+        if (std::fabs(y[i]) > 1.0e6f) return false;
+      }
+      x = SignalBlock{0.f};
+    }
+    return true;
+  };
+
+  auto checkAcrossOmegas = [&](auto&& makeFilter, const char* name) {
+    for (float w : omegas)
+    {
+      auto f = makeFilter(w);
+      for (auto c : f.coeffs)
+      {
+        INFO(name << " coefficient at omega " << w);
+        REQUIRE(std::isfinite(c));
+      }
+      INFO(name << " stability at omega " << w);
+      REQUIRE(isStable(f));
+    }
+  };
+
+  SECTION("every filter stays finite and stable past Nyquist")
+  {
+    checkAcrossOmegas([](float w) {
+      Lopass<float> f; f.coeffs = Lopass<float>::makeCoeffs({w, 0.5f}); return f; }, "Lopass");
+    checkAcrossOmegas([](float w) {
+      Hipass<float> f; f.coeffs = Hipass<float>::makeCoeffs({w, 1.414f}); return f; }, "Hipass");
+    // k = 4 is what Aaltoverb uses, and makes 2 + k*sin(2*pi*omega) reachable at zero
+    checkAcrossOmegas([](float w) {
+      Bandpass<float> f; f.coeffs = Bandpass<float>::makeCoeffs({w, 4.0f}); return f; }, "Bandpass");
+    // k = 2 is Aaltoverb's kDamping, for which 1 + g*(g + k) factors to (1 + g)^2
+    checkAcrossOmegas([](float w) {
+      LoShelf<float> f; f.coeffs = LoShelf<float>::makeCoeffs({w, 2.0f, 1.0f}); return f; }, "LoShelf");
+    checkAcrossOmegas([](float w) {
+      HiShelf<float> f; f.coeffs = HiShelf<float>::makeCoeffs({w, 2.0f, 1.0f}); return f; }, "HiShelf");
+    checkAcrossOmegas([](float w) {
+      Bell<float> f; f.coeffs = Bell<float>::makeCoeffs({w, 2.0f, 2.0f}); return f; }, "Bell");
+  }
+
+  SECTION("the cascaded shelves Aaltoverb runs at 1234 Hz stay finite")
+  {
+    // Aaltoverb feeds the wet signal through hiShelf then loShelf with the same
+    // omega, which is how one unstable stage became two.
+    const float toneOmega = 1000.f / 1234.f;
+    HiShelf<float> hi;
+    LoShelf<float> lo;
+    hi.coeffs = HiShelf<float>::makeCoeffs({toneOmega, 2.0f, 1.0f});
+    lo.coeffs = LoShelf<float>::makeCoeffs({toneOmega, 2.0f, 1.0f});
+
+    SignalBlock x{0.f};
+    x[0] = 1.0f;
+    for (int block = 0; block < 8; ++block)
+    {
+      SignalBlock y = lo(hi(x));
+      for (int i = 0; i < kFramesPerBlock; ++i)
+      {
+        REQUIRE(std::isfinite(y[i]));
+      }
+      x = SignalBlock{0.f};
+    }
+  }
+}

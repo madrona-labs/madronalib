@@ -19,6 +19,25 @@
 namespace ml
 {
 
+// Filter cutoffs are set by omega = frequency / sample rate, so a host running
+// at a low sample rate can easily ask for a cutoff above Nyquist. The
+// coefficient math below is only valid for omega < 0.5. Past that the tan()
+// warp used by the shelf and bell filters turns negative, which puts the SVF
+// poles outside the unit circle and makes the state diverge until it
+// overflows to infinity; the sin() form divides by (2 + k*sin(2*pi*omega)),
+// which reaches zero once sin() goes negative. Clamping omega keeps every
+// filter stable whatever rate we are handed. LadderFilter applies its own,
+// tighter bound.
+constexpr float kOmegaMin{0.00001f};
+constexpr float kOmegaMax{0.49f};
+
+template <typename T>
+inline T clampOmega(T omega)
+{
+  return clamp(omega, T{kOmegaMin}, T{kOmegaMax});
+}
+
+
 template<typename T, typename Derived>
 struct Filter
 {
@@ -138,7 +157,7 @@ struct Lopass : Filter<T, Lopass<T>>
 
   static Coeffs makeCoeffs(Params p)
   {
-    T piOmega = T{kPi} * p[omega];
+    T piOmega = T{kPi} * clampOmega(p[omega]);
     T s1 = sin(piOmega);
     T s2 = sin(T{2.0f} * piOmega);
     T nrm = T{1.0f} / (T{2.f} + p[k] * s2);
@@ -183,7 +202,7 @@ struct Hipass : Filter<T, Hipass<T>>
 
   static Coeffs makeCoeffs(Params p)
   {
-    T piOmega = T{kPi} * p[omega];
+    T piOmega = T{kPi} * clampOmega(p[omega]);
     T s1 = sin(piOmega);
     T s2 = sin(T{2.0f} * piOmega);
     T nrm = T{1.0f} / (T{2.f} + p[k] * s2);
@@ -229,7 +248,7 @@ struct Bandpass : Filter<T, Bandpass<T>>
 
   static Coeffs makeCoeffs(Params p)
   {
-    T piOmega = T{kPi} * p[omega];
+    T piOmega = T{kPi} * clampOmega(p[omega]);
     T s1 = sin(piOmega);
     T s2 = sin(T{2.0f} * piOmega);
     T nrm = T{1.0f} / (T{2.f} + p[k] * s2);
@@ -274,7 +293,7 @@ struct LoShelf : Filter<T, LoShelf<T>>
 
   static Coeffs makeCoeffs(Params p)
   {
-    T piOmega = T{kPi} * p[omega];
+    T piOmega = T{kPi} * clampOmega(p[omega]);
     T g = tan(piOmega) / sqrt(p[A]);
     T ca1 = T{1.f} / (T{1.f} + g * (g + p[k]));
     T ca2 = g * ca1;
@@ -318,7 +337,7 @@ struct HiShelf : Filter<T, HiShelf<T>>
 
   static Coeffs makeCoeffs(Params p)
   {
-    T piOmega = T{kPi} * p[omega];
+    T piOmega = T{kPi} * clampOmega(p[omega]);
     T g = tan(piOmega) * sqrt(p[A]);
     T ca1 = T{1.f} / (T{1.f} + g * (g + p[k]));
     T ca2 = g * ca1;
@@ -364,7 +383,7 @@ struct Bell : Filter<T, Bell<T>>
   static Coeffs makeCoeffs(Params p)
   {
     T kc = p[k] / p[A];
-    T piOmega = T{kPi} * p[omega];
+    T piOmega = T{kPi} * clampOmega(p[omega]);
     T g = tan(piOmega);
     T ca1 = T{1.f} / (T{1.f} + g * (g + kc));
     T ca2 = g * ca1;
