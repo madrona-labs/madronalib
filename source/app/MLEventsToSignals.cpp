@@ -38,7 +38,12 @@ int getKeyIndex(const Event& e, Symbol protocol)
       break;
     }
   }
-  return instigator;
+
+  // keyStates_ is indexed with this result directly, so it can never be allowed
+  // out of range. Note that a caller passing a negative key does not arrive
+  // here as a negative number: sourceIdx is uint16_t and channel is uint8_t, so
+  // CLAP's -1 wildcard shows up as 65535 or 255. Clamping is the only backstop.
+  return ml::clamp(instigator, 0, (int)EventsToSignals::kMaxPhysicalKeys - 1);
 }
 
 #pragma mark -
