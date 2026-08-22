@@ -119,6 +119,8 @@ void AudioContext::setSampleRate(int r)
 
 void AudioContext::resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames)
 {
+  maxFramesPerBlock_ = maxFrames;
+
   inputBuffers_.resize(nInputs);
   for (int i = 0; i < nInputs; ++i)
   {
@@ -159,7 +161,7 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
   size_t nOutputs = outputBuffers_.size();
   if (nOutputs < 1) return;
   if (!externalOutputs) return;
-  if (externalFrames > (int)maxFrames_) return;
+  if (externalFrames > (int)maxFramesPerBlock_) return;
   
   // write vectors from external inputs (if any) to inputBuffers
   for (int c = 0; c < nInputs; c++)
