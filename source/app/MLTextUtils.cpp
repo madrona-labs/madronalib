@@ -648,7 +648,10 @@ TextFragment base64Encode(const std::vector<uint8_t>& in)
 {
   std::vector<char> out;
 
-  int val = 0, valb = -6;
+  // val accumulates shifted-in bytes; signed overflow here is UB, and the
+  // shifts routinely push past the sign bit on inputs of any length.
+  unsigned int val = 0;
+  int valb = -6;
   for (uint8_t c : in)
   {
     val = (val << 8) + c;
@@ -673,7 +676,10 @@ std::vector<uint8_t> base64Decode(const TextFragment& in)
   for (int i = 0; i < 64; i++) T[base64table[i]] = i;
 
   std::vector<uint8_t> out;
-  int val = 0, valb = -8;
+  // unsigned for the same reason as base64Encode -- and this one decodes
+  // clipboard text, so the input is entirely outside our control.
+  unsigned int val = 0;
+  int valb = -8;
   for (uint8_t c : in)
   {
     if (T[c] == -1) break;
