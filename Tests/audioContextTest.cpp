@@ -60,9 +60,7 @@ TEST_CASE("madronalib/core/audiocontext/default_block_sizes", "[audiocontext]")
   }
 }
 
-// resizeBuffers is the only way to raise that limit, so it has to actually
-// raise it -- it used to resize the ring buffers and leave maxFrames_ alone,
-// which made it look like it worked while process() kept dropping blocks.
+
 TEST_CASE("madronalib/core/audiocontext/large_block_sizes", "[audiocontext]")
 {
   for (int n : {(int)kMaxIOFramesDefault + 1, 8192, 16384})
