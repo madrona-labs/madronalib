@@ -124,6 +124,14 @@ class SignalProcessor
 
   virtual void processBlock(const SignalBlockDynamic& inputs, SignalBlockDynamic& outputs, AudioContext* stateData = nullptr) {}
 
+  // Drop any audio state the processor is carrying -- filter and delay memory,
+  // feedback buffers, smoother positions -- without touching parameter values.
+  // Hosts call this through clap_plugin::reset() when the transport jumps or
+  // the plugin is reused, and it is the only way a processor that has gone
+  // non-finite can recover. Also worth calling on a sample rate change, since
+  // state carried across a rate change is meaningless.
+  virtual void onReset() {}
+
   // Sample rate access (needed by all adapters)
   virtual void setSampleRate(double sr) { sampleRate_ = sr; }
   double getSampleRate() const { return sampleRate_; }
