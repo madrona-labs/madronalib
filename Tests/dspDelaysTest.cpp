@@ -4,6 +4,8 @@
 
 // a unit test made using the Catch framework in catch.hpp / tests.cpp.
 
+#include <cmath>
+
 #include "catch.hpp"
 #include "madronalib.h"
 #include "MLDSPDelays.h"

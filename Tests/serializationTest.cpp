@@ -4,6 +4,13 @@
 
 // a unit test made using the Catch framework in catch.hpp / tests.cpp.
 
+#include <array>
+#include <climits>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <vector>
+
 #include "catch.hpp"
 #include "madronalib.h"
 
