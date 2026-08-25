@@ -120,17 +120,11 @@ inline float fracPart(float f)
   return f - floor(f);
 }
 
-inline uint32_t reinterpretFloatAsInt(float f)
-{
-  typedef uint32_t ML_MAY_ALIAS aliased_uint32_t;
-  return *reinterpret_cast<const aliased_uint32_t*>(&f);
-}
-
-inline float reinterpretFloatAsInt(uint32_t f)
-{
-  typedef float ML_MAY_ALIAS aliased_float;
-  return *reinterpret_cast<const aliased_float*>(&f);
-}
+// The scalar bit casts live in MLDSPMathApprox.h, included above, as
+// reinterpretFloatAsInt(float) -> int32_t and reinterpretIntAsFloat(int32_t)
+// -> float. Duplicating the first of those here differing only in return type
+// made every call with a float ambiguous, and the second one was named for the
+// opposite of the conversion it performed.
 
 inline float log(float x) { return std::log(x); }
 inline float exp(float x) { return std::exp(x); }

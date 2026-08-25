@@ -28,7 +28,7 @@ ENDIF(APPLE)
 # project and version
 #--------------------------------------------------------------------
 
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo" CACHE STRING "" FORCE)
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 
 project(madronalib)
 
@@ -97,6 +97,13 @@ if(APPLE)
 elseif(WIN32)
     # Suppress unknown pragma warnings and disable aligned new
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4068 /Zc:alignedNew-")
+
+    # Compile a project's translation units in parallel. MSBuild's own -m only
+    # parallelizes across projects, and madronalib is a single big one.
+    # Appended here rather than passed as -DCMAKE_CXX_FLAGS, which would replace
+    # CMake's default /DWIN32 /D_WINDOWS /EHsc instead of adding to it.
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
     
     # Debug info in Release builds (for profiling/debugging)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
@@ -111,6 +118,13 @@ elseif(WIN32)
     # Link-time code generation (companion to /GL)
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
     set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
+
+    # Symbols for the tests and example executables. /DEBUG turns /OPT:REF and
+    # /OPT:ICF off by default, so name them explicitly; /DEBUG:FULL rather than
+    # /DEBUG:FASTLINK so the PDBs stay self-contained. The madronalib target is a
+    # static library archived by lib.exe, which takes none of these.
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG:FULL")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /OPT:REF /OPT:ICF")
     
 else()
     # GCC/Clang on Linux

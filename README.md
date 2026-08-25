@@ -56,6 +56,18 @@ Both scripts install to `/usr/local/include/madronalib` and `/usr/local/lib`
 step; the scripts will prompt as needed. Downstream projects (e.g. manzanita and
 its plugin examples) expect both Debug and Release configurations installed.
 
+On Windows, the counterpart is `rebuild-vs` at the repo root:
+
+	.\rebuild-vs.cmd          # Visual Studio solution under build/, builds + installs Debug and Release
+	.\rebuild-vs.cmd -Open    # ...and open the solution afterwards
+
+It installs to `C:\Program Files\madronalib`: headers flat in `include\`,
+`madrona.lib` and `madrona-debug.lib` in `lib\`. Writing there needs
+administrator rights, so the script relaunches itself elevated and Windows will
+show a UAC prompt. `rebuild-vs.cmd` is a thin wrapper that runs `rebuild-vs.ps1`
+past the default execution policy; call the .ps1 directly if yours already
+allows it.
+
 To drive cmake by hand instead:
 
 	mkdir build

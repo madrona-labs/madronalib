@@ -97,23 +97,30 @@ TEST_CASE("madronalib/filters/template", "[filters]")
     SignalBlockArray<2> signalParams = concatRows(freq, damp);
     SignalBlock ref = lp1(input, signalParams);
 
+    // SignalBlock::operator== is a memcmp, and the parameter forms below reach
+    // the same arithmetic by different routes. /fp:fast lets the compiler
+    // contract and reorder each route differently, so results that agree to
+    // within float rounding need not agree bit for bit. Compare with a
+    // tolerance instead of demanding identical bits.
+    const float kEps = 1e-6f;
+
     // single Params
     lp1.clear();
     Lopass<float>::Params lopassParams{kFreq, kDamp};
-    REQUIRE(lp1(input, lopassParams) == ref);
-    
+    REQUIRE(nearlyEqual(lp1(input, lopassParams), ref, kEps));
+
     // single Params from std::array
     lp1.clear();
     std::array<float, 2> arrayParams{kFreq, kDamp};
-    REQUIRE(lp1(input, arrayParams) == ref);
+    REQUIRE(nearlyEqual(lp1(input, arrayParams), ref, kEps));
 
     // float params
     lp1.clear();
-    REQUIRE(lp1(input, kFreq, kDamp) == ref);
+    REQUIRE(nearlyEqual(lp1(input, kFreq, kDamp), ref, kEps));
 
     // no params
     lp1.clear();
-    REQUIRE(lp1(input) == ref);
+    REQUIRE(nearlyEqual(lp1(input), ref, kEps));
   }
 }
 

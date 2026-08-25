@@ -18,10 +18,9 @@ on:
       build-type:
         description: 'Build type'
         required: false
-        default: 'RelWithDebInfo'
+        default: 'Release'
         type: choice
         options:
-          - RelWithDebInfo
           - Release
           - Debug
       build-macos:
@@ -118,7 +117,7 @@ jobs:
       - name: Configure
         run: >
           cmake -B build
-          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'RelWithDebInfo' }}
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'Release' }}
           -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
           -DCMAKE_OSX_DEPLOYMENT_TARGET="10.15"
           -DBUILD_EXAMPLES=OFF
@@ -142,7 +141,7 @@ jobs:
       - name: Configure
         run: >
           cmake -B build
-          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'RelWithDebInfo' }}
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'Release' }}
           -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
           -DCMAKE_OSX_DEPLOYMENT_TARGET="10.15"
           -DBUILD_EXAMPLES=OFF
@@ -168,7 +167,7 @@ jobs:
       - name: Configure
         run: >
           cmake -B build
-          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'RelWithDebInfo' }}
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'Release' }}
           -DBUILD_EXAMPLES=OFF
 
       - name: Build tests
@@ -187,14 +186,14 @@ jobs:
       - name: Configure
         run: >
           cmake -B build
-          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'RelWithDebInfo' }}
+          -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build-type || 'Release' }}
           -DBUILD_EXAMPLES=OFF
 
       - name: Build tests
-        run: cmake --build build --target tests --config ${{ github.event.inputs.build-type || 'RelWithDebInfo' }} --parallel
+        run: cmake --build build --target tests --config ${{ github.event.inputs.build-type || 'Release' }} --parallel
 
       - name: Run tests
-        run: .\build\bin\${{ github.event.inputs.build-type || 'RelWithDebInfo' }}\tests.exe
+        run: .\build\bin\${{ github.event.inputs.build-type || 'Release' }}\tests.exe
 
   summary:
     name: Build Summary
@@ -213,4 +212,4 @@ jobs:
           echo "| Linux | ${{ needs.test-linux.result == 'success' && '✅ Success' || needs.test-linux.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Windows | ${{ needs.test-windows.result == 'success' && '✅ Success' || needs.test-windows.result == 'skipped' && 'Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Build type:** \`${{ github.event.inputs.build-type || 'RelWithDebInfo' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Build type:** \`${{ github.event.inputs.build-type || 'Release' }}\`" >> $GITHUB_STEP_SUMMARY

@@ -28,6 +28,13 @@ bool eq(const SignalBlock& a, const SignalBlock& b) {
   return true;
 }
 
+// The comparison ops return a SIMD mask: every bit set for true, every bit
+// clear for false. All bits set is a NaN, so read the bit pattern rather than
+// comparing the mask as a float - under /fp:fast the compiler may assume no
+// NaNs and fold such a compare the wrong way.
+bool maskIsTrue(float mask) { return reinterpretFloatAsInt(mask) == -1; }
+bool maskIsFalse(float mask) { return reinterpretFloatAsInt(mask) == 0; }
+
 // Equality check for float4
 bool eq(float4 a, float4 b) {
   for (int i = 0; i < 4; ++i) {
@@ -277,14 +284,14 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
     
     // Or better - actually test the logic:
     // First element (0.0f) should NOT be greater than 5.0f
-    REQUIRE(gt[0] == 0);
+    REQUIRE(maskIsFalse(gt[0]));
     // Last element (10.0f) SHOULD be greater than 5.0f
-    REQUIRE(gt[kFramesPerBlock - 1] != 0);
-    
+    REQUIRE(maskIsTrue(gt[kFramesPerBlock - 1]));
+
     // First element (0.0f) SHOULD be less than 5.0f
-    REQUIRE(lt[0] != 0);
+    REQUIRE(maskIsTrue(lt[0]));
     // Last element (10.0f) should NOT be less than 5.0f
-    REQUIRE(lt[kFramesPerBlock - 1] == 0);
+    REQUIRE(maskIsFalse(lt[kFramesPerBlock - 1]));
   }
   
   SECTION("horizontal operations")
