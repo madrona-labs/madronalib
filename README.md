@@ -56,17 +56,28 @@ Both scripts install to `/usr/local/include/madronalib` and `/usr/local/lib`
 step; the scripts will prompt as needed. Downstream projects (e.g. manzanita and
 its plugin examples) expect both Debug and Release configurations installed.
 
-On Windows, the counterpart is `rebuild-vs` at the repo root:
+On Windows, use the PowerShell script at the repo root from a Windows Terminal
+tab. It regenerates the Visual Studio solution under `build/` and builds and
+installs Debug and Release, all in the tab you ran it from:
 
-	.\rebuild-vs.cmd          # Visual Studio solution under build/, builds + installs Debug and Release
-	.\rebuild-vs.cmd -Open    # ...and open the solution afterwards
+	.\rebuild-vs.ps1                 # Debug and Release
+	.\rebuild-vs.ps1 -Open           # ...and open the solution afterwards
+	.\rebuild-vs.ps1 -Configs Release
 
-It installs to `C:\Program Files\madronalib`: headers flat in `include\`,
-`madrona.lib` and `madrona-debug.lib` in `lib\`. Writing there needs
-administrator rights, so the script relaunches itself elevated and Windows will
-show a UAC prompt. `rebuild-vs.cmd` is a thin wrapper that runs `rebuild-vs.ps1`
-past the default execution policy; call the .ps1 directly if yours already
-allows it.
+A stock Windows install blocks .ps1 files, so allow local scripts once. This
+writes to your own user hive and needs no administrator rights:
+
+	Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+The script installs to `C:\Program Files\madronalib`: headers flat in
+`include\`, `madrona.lib` and `madrona-debug.lib` in `lib\`. Writing there needs
+administrator rights, and the script will not elevate itself - UAC cannot
+elevate a process that is already running, so that would mean a second window
+with your build output in it. Instead it stops before touching anything and
+names your options: run the tab elevated (ctrl+shift+click the profile in the
+Windows Terminal dropdown, or give that profile `"elevate": true` in
+settings.json), grant yourself write access to the prefix once with `icacls` so
+that no later run needs elevation, or pass `-InstallPrefix` somewhere you own.
 
 To drive cmake by hand instead:
 

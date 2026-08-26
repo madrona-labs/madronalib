@@ -7,17 +7,27 @@
     build/madronalib.sln, clears the installed library out of the install prefix,
     then builds and installs the madronalib target for each configuration.
 
-    Installing into C:\Program Files needs administrator rights, so the script
-    relaunches itself elevated when the install prefix turns out not to be
-    writable. That is the equivalent of the sudo calls in rebuild-xcode. Point
-    -InstallPrefix at somewhere you own and no elevation happens at all.
+    Run it from a Windows Terminal tab and all of that happens in that tab's own
+    PowerShell session - no wrapper script, no second window. A stock Windows
+    install blocks .ps1 files, so allow local scripts once. That writes to your
+    own user hive and needs no administrator rights:
+
+        Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+    RemoteSigned still runs unsigned local scripts; a clone carries no
+    mark-of-the-web. Only a copy unzipped from a download needs Unblock-File.
+
+    Installing into C:\Program Files needs administrator rights, and this script
+    will not elevate itself: UAC cannot elevate a process that is already
+    running, so doing that would mean a second window with your build output in
+    it. Instead it stops before touching anything and names your options.
 
 .EXAMPLE
-    .\rebuild-vs.cmd
+    .\rebuild-vs.ps1
     Full rebuild and install of Debug and Release.
 
 .EXAMPLE
-    .\rebuild-vs.cmd -Configs Release -Open
+    .\rebuild-vs.ps1 -Configs Release -Open
     Rebuild Release only, then open the solution in Visual Studio.
 #>
 
@@ -68,12 +78,6 @@ function Invoke-Checked {
     }
 }
 
-function Test-Administrator {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
 # Can we create files where the install would put them? Walks up to the nearest
 # directory that exists, since that is where the install has to start writing.
 function Test-PathWritable {
@@ -110,38 +114,35 @@ function Get-CrtDirective {
 }
 
 #--------------------------------------------------------------------
-# elevate if needed
+# check we can install before spending a build on it
 #--------------------------------------------------------------------
 
-if (-not (Test-Administrator) -and -not (Test-PathWritable $InstallPrefix)) {
-    Write-Host "Installing to '$InstallPrefix' needs administrator rights - relaunching elevated." -ForegroundColor Yellow
+# Test-Path is not the question: the prefix can exist and still refuse your
+# writes, which is exactly C:\Program Files from an ordinary tab.
+if (-not (Test-PathWritable $InstallPrefix)) {
+    # Windows form for the commands below, since they are meant to be pasted.
+    $prefixDisplay = $InstallPrefix -replace '/', '\'
 
-    # Forward only this script's own parameters; the common parameters that
-    # CmdletBinding adds are not ours to pass along.
-    $ownParams = @('Generator', 'Platform', 'InstallPrefix', 'Configs', 'Open')
-    $forwarded = @()
-    foreach ($name in $ownParams) {
-        if (-not $PSBoundParameters.ContainsKey($name)) { continue }
-        $value = $PSBoundParameters[$name]
-        if ($value -is [switch]) {
-            if ($value.IsPresent) { $forwarded += "-$name" }
-        }
-        elseif ($value -is [array]) {
-            $forwarded += "-$name"
-            $forwarded += ($value -join ',')
-        }
-        else {
-            $forwarded += "-$name"
-            $forwarded += """$value"""
-        }
-    }
-
-    $hostExe = (Get-Process -Id $PID).Path
-    if (-not $hostExe) { $hostExe = 'powershell.exe' }
-
-    $argList = @('-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', """$PSCommandPath""") + $forwarded
-    Start-Process -FilePath $hostExe -Verb RunAs -ArgumentList $argList
-    exit 0
+    Write-Host ''
+    Write-Host "Cannot write to '$prefixDisplay', so the install would fail. Three ways to fix that:" -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host '  1. Run this tab elevated. In Windows Terminal, ctrl+shift+click the profile in'
+    Write-Host '     the dropdown, or give that profile "elevate": true in settings.json.'
+    Write-Host ''
+    Write-Host '  2. Grant yourself write access to the prefix once, from an elevated tab, after'
+    Write-Host '     which no run needs elevation at all:'
+    Write-Host ''
+    Write-Host "         New-Item -ItemType Directory -Force '$prefixDisplay'"
+    Write-Host "         icacls '$prefixDisplay' /grant '${env:USERNAME}:(OI)(CI)M'"
+    Write-Host ''
+    Write-Host '  3. Install somewhere you already own:'
+    Write-Host ''
+    Write-Host '         .\rebuild-vs.ps1 -InstallPrefix "$env:LOCALAPPDATA\madronalib"'
+    Write-Host ''
+    Write-Host '     That is off the path CMake searches by default, so a downstream'
+    Write-Host '     find_package(madronalib) then needs CMAKE_PREFIX_PATH pointed at it.'
+    Write-Host ''
+    exit 1
 }
 
 #--------------------------------------------------------------------
