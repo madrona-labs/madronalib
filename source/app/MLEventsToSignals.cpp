@@ -156,7 +156,7 @@ void EventsToSignals::Voice::writeOutputSignals(size_t endTime)
 // prior to the event time. Updates nextFrameToProcess with the event time.
 void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doGlide, bool doReset)
 {
-  // incoming time in the event e is the sample offset into the DSPVector.
+  // incoming time in the event e is the sample offset into the SignalBlock.
   size_t destTime = clamp((size_t)e.time, (size_t)0, (size_t)kFramesPerBlock);
 
   switch (e.type)

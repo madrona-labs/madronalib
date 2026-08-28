@@ -57,11 +57,6 @@ static constexpr size_t calculatePaddedCols() {
   return aligned_bytes / sizeof(T);
 }
 
-// TEMP as we move from DSPVector to SignalBlock
-constexpr size_t kFramesPerBlock = kFloatsPerDSPVector;
-
-
-
 using PartialsFrame = AlignedArray<float, kPartialsPerVoice>;
 
 inline std::ostream& operator<< (std::ostream& out, const PartialsFrame& r)
