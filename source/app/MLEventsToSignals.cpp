@@ -815,8 +815,13 @@ void EventsToSignals::processControllerEvent(const Event& event)
   {
     if (val == 0)
     {
-      // all sound off
-      clear();
+      // all sound off. this runs inside makeSignalBlock()'s loop over eventBuffer_, so reset
+      // the voices without clear(), which would empty the buffer out from under that loop.
+      for (auto& v : voices)
+      {
+        v.reset();
+      }
+      lastFreeVoiceFound_ = 0;
     }
   }
   else if (ctrl == 123)

@@ -351,3 +351,40 @@ TEST_CASE("madronalib/core/events/out_of_range_channel", "[events]")
 
   t.callback(kFramesPerBlock, {wild});
 }
+
+// helper: make a MIDI controller event
+static Event makeController(int cc, float value, int time = 0)
+{
+  Event e;
+  e.type = kController;
+  e.channel = 1;
+  e.sourceIdx = cc;
+  e.time = time;
+  e.value1 = value;
+  return e;
+}
+
+// CC 120 (all sound off) is handled inside makeSignalBlock()'s loop over the
+// event buffer, so it must not empty that buffer out from under the loop.
+TEST_CASE("madronalib/core/events/all_sound_off", "[events]")
+{
+  TestFixture t;
+  const int bufSize = kFramesPerBlock;
+
+  t.callback(bufSize, {makeNoteOn(60, 60.f, 0.8f, 0)});
+  REQUIRE(t.gateEnd(0) > 0.f);
+
+  t.callback(bufSize, {makeController(120, 0.f, 0)});
+  REQUIRE(t.gateEnd(0) == 0.f);
+}
+
+// all sound off silences what is sounding now. a note queued after it in the
+// same host buffer still plays.
+TEST_CASE("madronalib/core/events/note_after_all_sound_off", "[events]")
+{
+  TestFixture t;
+  const int bufSize = kFramesPerBlock * 2;
+
+  t.callback(bufSize, {makeController(120, 0.f, 0), makeNoteOn(60, 60.f, 0.8f, kFramesPerBlock + 8)});
+  REQUIRE(t.gateEnd(0) > 0.f);
+}
