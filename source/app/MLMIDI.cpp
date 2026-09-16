@@ -121,7 +121,7 @@ float messagePitchBendValue(const MIDIMessage& m)
   constexpr float scale = 1.f / float(0x3FFF);
   int loByte = m[1] & 0x7f;
   int hiByte = m[2] & 0x7f;
-  int bothBytes = (hiByte << 7) & loByte;
+  int bothBytes = (hiByte << 7) | loByte;
   return float(bothBytes - offset) * scale;
 }
 
