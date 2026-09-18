@@ -124,3 +124,79 @@ TEST_CASE("madronalib/core/audiocontext/fractional_sample_rate", "[audiocontext]
     REQUIRE(ctx.getSampleRate() == Approx(r));
   }
 }
+
+// ---- note-on filter ----
+// A synth can refuse a note-on before it reaches a voice (an MTS-ESP master or
+// a .kbm may leave a key unmapped). Only note-ons are filtered; the note-off
+// for a key that never sounded is harmless.
+
+namespace
+{
+struct FilterState
+{
+  int droppedKey{-1};
+  int calls{0};
+};
+
+bool dropOneKey(void* context, const Event& e)
+{
+  auto* s = static_cast<FilterState*>(context);
+  s->calls++;
+  return e.sourceIdx == s->droppedKey;
+}
+
+Event noteEvent(EventType type, int key, int time = 0)
+{
+  Event e;
+  e.type = type;
+  e.channel = 1;
+  e.sourceIdx = key;
+  e.time = time;
+  e.value1 = (float)key;
+  e.value2 = (type == kNoteOn) ? 0.8f : 0.f;
+  return e;
+}
+
+float gateEnd(AudioContext& ctx, int voice)
+{
+  return ctx.getInputVoice(voice).outputs.constRow(kGate)[kFramesPerBlock - 1];
+}
+
+void runBlock(AudioContext& ctx, const std::vector<Event>& events)
+{
+  for (const auto& e : events) ctx.addInputEvent(e);
+  float outL[kFramesPerBlock]{}, outR[kFramesPerBlock]{};
+  float* outs[2] = {outL, outR};
+  ctx.process(nullptr, outs, kFramesPerBlock, [](AudioContext*) {});
+}
+}  // namespace
+
+TEST_CASE("madronalib/core/audiocontext/note_on_filter_drops_notes", "[audiocontext]")
+{
+  AudioContext ctx(0, 2);
+  ctx.setSampleRate(48000);
+  ctx.setInputPolyphony(1);
+
+  FilterState state;
+  state.droppedKey = 60;
+  ctx.setNoteOnFilter(dropOneKey, &state);
+
+  // the filtered key never starts a voice
+  runBlock(ctx, {noteEvent(kNoteOn, 60)});
+  REQUIRE(gateEnd(ctx, 0) == 0.f);
+  REQUIRE(state.calls == 1);
+
+  // its note-off is not offered to the filter and does no harm
+  runBlock(ctx, {noteEvent(kNoteOff, 60)});
+  REQUIRE(state.calls == 1);
+
+  // another key plays as usual
+  runBlock(ctx, {noteEvent(kNoteOn, 62)});
+  REQUIRE(gateEnd(ctx, 0) > 0.f);
+
+  // removing the filter lets the key through
+  ctx.setNoteOnFilter(nullptr, nullptr);
+  runBlock(ctx, {noteEvent(kNoteOff, 62), noteEvent(kNoteOn, 60, 1)});
+  REQUIRE(gateEnd(ctx, 0) > 0.f);
+  REQUIRE(state.calls == 2);
+}
