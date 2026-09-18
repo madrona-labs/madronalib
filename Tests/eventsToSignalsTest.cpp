@@ -388,3 +388,33 @@ TEST_CASE("madronalib/core/events/note_after_all_sound_off", "[events]")
   t.callback(bufSize, {makeController(120, 0.f, 0), makeNoteOn(60, 60.f, 0.8f, kFramesPerBlock + 8)});
   REQUIRE(t.gateEnd(0) > 0.f);
 }
+
+// ---- creator channel ----
+// A synth following an MTS-ESP master retunes each voice on the MIDI channel
+// that started it, through its release tail, so the voice keeps that channel
+// after note-off.
+
+static Event makeNoteOnOnChannel(int channel, int key, int time = 0)
+{
+  Event e = makeNoteOn(key, (float)key, 0.8f, time);
+  e.channel = channel;
+  return e;
+}
+
+TEST_CASE("madronalib/core/events/voice_keeps_creator_channel", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputPolyphony(1);
+
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(3, 60)});
+  REQUIRE(t.ctx.getInputVoice(0).creatorChannel_ == 3);
+
+  // note-off ends the gate but the voice's channel stays for the release tail
+  t.callback(kFramesPerBlock, {makeNoteOff(60, 60.f)});
+  REQUIRE(t.gateEnd(0) == 0.f);
+  REQUIRE(t.ctx.getInputVoice(0).creatorChannel_ == 3);
+
+  // the next note on another channel takes over
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(5, 62)});
+  REQUIRE(t.ctx.getInputVoice(0).creatorChannel_ == 5);
+}

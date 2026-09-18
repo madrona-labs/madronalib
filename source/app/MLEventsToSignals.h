@@ -142,6 +142,10 @@ class EventsToSignals final
 
     // physical key or touch # of creator. 0 = undefined.
     size_t creatorKeyIdx_{0};
+
+    // MIDI channel of the note-on that started the voice (1-based, as Event::channel),
+    // kept through the release so a client can keep retuning on it. 0 = none yet.
+    uint8_t creatorChannel_{0};
     uint32_t eventAgeInSamples{0};
 
     // amount to increase event age each sample—either 0 or 1
