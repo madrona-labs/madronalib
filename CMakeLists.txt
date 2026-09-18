@@ -314,10 +314,11 @@ target_include_directories(${target} PUBLIC
     $<BUILD_INTERFACE:${cjson_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${HEADERS_INCLUDE_DIR}>
 )
-# aes256 and utf use flat includes (e.g. #include "aes256.h")
+# aes256, utf and tuning-library use flat includes (e.g. #include "aes256.h")
 target_include_directories(${target} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/external/aes256
     ${CMAKE_CURRENT_SOURCE_DIR}/external/utf
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/tuning-library
 )
 
 # cJSON is now compiled directly into madronalib (no separate target)
