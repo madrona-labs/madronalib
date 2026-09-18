@@ -29,8 +29,8 @@ void Scale::setDefault()
   description_ = "The chromatic equal-tempered scale.";
   for (int i = 0; i < kMLNumNotes; ++i)
   {
-    pitches_[i] = (i - kDefaultRootNote) / 12.0;
-    mapped_[i] = 1;
+    table_.pitches[i] = (i - kDefaultRootNote) / 12.0;
+    table_.mapped[i] = 1;
   }
 }
 
@@ -51,8 +51,8 @@ bool Scale::loadScaleFromString(const std::string& scaleStr, const std::string& 
 
     for (int i = 0; i < kMLNumNotes; ++i)
     {
-      pitches_[i] = ti.logScaledFrequencyForMidiNote(i) - kLogPitchOffset;
-      mapped_[i] = t.isMidiNoteMapped(i) ? 1 : 0;
+      table_.pitches[i] = ti.logScaledFrequencyForMidiNote(i) - kLogPitchOffset;
+      table_.mapped[i] = t.isMidiNoteMapped(i) ? 1 : 0;
     }
     name_ = s.name;
     description_ = s.description;

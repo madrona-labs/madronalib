@@ -14,6 +14,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "MLDSPScale.h"
@@ -260,4 +261,29 @@ TEST_CASE("madronalib/dsp/scale/quantizePitch snaps down to a scale note", "[sca
   REQUIRE(s.quantizePitch(0.3f) == Approx(0.25f));
   REQUIRE(s.quantizePitch(-0.7f) == Approx(-0.75f));
   REQUIRE(s.quantizePitchNearest(0.3f) == Approx(0.25f + 1.f / 12.f));
+}
+
+// A plugin parses on the main thread and hands the audio thread a finished
+// table through a blob parameter, so the table has to be a plain struct.
+TEST_CASE("Scale table round-trips through a trivially copyable struct", "[scale]")
+{
+  static_assert(std::is_trivially_copyable<Scale::Table>::value, "Scale::Table must be memcpy-able");
+  static_assert(sizeof(Scale::Table) == kMLNumNotes * (sizeof(double) + 1), "Scale::Table has no padding to leak");
+
+  Scale a;
+  REQUIRE(a.loadScaleFromString(readFile(kDataDir + "zeus22.scl"), readFile(kDataDir + "mapping-whitekeys-a440.kbm")));
+
+  Scale b;
+  b.setTable(a.getTable());
+  for (int n = 0; n < kMLNumNotes; ++n)
+  {
+    CHECK(b.noteToLogPitch((float)n) == a.noteToLogPitch((float)n));
+    CHECK(b.isNoteMapped(n) == a.isNoteMapped(n));
+  }
+  CHECK_FALSE(b.isNoteMapped(61));  // a black key the mapping leaves out
+  CHECK(b.getName() == "12-equal");  // names stay with the parser, not the table
+
+  // the copy is independent of the source
+  a = Scale();
+  CHECK(b.noteToLogPitch(60.f) != a.noteToLogPitch(60.f));
 }
