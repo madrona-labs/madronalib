@@ -180,6 +180,9 @@ file(GLOB APP_HEADERS "source/app/*.h")
 file(GLOB DSP_SOURCES "source/DSP/*.cpp")
 file(GLOB DSP_HEADERS "source/DSP/*.h")
 
+# ODDSound MTS-ESP client (ISC). Only MLMTSClient.cpp includes it.
+file(GLOB MTS_SOURCES "external/mts-esp/*.cpp")
+
 file(GLOB MATRIX_SOURCES "source/matrix/*.cpp")
 file(GLOB MATRIX_HEADERS "source/matrix/*.h")
 
@@ -233,6 +236,7 @@ set(madronalib_SOURCES
     ${RTMIDI_SOURCES}
     ${RTMIDI_HEADERS}
     ${DSP_SOURCES}
+    ${MTS_SOURCES}
     ${DSP_HEADERS}
     ${MATRIX_SOURCES}
     ${MATRIX_HEADERS}
@@ -316,12 +320,15 @@ target_include_directories(${target} PUBLIC
     $<BUILD_INTERFACE:${cjson_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${HEADERS_INCLUDE_DIR}>
 )
-# aes256, utf and tuning-library use flat includes (e.g. #include "aes256.h")
+# aes256, utf, tuning-library and mts-esp use flat includes (e.g. #include "aes256.h")
 target_include_directories(${target} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/external/aes256
     ${CMAKE_CURRENT_SOURCE_DIR}/external/utf
     ${CMAKE_CURRENT_SOURCE_DIR}/external/tuning-library
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/mts-esp
 )
+# libMTSClient.cpp dlopens libMTS at static-init time; consumers need libdl on Linux
+target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS})
 
 # cJSON is now compiled directly into madronalib (no separate target)
 # cJSON.h is installed alongside madronalib headers for consumers
