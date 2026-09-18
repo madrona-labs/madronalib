@@ -27,6 +27,17 @@ const int kMLNumNotes = 256;
 class Scale
 {
  public:
+  // The finished lookup table: log pitch per note and whether the mapping assigns the
+  // note a degree. Trivially copyable so a plugin can parse on the main thread and hand
+  // the audio thread a finished table (through a blob parameter, say).
+  struct Table
+  {
+    // log pitch for each integer note number, log2(freq / 440 Hz).
+    std::array<double, kMLNumNotes> pitches;
+    // 1 if the keyboard mapping assigns the note a scale degree.
+    std::array<unsigned char, kMLNumNotes> mapped;
+  };
+
   Scale() { setDefault(); }
   ~Scale() = default;
 
@@ -44,8 +55,8 @@ class Scale
     float fn = ml::clamp(note, 0.f, (float)(kMLNumNotes - 1));
     int i = (int)fn;
     double fracPart = fn - (double)i;
-    double p0 = pitches_[i];
-    double p1 = (i < kMLNumNotes - 1) ? pitches_[i + 1] : p0;
+    double p0 = table_.pitches[i];
+    double p1 = (i < kMLNumNotes - 1) ? table_.pitches[i + 1] : p0;
     return (float)(p0 + fracPart * (p1 - p0));
   }
 
@@ -55,7 +66,7 @@ class Scale
   bool isNoteMapped(int note) const
   {
     if ((note < 0) || (note >= kMLNumNotes)) return false;
-    return mapped_[note] != 0;
+    return table_.mapped[note] != 0;
   }
 
   // return log pitch of the note of the current scale just below the input.
@@ -64,7 +75,7 @@ class Scale
     float r = 0.f;
     for (int i = kMLNumNotes - 1; i > 0; i--)
     {
-      float p = (float)pitches_[i];
+      float p = (float)table_.pitches[i];
       if (p <= a)
       {
         r = p;
@@ -82,13 +93,13 @@ class Scale
     int lowerIdx{0};
     for (int i = kMLNumNotes - 1; i > 0; i--)
     {
-      float p = (float)pitches_[i];
+      float p = (float)table_.pitches[i];
       if (p <= a)
       {
         fLower = p;
         if (i < kMLNumNotes - 1)
         {
-          fHigher = (float)pitches_[i + 1];
+          fHigher = (float)table_.pitches[i + 1];
         }
         lowerIdx = i;
         break;
@@ -101,7 +112,7 @@ class Scale
     }
     else if (lowerIdx <= 0)
     {
-      return (float)pitches_[0];
+      return (float)table_.pitches[0];
     }
 
     float d1 = (a - fLower);
@@ -121,6 +132,10 @@ class Scale
   const std::string& getName() const { return name_; }
   const std::string& getDescription() const { return description_; }
 
+  // the table alone: name and description stay with the parser.
+  const Table& getTable() const { return table_; }
+  void setTable(const Table& t) { table_ = t; }
+
  private:
   // 12-ET, 1/1 on MIDI 69 = 440 Hz, every note mapped. No parsing, no allocation.
   void setDefault();
@@ -128,11 +143,7 @@ class Scale
   std::string name_;
   std::string description_;
 
-  // log pitch for each integer note number, log2(freq / 440 Hz).
-  std::array<double, kMLNumNotes> pitches_;
-
-  // 1 if the keyboard mapping assigns the note a scale degree.
-  std::array<unsigned char, kMLNumNotes> mapped_;
+  Table table_;
 };
 
 }  // namespace ml
