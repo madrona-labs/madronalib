@@ -218,3 +218,6 @@ claude/
 # per-developer overrides; .claude/settings.json is shared and tracked
 .claude/settings.local.json
 
+
+# tuning-library clone made by Tests/data/tuning/gen-oracle.sh
+Tests/data/tuning/tuning-library/

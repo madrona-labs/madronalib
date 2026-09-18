@@ -176,7 +176,8 @@ endif()
 file(GLOB APP_SOURCES "source/app/*.cpp")
 file(GLOB APP_HEADERS "source/app/*.h")
 
-# DSP code is headers-only
+# DSP code is headers-only, except the Scala parser behind ml::Scale
+file(GLOB DSP_SOURCES "source/DSP/*.cpp")
 file(GLOB DSP_HEADERS "source/DSP/*.h")
 
 file(GLOB MATRIX_SOURCES "source/matrix/*.cpp")
@@ -231,6 +232,7 @@ set(madronalib_SOURCES
     ${RTAUDIO_HEADERS}
     ${RTMIDI_SOURCES}
     ${RTMIDI_HEADERS}
+    ${DSP_SOURCES}
     ${DSP_HEADERS}
     ${MATRIX_SOURCES}
     ${MATRIX_HEADERS}
