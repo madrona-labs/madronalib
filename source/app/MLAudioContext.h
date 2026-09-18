@@ -70,6 +70,16 @@ class AudioContext final
 
   void updateTime(const double ppqPos, const double bpmIn, bool isPlaying, double sampleRateIn);
   SignalBlock getBeatPhase() { return currentTime.quarterNotesPhase_; }
+
+  // Optional veto on note-ons, asked before the event reaches a voice: return true to
+  // drop it. Set once from the audio thread with a plain function so no allocation is
+  // involved; nullptr removes it. Note-offs and all other events always pass.
+  using NoteOnFilterFn = bool (*)(void* context, const Event& e);
+  void setNoteOnFilter(NoteOnFilterFn fn, void* context)
+  {
+    noteOnFilter_ = fn;
+    noteOnFilterContext_ = context;
+  }
   const ProcessTime& getTimeInfo() { return currentTime; }
 
   void setInputPolyphony(int voices, int chan = 0) { eventsToSignals_[chan].setPolyphony(voices); }
@@ -109,6 +119,8 @@ class AudioContext final
   ProcessTime currentTime;
   
   std::vector< ml::EventsToSignals > eventsToSignals_;
+  NoteOnFilterFn noteOnFilter_{nullptr};
+  void* noteOnFilterContext_{nullptr};
   
   // buffers containing audio to / from outside world, in bigger chunks
   std::vector< ml::DSPBuffer > inputBuffers_;

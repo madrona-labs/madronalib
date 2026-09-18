@@ -250,6 +250,7 @@ SignalBlock AudioContext::getInputController(size_t ctrlNumber, int c) const
 
 void AudioContext::addInputEvent(const Event& e, int chan)
 {
+  if ((e.type == kNoteOn) && noteOnFilter_ && noteOnFilter_(noteOnFilterContext_, e)) return;
   Event adjusted = e;
   adjusted.time += inputSamplesAccumulated_;
   eventsToSignals_[chan].addEvent(adjusted);
