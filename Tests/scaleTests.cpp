@@ -24,8 +24,10 @@ using namespace ml;
 
 namespace
 {
-// this file's directory + "data/tuning/" (no std::filesystem: macOS 10.14 target)
-const std::string kDataDir = std::string(__FILE__).substr(0, std::string(__FILE__).rfind('/')) + "/data/tuning/";
+// this file's directory + "data/tuning/" (no std::filesystem: macOS 10.14 target).
+// MSVC's __FILE__ separates with backslashes, so split on either.
+const std::string kDataDir =
+    std::string(__FILE__).substr(0, std::string(__FILE__).find_last_of("/\\")) + "/data/tuning/";
 
 const char* kBadFiles[] = {"badnote.scl",  "blanknote.scl",   "missingnote.scl",  "blank-line.kbm",
                            "empty-bad.kbm", "garbage-key.kbm", "missing-note.kbm"};
