@@ -2,8 +2,6 @@
 // Copyright (c) 2026 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
-// AudioTask: adaptor from RtAudio's main loop to madronalib vector processing
-
 #pragma once
 
 #include "MLSignalProcessor.h"
@@ -31,9 +29,11 @@ public:
   int getOutputSampleRate();
   long getStreamLatency();
 
-  unsigned int startAudio(const AudioProcessData& processData);
-  void stopAudio();
-  
+  int openAudioDevice(const AudioProcessData& processData);
+  int startAudioDevice();
+  void stopAudioDevice();
+  void closeAudioDevice();
+
 private:
   struct Impl;
   std::unique_ptr<Impl> pImpl;

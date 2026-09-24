@@ -28,7 +28,7 @@ constexpr float kApDelaySeconds[kNumAllpasses]{
 constexpr float kMainDelaySecondsL{0.0313f};
 constexpr float kMainDelaySecondsR{0.0371f};
 
-struct AaltoverbState
+struct ReverbExampleState
 {
   // parameter smoothers
   LinearGlide mSmoothFeedback;
@@ -51,7 +51,7 @@ struct AaltoverbState
   SignalBlock mvFeedbackL, mvFeedbackR;
 };
 
-void initializeReverb(AudioContext* ctx, AaltoverbState* r)
+void initializeReverb(AudioContext* ctx, ReverbExampleState* r)
 {
   float sr = ctx->getSampleRate();
   
@@ -84,8 +84,9 @@ void initializeReverb(AudioContext* ctx, AaltoverbState* r)
 
 // processBlock() does all of the audio processing, in SignalBlock-sized chunks.
 // It is called every time a new buffer of audio is needed.
-void processBlock(AudioContext* ctx, AaltoverbState* r)
+void processBlock(AudioContext* ctx, ReverbExampleState* r)
 {
+  if(ctx->inputs.size() < 2) return;
   float sr = ctx->getSampleRate();
   const float RT60const = 0.001f;
 
@@ -141,13 +142,15 @@ void processBlock(AudioContext* ctx, AaltoverbState* r)
 
 int main()
 {
-  // create and initialize the reverb state.
-  AaltoverbState r;
+  ReverbExampleState r;
 
-  // make a context and run the audio task.
+  // make the context and audio task.
   AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask reverbExample(&ctx, processBlock, &r);
+
+  // create and initialize the reverb state.
   initializeReverb(&ctx, &r);
   
+  // run the app.
   return reverbExample.runConsoleApp();
 }

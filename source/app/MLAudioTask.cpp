@@ -21,52 +21,35 @@ static void signalHandler(int)
   gQuitFlag = true;
 }
 
-AudioTask::~AudioTask()
-{
-}
-
-int AudioTask::startAudio()
-{
-  auto deviceSampleRate = devs.startAudio(processData);
-  processData.processContext->setSampleRate(deviceSampleRate);
-  
-  return 1;
-}
-
-void AudioTask::stopAudio()
-{
-  devs.stopAudio();
-  processData.hasQuit = true;
-}
-
-bool AudioTask::hasQuit() const
-{
-  return processData.hasQuit;
-}
-
 int AudioTask::runConsoleApp()
 {
-  if (startAudio())
+  if (processData.processContext->getSampleRate())
   {
+    devs.startAudioDevice();
+    
     std::cout << "\nStream latency = " << devs.getStreamLatency() << " frames" << std::endl;
     std::cout << "sample rate: " << processData.processContext->getSampleRate() << "\n";
     
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     gQuitFlag = false;
-
+    
     std::cout << "\nRunning ... press Ctrl+C to quit.\n";
-
+    
     while (!gQuitFlag)
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-
-    stopAudio();
+    
+    devs.stopAudioDevice();
   }
   
   return 0;
 }
 
+bool AudioTask::hasQuit() const
+{
+  return processData.hasQuit;
+}
 
 }  // namespace ml

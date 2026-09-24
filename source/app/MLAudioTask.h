@@ -16,20 +16,26 @@ namespace ml
 
 class AudioTask
 {
-  static constexpr int kMaxBlockSize{4096};
   
 public:
+  // on creation, openAudioDevice() is called. If open is successful,
+  // getSampleRate() will return the current rate.
   template<typename State>
   AudioTask(AudioContext* ctx, void(*fn)(AudioContext*, State*), State* state)
   {
+    if(!ctx) return;
     processData.processContext = ctx;
     processData.processFn = [fn, state](AudioContext* c) { fn(c, state); };
+    auto deviceSampleRate = devs.openAudioDevice(processData);
+    processData.processContext->setSampleRate(deviceSampleRate);
   }
   
-  ~AudioTask();
-  
-  int startAudio();
-  void stopAudio();
+  ~AudioTask()
+  {
+    devs.closeAudioDevice();
+    processData.hasQuit = true;
+  }
+
   int runConsoleApp();
   bool hasQuit() const;
   

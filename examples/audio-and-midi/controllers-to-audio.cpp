@@ -54,7 +54,7 @@ int main( int argc, char *argv[] )
   AudioTask exampleTask(&ctx, processAudio, &state);
 
   // set up the state:
-  // make a sine generator for each contrller number we listen to
+  // make a sine generator for each controller number we listen to
   state.sineGens.resize(state.sineControllers.size());
 
   // define the MIDI handling callback.

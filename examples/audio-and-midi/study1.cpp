@@ -24,12 +24,15 @@ struct Study1 : public SignalProcessor
   PulseGen<float> osc1;
   ADSR env1;
   
-  void init(float sr)
+  void init(int sr)
   {
-    pinker.init(sr);
-    env1.coeffs = ADSR::calcCoeffs(0, 0, 1, 1.0f, 48000);
-    publishSignal("osc", 512, 1, 1, 0);
-    setPublishedSignalsActive(true);
+    if(sr)
+    {
+      pinker.init(sr);
+      env1.coeffs = ADSR::calcCoeffs(0, 0, 1, 1.0f, sr);
+      publishSignal("osc", 512, 1, 1, 0);
+      setPublishedSignalsActive(true);
+    }
   }
   
   SignalBlock process(AudioContext* ctx)
@@ -57,7 +60,6 @@ struct Study1 : public SignalProcessor
   }
 };
 
-
 // study1Process() calls the SignalProcessor audio processing code in
 // SignalBlock-sized chunks.  It is called by the AudioTask
 // every time a new buffer of audio is needed.
@@ -74,8 +76,7 @@ int main()
   Study1 state;
   AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask study1Task(&ctx, study1Process, &state);
-  const float sr = ctx.getSampleRate();
-  state.init(sr);
+  state.init(ctx.getSampleRate());
   
   // very simple background thread for reading signals from SignalProcessor
   std::thread ticker([&]() {
@@ -95,7 +96,6 @@ int main()
     }
   });
   
-
   auto result = study1Task.runConsoleApp();
   ticker.join();
   return result;

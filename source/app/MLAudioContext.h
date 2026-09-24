@@ -63,6 +63,8 @@ class AudioContext final
   void clear();
 
   void setSampleRate(double r);
+  double getSampleRate() { return currentTime.sampleRate; }
+
   void resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames);
 
   void setInputPolyphony(int voices) { eventsToSignals.setPolyphony(voices); }
@@ -86,7 +88,6 @@ class AudioContext final
   int getNewestInputVoice() { return eventsToSignals.getNewestVoice(); }
   SignalBlock getInputController(size_t n) const;
 
-  double getSampleRate() { return currentTime.sampleRate; }
   const ProcessTime& getTimeInfo() { return currentTime; }
 
   // clients can access these directly to do processing

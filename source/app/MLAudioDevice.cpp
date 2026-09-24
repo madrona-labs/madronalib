@@ -55,10 +55,10 @@ AudioDevice::AudioDevice() : pImpl(std::make_unique<Impl>())
 
 AudioDevice::~AudioDevice()
 {
-  stopAudio();
+  stopAudioDevice();
 }
 
-unsigned int AudioDevice::startAudio(const AudioProcessData& processData)
+int AudioDevice::openAudioDevice(const AudioProcessData& processData)
 {
   if (!pImpl->deviceController_) return 0;
   RtAudio& ctrl = *pImpl->deviceController_;
@@ -104,24 +104,36 @@ unsigned int AudioDevice::startAudio(const AudioProcessData& processData)
     return 0;
   }
   
+  return (int)deviceSampleRate;
+}
+
+int AudioDevice::startAudioDevice()
+{
+  if (!pImpl->deviceController_) return 0;
+  RtAudio& ctrl = *pImpl->deviceController_;
+
   if (RTAUDIO_NO_ERROR != ctrl.startStream())
   {
     std::cout << ctrl.getErrorText() << std::endl;
     return 0;
   }
-  
-  return deviceSampleRate;
 }
 
-void AudioDevice::stopAudio()
+void AudioDevice::stopAudioDevice()
 {
   if (!pImpl->deviceController_) return;
   RtAudio& ctrl = *pImpl->deviceController_;
-
+  
   if (RTAUDIO_NO_ERROR != ctrl.stopStream())
   {
     std::cout << ctrl.getErrorText() << std::endl;
   }
+}
+
+void AudioDevice::closeAudioDevice()
+{
+  if (!pImpl->deviceController_) return;
+  RtAudio& ctrl = *pImpl->deviceController_;
   
   if (ctrl.isStreamOpen()) ctrl.closeStream();
 }
