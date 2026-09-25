@@ -296,19 +296,21 @@ TEST_CASE("madronalib/core/dsp_ops", "[dsp_ops]")
   
   SECTION("horizontal operations")
   {
-    SignalBlock a = rangeClosed(0.0f, 63.0f);
+    float fpb = kFramesPerBlock;
+    SignalBlock a = rangeClosed(0.0f, fpb - 1.f);
     
     float s = sum(a);
-    REQUIRE(s == Approx(63.0f * 64.0f / 2.0f)); // Sum of 0..63
+    
+    REQUIRE(s == Approx((fpb - 1.f) * fpb / 2.0f)); // Sum of 0..fpb
     
     float m = mean(a);
-    REQUIRE(m == Approx(31.5f));
+    REQUIRE(m == Approx((fpb - 1.f)/2.f));
     
     float minVal = min(a);
     REQUIRE(minVal == Approx(0.0f));
     
     float maxVal = max(a);
-    REQUIRE(maxVal == Approx(63.0f));
+    REQUIRE(maxVal == Approx(fpb - 1.f));
 
     // max() and min() must work on blocks that don't straddle zero.
     SignalBlock negative = rangeClosed(-63.0f, -1.0f);

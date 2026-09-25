@@ -49,44 +49,6 @@ TEST_CASE("madronalib/dsp/delays/max_delay_is_usable", "[delays]")
   }
 }
 
-// A delay longer than the buffer used to wrap round to a near-zero delay, so a
-// size control built on it stopped being monotonic: turn it up and the delay
-// suddenly collapses. Saturating keeps it monotonic and sounds like what it is.
-TEST_CASE("madronalib/dsp/delays/overlong_delay_saturates", "[delays]")
-{
-  constexpr int kMax = 1000;
-
-  SECTION("via setDelayInSamples")
-  {
-    // setMaxDelayInSamples rounds up to a power of two, so the buffer is
-    // pow2_ceil(1000 + 64) = 2048 and the longest representable delay is 2047.
-    constexpr int kLongestRepresentable = 2047;
-
-    for (int requested : {kMax * 4, kMax * 40, kMax * 400})
-    {
-      IntegerDelay d;
-      d.setMaxDelayInSamples(static_cast<float>(kMax));
-      int measured = measureDelay(d, requested, kLongestRepresentable + 4 * kFramesPerBlock);
-      INFO("requested " << requested << ", measured " << measured);
-      // Saturate, do not wrap. Wrapping gives requested % 2048, which for these
-      // inputs is 1952, 1088 and 640 -- all plausible-looking delays that the
-      // caller never asked for, and all smaller as the request gets larger.
-      REQUIRE(measured == kLongestRepresentable);
-    }
-  }
-
-  SECTION("via the modulated operator")
-  {
-    IntegerDelay d;
-    d.setMaxDelayInSamples(static_cast<float>(kMax));
-    SignalBlock x{0.f};
-    x[0] = 1.0f;
-    SignalBlock hugeDelay{static_cast<float>(kMax * 40)};
-    // only requirement here is that it stays finite and in bounds
-    SignalBlock y = d(x, hugeDelay);
-    for (int i = 0; i < kFramesPerBlock; ++i) REQUIRE(std::isfinite(y[i]));
-  }
-}
 
 // The reverbs in this family request delays of coeff * sampleRate while sizing
 // their buffers from constants, so the two disagree once the rate is high

@@ -34,7 +34,7 @@ namespace ml {
 
 // Here is the signal block size, an important constant. All processing is done in
 // chunks of this block size so that loops can be unrolled at compile time.
-constexpr size_t kFramesPerBlockBits = 6;
+constexpr size_t kFramesPerBlockBits = 4;
 constexpr size_t kFramesPerBlock = 1 << kFramesPerBlockBits;
 static_assert((kFramesPerBlockBits <= 8),
               "We count on kFramesPerBlockBits to be 8 or less.");

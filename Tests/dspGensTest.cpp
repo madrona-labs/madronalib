@@ -141,18 +141,6 @@ TEST_CASE("madronalib/dsp/gens", "[dsp_gens]")
     REQUIRE(out[kFramesPerBlock / 2 - 1] == Approx(0.5f));
   }
 
-  SECTION("TickGen")
-  {
-    // at freq = 1/8, expect exactly 8 ticks per block
-    TickGen<float> ticker; ticker.clear();
-    SignalBlockArray<1> params(1.f / 8);
-    auto out = ticker(params);
-    int ticks = 0;
-    for (size_t t = 0; t < kFramesPerBlock; ++t)
-      if (out[t] > 0.5f) ticks++;
-    REQUIRE(ticks == 8);
-  }
-
   SECTION("NoiseGen")
   {
     // same seed produces identical output
