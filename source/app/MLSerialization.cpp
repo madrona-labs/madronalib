@@ -66,7 +66,7 @@ struct ValueBinaryHeader
 };
 
 // make sure all the values in our Type enum fit into the type field
-static_assert((2 << ValueBinaryHeader::kTypeBits) >= Value::kNumTypes);
+static_assert((1 << ValueBinaryHeader::kTypeBits) >= Value::kNumTypes);
 
 static_assert(sizeof(ValueBinaryHeader) == 4);
 
