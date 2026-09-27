@@ -57,7 +57,7 @@ class AudioContext final
     double ppqPhase1_{0};
   };
   
-  AudioContext(size_t nInputs, size_t nOutputs);
+  AudioContext(size_t nInputs, size_t nOutputs, size_t nEventChannels = 1);
   ~AudioContext() = default;
 
   void clear();
@@ -65,35 +65,42 @@ class AudioContext final
   void setSampleRate(double r);
   double getSampleRate() { return currentTime.sampleRate; }
 
-  void resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames);
-
-  void setInputPolyphony(int voices) { eventsToSignals.setPolyphony(voices); }
-  size_t getInputPolyphony() { return eventsToSignals.getPolyphony(); }
+  // default is one event channel -this lets existing code work after adding multiple channels
+  void resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames, size_t nEventChannels = 1);
 
   void updateTime(const double ppqPos, const double bpmIn, bool isPlaying, double sampleRateIn);
   SignalBlock getBeatPhase() { return currentTime.quarterNotesPhase_; }
-
-  void addInputEvent(const Event& e);
-  void clearInputEvents() { eventsToSignals.clearEvents(); }
-
-  void setInputPitchBend(float p) { eventsToSignals.setPitchBendInSemitones(p); }
-  void setInputMPEPitchBend(float p) { eventsToSignals.setMPEPitchBendInSemitones(p); }
-  void setInputGlideTimeInSeconds(float s) { eventsToSignals.setPitchGlideInSeconds(s); }
-  void setInputDriftAmount(float d) { eventsToSignals.setDriftAmount(d); }
-  void setInputUnison(bool u) { eventsToSignals.setUnison(u); }
-  void setInputProtocol(Symbol p) { eventsToSignals.setProtocol(p); }
-  void setInputModCC(int p) { eventsToSignals.setModCC(p); }
-  const EventsToSignals::Voice& getInputVoice(int n) { return eventsToSignals.getVoice(n); }
-
-  int getNewestInputVoice() { return eventsToSignals.getNewestVoice(); }
-  SignalBlock getInputController(size_t n) const;
-
   const ProcessTime& getTimeInfo() { return currentTime; }
+
+  void setInputPolyphony(int voices, int chan = 0) { eventsToSignals_[chan].setPolyphony(voices); }
+  size_t getInputPolyphony(int chan = 0) { return eventsToSignals_[chan].getPolyphony(); }
+  
+  void clearInputEvents(int chan = 0) { eventsToSignals_[chan].clearEvents(); }
+  void addInputEvent(const Event& e, int chan = 0);
+
+  void setInputPitchBend(float p, int chan = 0) { eventsToSignals_[chan].setPitchBendInSemitones(p); }
+  void setInputMPEPitchBend(float p, int chan = 0) { eventsToSignals_[chan].setMPEPitchBendInSemitones(p); }
+  void setInputGlideTimeInSeconds(float s, int chan = 0) { eventsToSignals_[chan].setPitchGlideInSeconds(s); }
+  void setInputDriftAmount(float d, int chan = 0) { eventsToSignals_[chan].setDriftAmount(d); }
+  void setInputUnison(bool u, int chan = 0) { eventsToSignals_[chan].setUnison(u); }
+  void setInputProtocol(Symbol p, int chan = 0) { eventsToSignals_[chan].setProtocol(p); }
+  void setInputModCC(int p, int chan = 0) { eventsToSignals_[chan].setModCC(p); }
+
+  int getNewestInputVoice(int chan = 0) { return eventsToSignals_[chan].getNewestVoice(); }
 
   // clients can access these directly to do processing
   SignalBlockDynamic inputs;
   SignalBlockDynamic outputs;
+  //
+  // TODO unify API for audio signals above and events below.
+  // make k-rate signals for events.
+  //
+  // get input voice v of event channel c
+  const EventsToSignals::Voice& getInputVoice(int n, int c = 0) const;
   
+  // get input controller value
+  SignalBlock getInputController(size_t n, int channel = 0) const;
+
   void process(const float** externalInputs, float** externalOutputs,
                              int externalFrames,
                std::function<void(AudioContext*)> processFn);
@@ -101,11 +108,11 @@ class AudioContext final
  private:
   ProcessTime currentTime;
   
-  ml::EventsToSignals eventsToSignals;
+  std::vector< ml::EventsToSignals > eventsToSignals_;
   
   // buffers containing audio to / from outside world, in bigger chunks
-  std::vector<ml::DSPBuffer> inputBuffers_;
-  std::vector<ml::DSPBuffer> outputBuffers_;
+  std::vector< ml::DSPBuffer > inputBuffers_;
+  std::vector< ml::DSPBuffer > outputBuffers_;
   
   // max chunk size for outside I/O
   size_t maxFramesPerBlock_{kMaxIOFramesDefault};

@@ -104,20 +104,23 @@ void AudioContext::ProcessTime::makeTimeSignals()
 
 // AudioContext
 
-AudioContext::AudioContext(size_t nInputs, size_t nOutputs)
+AudioContext::AudioContext(size_t nInputs, size_t nOutputs, size_t nEventChannels)
     : inputs(nInputs), outputs(nOutputs)
 {
-  resizeBuffers(nInputs, nOutputs, kMaxIOFramesDefault);
+  resizeBuffers(nInputs, nOutputs, kMaxIOFramesDefault, nEventChannels);
   clear();
 }
 
 void AudioContext::setSampleRate(double r)
 {
   currentTime.sampleRate = r;
-  eventsToSignals.setSampleRate(r);
+  for (auto& ev : eventsToSignals_)
+  {
+    ev.setSampleRate(r);
+  }
 }
 
-void AudioContext::resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames)
+void AudioContext::resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames, size_t nEventChannels)
 {
   maxFramesPerBlock_ = maxFrames;
 
@@ -132,12 +135,23 @@ void AudioContext::resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFram
   {
     outputBuffers_[i].resize((int)maxFrames);
   }
+  
+  eventsToSignals_.resize(nEventChannels);
+}
+
+void AudioContext::updateTime(const double ppqPos, const double bpmIn, bool isPlaying,
+                              double sampleRateIn)
+{
+  currentTime.setTimeAndRate(ppqPos, bpmIn, isPlaying, sampleRateIn);
 }
 
 void AudioContext::clear()
 {
   currentTime.clear();
-  eventsToSignals.clear();
+  for (auto& ev : eventsToSignals_)
+  {
+    ev.clear();
+  }
   
   // add a block of zeros to output buffer. We have a constant one-block delay between input and output.
   SignalBlock emptyBlock(0.f);
@@ -159,6 +173,10 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
 {
   size_t nInputs = inputBuffers_.size();
   size_t nOutputs = outputBuffers_.size();
+  
+  // TODO n channels of events also
+  size_t nEventInputs = eventsToSignals_.size();
+  
   if (nOutputs < 1) return;
   if (!externalOutputs) return;
   if (externalFrames > (int)maxFramesPerBlock_) return;
@@ -183,7 +201,10 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
     
     // generate one block of time / event / controller signals
     currentTime.makeTimeSignals();
-    eventsToSignals.makeSignalBlock();
+    for (auto& ev : eventsToSignals_)
+    {
+      ev.makeSignalBlock();
+    }
     
     // run the signal processing function
     if(processFn) processFn(this);
@@ -195,7 +216,10 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
     }
         
     // shift any remaining events in buffer forward and fix accum counter
-    eventsToSignals.adjustEventsInBuffer(kFramesPerBlock);
+    for (auto& ev : eventsToSignals_)
+    {
+      ev.adjustEventsInBuffer(kFramesPerBlock);
+    }
     inputSamplesAccumulated_ -= kFramesPerBlock;
   }
   
@@ -209,22 +233,26 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
   }
 }
 
-SignalBlock AudioContext::getInputController(size_t n) const
+const EventsToSignals::Voice& AudioContext::getInputVoice(int n, int c) const
 {
-  return eventsToSignals.getController(n).output;
+  return eventsToSignals_[c].getVoice(n);
 }
 
-void AudioContext::addInputEvent(const Event& e)
+SignalBlock AudioContext::getInputController(size_t ctrlNumber, int c) const
+{
+  SignalBlock r(0.f);
+  if(c < eventsToSignals_.size())
+  {
+    r = eventsToSignals_[c].getController(ctrlNumber).output;
+  }
+  return r;
+}
+
+void AudioContext::addInputEvent(const Event& e, int chan)
 {
   Event adjusted = e;
   adjusted.time += inputSamplesAccumulated_;
-  eventsToSignals.addEvent(adjusted);
-}
-
-void AudioContext::updateTime(const double ppqPos, const double bpmIn, bool isPlaying,
-                              double sampleRateIn)
-{
-  currentTime.setTimeAndRate(ppqPos, bpmIn, isPlaying, sampleRateIn);
+  eventsToSignals_[chan].addEvent(adjusted);
 }
 
 }  // namespace ml
