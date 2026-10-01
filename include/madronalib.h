@@ -14,6 +14,7 @@
 #include "MLEventsToSignals.h"
 #include "MLMemoryUtils.h"
 #include "MLMIDI.h"
+#include "MLMTSClient.h"
 #include "MLParameters.h"
 #include "MLPath.h"
 #include "MLPlatform.h"

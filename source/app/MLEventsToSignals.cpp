@@ -82,6 +82,7 @@ void EventsToSignals::Voice::reset()
   currentZ = 0;
 
   creatorKeyIdx_ = 0;
+  creatorChannel_ = 0;
 
   pitchBendGlide.setValue(0.f);
   modGlide.setValue(0.f);
@@ -183,6 +184,7 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
 
       // set new values
       creatorKeyIdx_ = keyIdx;
+      creatorChannel_ = e.channel;
       currentPitch = e.value1;
       currentVelocity = e.value2;
       break;
@@ -210,6 +212,7 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
 
       // set new values
       creatorKeyIdx_ = keyIdx;
+      creatorChannel_ = e.channel;
       currentPitch = e.value1;
       currentVelocity = e.value2;
       break;
