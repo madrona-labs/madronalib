@@ -115,10 +115,11 @@ int messageChannel(const MIDIMessage& m) { return (m[0] & 0x0f) + 1; }
 int messageByte2(const MIDIMessage& m) { return m[1] & 0x7f; }
 int messageByte3(const MIDIMessage& m) { return m[2] & 0x7f; }
 float toValue(int messageData) { return messageData / 127.0f; }
+// 14-bit bend, low 7 bits first, as [-1, 1] with 0 at center (0x2000).
 float messagePitchBendValue(const MIDIMessage& m)
 {
   constexpr int offset = 0x2000;
-  constexpr float scale = 1.f / float(0x3FFF);
+  constexpr float scale = 1.f / float(offset);
   int loByte = m[1] & 0x7f;
   int hiByte = m[2] & 0x7f;
   int bothBytes = (hiByte << 7) | loByte;
