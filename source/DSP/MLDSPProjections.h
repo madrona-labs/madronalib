@@ -143,6 +143,53 @@ inline Projection exp(Interval m)
   }
 }
 
+// logZeroThresh and expZeroThresh are for log parameters that should reach 0
+// at the low end of their travel, which a log curve on [a, b] never does.
+// logZeroThresh maps [0, 1] to a log curve on [a, b], with the bottom of the
+// range coerced to zero. Unlike log and exp these map to and from the real
+// values directly, not a unit curve to be scaled with intervalMap, so that
+// zero is exactly zero. works for positive a, b with a < b only.
+//
+// Values under the threshold, a small step above a, map to zero. So the pair
+// is a bijection between {0} and [xt, 1] on the unit side and {0} and
+// [a*(1 + kZeroThreshEpsilon), b] on the real side.
+constexpr float kZeroThreshEpsilon{0.001f};
+
+inline Projection logZeroThresh(Interval m)
+{
+  float a = m.x1;
+  float b = m.x2;
+  if ((b - a == 0.f) || (a == 0.f))
+  {
+    return [=](float x) { return a; };
+  }
+  else
+  {
+    const float thresh = a * (1.f + kZeroThreshEpsilon);
+    return [=](float x)
+    {
+      float y = a * powf((b / a), x);
+      return (y < thresh) ? 0.f : y;
+    };
+  }
+}
+
+// the inverse of the logZeroThresh projection.
+inline Projection expZeroThresh(Interval m)
+{
+  float a = m.x1;
+  float b = m.x2;
+  if ((b - a == 0.f) || (a == 0.f))
+  {
+    return [=](float x) { return 0.f; };
+  }
+  else
+  {
+    const float thresh = a * (1.f + kZeroThreshEpsilon);
+    return [=](float x) { return (x < thresh) ? 0.f : logf(x / a) / logf(b / a); };
+  }
+}
+
 // linear projection mapping an interval to another interval
 inline Projection linear(const Interval a, const Interval b)
 {

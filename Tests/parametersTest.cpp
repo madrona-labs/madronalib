@@ -33,6 +33,14 @@ void readParameterDescriptions(ParameterDescriptionList& params)
     { "offset", -1.f },
     { "real_default", 0.0 }
   } ) );
+
+  params.push_back( std::make_unique< ParameterDescription >(WithValues{
+    { "name", "log-param-zero-thresh" },
+    { "range", {0.005, 5} },
+    { "log", true },
+    { "zero_thresh", true },
+    { "real_default", 0.01 }
+  } ) );
 }
 
 // Test to confirm that the projections are invertible
@@ -78,4 +86,53 @@ TEST_CASE("madronalib/core/parameters", "[parameters]")
       REQUIRE(testUtils::nearlyEqual(fNorm, fNorm2));
     }
   }
+}
+
+// a log parameter with zero_thresh reaches zero at the bottom of its range
+TEST_CASE("madronalib/core/parameters/zero_thresh", "[parameters]")
+{
+  theSymbolTable().clear();
+
+  ParameterStore params;
+  ParameterDescriptionList pdl;
+  readParameterDescriptions(pdl);
+  buildParameterStore(pdl, params);
+
+  Path pname("log-param-zero-thresh");
+  ParameterProjection& pproj = params.projections[pname];
+
+  // the bottom of the dial is zero, not the low end of the log range
+  REQUIRE(pproj.normalizedToReal(0.f) == 0.f);
+  REQUIRE(pproj.realToNormalized(0.f) == 0.f);
+
+  // the rest of the range is the plain log curve
+  REQUIRE(pproj.normalizedToReal(1.f) == Approx(5.f));
+  REQUIRE(pproj.normalizedToReal(0.5f) == Approx(std::sqrt(0.005f * 5.f)));
+
+  // real values under the threshold are zero on the dial
+  REQUIRE(pproj.realToNormalized(0.005f) == 0.f);
+  REQUIRE(pproj.realToNormalized(0.001f) == 0.f);
+
+  // above the threshold the projections invert each other
+  for (float fReal : {0.006f, 0.01f, 0.25f, 5.f})
+  {
+    float fNorm = pproj.realToNormalized(fReal);
+    REQUIRE(fNorm > 0.f);
+    REQUIRE(pproj.normalizedToReal(fNorm) == Approx(fReal));
+  }
+
+  // the store never holds a real value between zero and the threshold
+  params.setFromRealValue(pname, 0.005f);
+  REQUIRE(params.getRealFloatValue("log-param-zero-thresh") == 0.f);
+  REQUIRE(params.getNormalizedFloatValue("log-param-zero-thresh") == 0.f);
+
+  params.setFromNormalizedValue(pname, 0.f);
+  REQUIRE(params.getRealFloatValue("log-param-zero-thresh") == 0.f);
+
+  params.setFromRealValue(pname, 0.01f);
+  REQUIRE(params.getRealFloatValue("log-param-zero-thresh") == Approx(0.01f));
+
+  // a plain log parameter is unchanged: its low end is the bottom of the dial
+  ParameterProjection& plain = params.projections["log-param"];
+  REQUIRE(plain.normalizedToReal(0.f) == Approx(0.001f));
 }

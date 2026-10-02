@@ -27,6 +27,7 @@ inline ParameterProjection createParameterProjection(const ParameterDescription&
   ParameterProjection b;
   Symbol units(p.getProperty("units").getTextValue());
   bool bLog = p.getBoolPropertyWithDefault("log", false);
+  bool zeroThresh = p.getBoolPropertyWithDefault("zero_thresh", false);
   bool bisquare = p.getBoolPropertyWithDefault("bisquare", false);
 
   Interval normalRange{0., 1.};
@@ -65,13 +66,25 @@ inline ParameterProjection createParameterProjection(const ParameterDescription&
   {
     if (bLog)
     {
-      b.normalizedToReal =
-          compose(projections::add(offset),
-                  projections::intervalMap(normalRange, plainRange, projections::log(plainRange)));
+      if (zeroThresh)
+      {
+        // a log parameter whose low end is coerced to zero. See projections::logZeroThresh.
+        b.normalizedToReal =
+            compose(projections::add(offset), projections::logZeroThresh(plainRange));
 
-      b.realToNormalized =
-          compose(projections::intervalMap(plainRange, normalRange, projections::exp(plainRange)),
-                  projections::add(-offset));
+        b.realToNormalized =
+            compose(projections::expZeroThresh(plainRange), projections::add(-offset));
+      }
+      else
+      {
+        b.normalizedToReal =
+            compose(projections::add(offset),
+                    projections::intervalMap(normalRange, plainRange, projections::log(plainRange)));
+
+        b.realToNormalized =
+            compose(projections::intervalMap(plainRange, normalRange, projections::exp(plainRange)),
+                    projections::add(-offset));
+      }
     }
     else if (bisquare)
     {
@@ -243,6 +256,19 @@ public:
     
     paramsNorm_[pname] = convertRealToNormalizedValue(pname, val);
     paramsReal_[pname] = val;
+
+    // a "zero_thresh" parameter has no real values between zero and its
+    // threshold: one set there, by an older patch say, is stored as zero so the
+    // real and normalized values agree.
+    auto& pdesc = descriptions[pname];
+    if (pdesc && pdesc->getBoolPropertyWithDefault("zero_thresh", false))
+    {
+      Value norm = paramsNorm_[pname];
+      if ((norm.getType() == Value::kFloat) && (norm.getFloatValue() == 0.f))
+      {
+        paramsReal_[pname] = convertNormalizedToRealValue(pname, norm);
+      }
+    }
     
 #ifdef DEBUG
     if (pname == watchParameter)
