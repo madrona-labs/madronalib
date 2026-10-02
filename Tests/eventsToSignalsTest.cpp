@@ -418,3 +418,79 @@ TEST_CASE("madronalib/core/events/voice_keeps_creator_channel", "[events]")
   t.callback(kFramesPerBlock, {makeNoteOnOnChannel(5, 62)});
   REQUIRE(t.ctx.getInputVoice(0).creatorChannel_ == 5);
 }
+
+// helper: make a pitch bend event, value in [-1, 1]
+static Event makePitchBend(int channel, float value, int time = 0)
+{
+  Event e;
+  e.type = kPitchBend;
+  e.channel = channel;
+  e.time = time;
+  e.value1 = value;
+  return e;
+}
+
+static float bendEnd(TestFixture& t, int voice)
+{
+  return t.ctx.getInputVoice(voice).outputs.constRow(kBend)[kFramesPerBlock - 1];
+}
+
+// enough blocks to finish the pitch bend glide
+static void runPastBendGlide(TestFixture& t)
+{
+  for (int i = 0; i < 32; ++i) t.callback(kFramesPerBlock);
+}
+
+TEST_CASE("madronalib/core/events/bend_row_zero_without_bend", "[events]")
+{
+  TestFixture t;
+  t.callback(kFramesPerBlock, {makeNoteOn(60, 60.f, 0.8f)});
+  runPastBendGlide(t);
+
+  REQUIRE(bendEnd(t, 0) == 0.f);
+  REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(60.f));
+}
+
+TEST_CASE("madronalib/core/events/bend_row_holds_bend_added_to_pitch", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputPitchBend(12.f);
+
+  t.callback(kFramesPerBlock, {makeNoteOn(60, 60.f, 0.8f)});
+  t.callback(kFramesPerBlock, {makePitchBend(1, 0.5f)});
+  runPastBendGlide(t);
+
+  // half of a 12 semitone range is half an octave
+  REQUIRE(bendEnd(t, 0) == Approx(0.5f));
+  REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(60.5f));
+
+  // subtracting the bend row recovers the note at every point in the glide
+  t.callback(kFramesPerBlock, {makePitchBend(1, -1.f)});
+  float pitch = t.pitchAt(0, kFramesPerBlock - 1);
+  float bend = bendEnd(t, 0);
+  REQUIRE(bend < 0.5f);
+  REQUIRE(bend > -1.f);
+  REQUIRE(pitch - bend == Approx(60.f));
+}
+
+TEST_CASE("madronalib/core/events/bend_row_mpe_sums_main_and_note_bend", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputProtocol("MPE");
+  t.ctx.setInputPitchBend(12.f);
+  t.ctx.setInputMPEPitchBend(24.f);
+
+  Event noteOn = makeNoteOn(60, 60.f, 0.8f);
+  noteOn.channel = 2;
+  t.callback(kFramesPerBlock, {noteOn});
+
+  // per-note bend on the member channel, main bend on channel 1
+  t.callback(kFramesPerBlock, {makePitchBend(2, 0.5f), makePitchBend(1, 0.25f)});
+  runPastBendGlide(t);
+
+  int v = t.ctx.getNewestInputVoice();
+  REQUIRE(v >= 0);
+  const float expected = 0.5f * 24.f / 12.f + 0.25f * 12.f / 12.f;
+  REQUIRE(bendEnd(t, v) == Approx(expected));
+  REQUIRE(t.pitchAt(v, kFramesPerBlock - 1) == Approx(60.f + expected));
+}
