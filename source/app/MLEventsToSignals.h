@@ -23,6 +23,8 @@ enum VoiceOutputSignals
   kY,
   kMod,
   kElapsedTime,
+  // the pitch bend amount already included in kPitch, in the same units
+  kBend,
   kNumVoiceOutputRows
 };
 

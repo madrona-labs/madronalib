@@ -255,9 +255,12 @@ void EventsToSignals::Voice::endProcess(float pitchBend)
   }
   outputs.setRow(kZ, zGlide(currentZ));
 
-  // add pitch bend in semitones to pitch output
+  // add pitch bend in semitones to pitch output, and write it to its own row
+  // so clients can separate it from the note
+  auto bend = bendGlide * pitchBend * (1.f / 12);
+  outputs.setRow(kBend, bend);
   auto p = outputs.getRow(kPitch);
-  outputs.setRow(kPitch, p + bendGlide * pitchBend * (1.f / 12));
+  outputs.setRow(kPitch, p + bend);
 
   // add drift to pitch output
   p = outputs.getRow(kPitch);
@@ -460,6 +463,7 @@ void EventsToSignals::makeSignalBlock()
       for (int v = 1; v < polyphony_ + 1; ++v)
       {
         voices[v].outputs.row(kPitch) += voices[0].outputs.row(kPitch);
+        voices[v].outputs.row(kBend) += voices[0].outputs.row(kBend);
         voices[v].outputs.row(kX) += voices[0].outputs.row(kX);
         voices[v].outputs.row(kY) += voices[0].outputs.row(kY);
         voices[v].outputs.row(kZ) += voices[0].outputs.row(kZ);
