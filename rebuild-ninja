@@ -4,14 +4,13 @@ set -e
 MADRONALIB_ROOT="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$MADRONALIB_ROOT/build-ninja"
 
-# Configure if needed
-if [ ! -f "$BUILD_DIR/build.ninja" ]; then
-    cmake -S "$MADRONALIB_ROOT" -B "$BUILD_DIR" \
-        -G "Ninja Multi-Config" \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-        -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET="10.14"
-fi
+# Configure every run so new source files (collected with file(GLOB)) are
+# picked up even when CMakeLists.txt did not change.
+cmake -S "$MADRONALIB_ROOT" -B "$BUILD_DIR" \
+    -G "Ninja Multi-Config" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="10.14"
 
 # Clean installed files
 sudo rm -rf /usr/local/include/madronalib

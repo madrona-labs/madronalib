@@ -3,12 +3,12 @@ set -e
 
 MADRONALIB_ROOT="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Configure if needed
-if [ ! -d "$MADRONALIB_ROOT/build/madronalib.xcodeproj" ]; then
-    cmake -S "$MADRONALIB_ROOT" -B "$MADRONALIB_ROOT/build" -GXcode \
-        -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET="10.14"
-fi
+# Regenerate the Xcode project every run so new source files and CMakeLists.txt
+# changes are in the project before xcodebuild loads it. Otherwise the first
+# build uses a stale file list.
+cmake -S "$MADRONALIB_ROOT" -B "$MADRONALIB_ROOT/build" -GXcode \
+    -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="10.14"
 
 # Clean installed files
 sudo rm -rf /usr/local/include/madronalib
