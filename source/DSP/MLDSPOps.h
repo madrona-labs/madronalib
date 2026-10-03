@@ -178,6 +178,8 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
     std::copy(block.begin(), block.end(), this->data() + i * kFramesPerBlock);
   }
   
+  // Fast path: direct pointer to row i, for reading or writing samples without
+  // copying the row. Prefer this over constRow() / getRow() in per-sample loops.
   T* rowPtr(size_t i) {
     return this->data() + i * kFramesPerBlock;
   }
@@ -223,6 +225,13 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
       return *this;
     }
     
+    RowView& operator/=(const SignalBlockArrayBase<T, 1>& other) {
+      for (size_t i = 0; i < kFramesPerBlock; ++i) {
+        _data[i] /= other[i];
+      }
+      return *this;
+    }
+    
     // compare RowViews. This is a template because we need to compare
     // rows of SignalBlockArrayBase classes with different N.
     template<typename T2>
@@ -240,22 +249,14 @@ struct SignalBlockArrayBase : public AlignedArray<T, ROWS * kFramesPerBlock>
     }
   };
   
-  struct ConstRowView {
-    const T* _data;
-    
-    const T& operator[](size_t i) const { return _data[i]; }
-    
-    operator SignalBlockArrayBase<T, 1>() const {
-      return SignalBlockArrayBase<T, 1>(_data);
-    }
-  };
-
   RowView row(size_t i) {
     return RowView{this->data() + i * kFramesPerBlock};
   }
   
-  ConstRowView constRow(size_t i) const {
-    return ConstRowView{this->data() + i * kFramesPerBlock};
+  // Returns a copy of row i, so all block operators and functions apply to it
+  // directly. Use rowPtr() for per-sample reads.
+  SignalBlockArrayBase<T, 1> constRow(size_t i) const {
+    return getRow(i);
   }
 };
 
