@@ -998,3 +998,134 @@ TEST_CASE("madronalib/dsp/filters/omega_past_nyquist", "[filters]")
 }
 
 #endif
+
+
+// ================================================================
+//  PhasorFollower
+// ================================================================
+
+namespace {
+
+constexpr int kFollowerTestBlocks = 4;
+constexpr float kFollowerTestFreq = 1.f / 32.f;
+constexpr float kFollowerEps = 1e-4f;
+
+// circular distance between two phases on [0, 1)
+float phaseDistance(float a, float b)
+{
+  float d = std::fabs(a - b);
+  return std::min(d, 1.f - d);
+}
+
+// make a trigger block that goes high at frame k. if held is false, it is
+// high for one frame only. k < 0 or k >= kFramesPerBlock makes silence.
+SignalBlock makeTrigger(int k, bool held = false)
+{
+  SignalBlock trig{0.f};
+  if (k < 0) return trig;
+  for (int i = k; i < (int)kFramesPerBlock; ++i)
+  {
+    trig[i] = 1.f;
+    if (!held) break;
+  }
+  return trig;
+}
+
+}  // namespace
+
+TEST_CASE("madronalib/filters/phasor_follower", "[filters]")
+{
+  SECTION("with no trigger the output tracks the input")
+  {
+    PhasorGen<float> phasor(kFollowerTestFreq);
+    PhasorFollower<float> follower;
+    SignalBlock trig{0.f};
+    
+    for (int block = 0; block < kFollowerTestBlocks; ++block)
+    {
+      SignalBlock x = phasor();
+      SignalBlock y = follower(x, trig);
+      for (int i = 0; i < (int)kFramesPerBlock; ++i)
+      {
+        REQUIRE(phaseDistance(fracPart(x[i] - y[i]), 0.f) < kFollowerEps);
+      }
+    }
+  }
+  
+  SECTION("a trigger resets the output, leaving a constant offset")
+  {
+    for (bool held : {false, true})
+    {
+      const int trigFrame = 13;
+      PhasorGen<float> phasor(kFollowerTestFreq);
+      PhasorFollower<float> follower;
+      float expectedOffset = 0.f;
+      
+      for (int block = 0; block < kFollowerTestBlocks; ++block)
+      {
+        // trigger in the first block only. a held trigger stays high for all
+        // the following blocks and must not reset the output again.
+        SignalBlock trig = (block == 0) ? makeTrigger(trigFrame, held) : SignalBlock{held ? 1.f : 0.f};
+        SignalBlock x = phasor();
+        SignalBlock y = follower(x, trig);
+        
+        for (int i = 0; i < (int)kFramesPerBlock; ++i)
+        {
+          if (block == 0 && i == trigFrame)
+          {
+            REQUIRE(y[i] == 0.f);
+            expectedOffset = x[i];
+          }
+          
+          REQUIRE(y[i] >= 0.f);
+          REQUIRE(y[i] < 1.f);
+          REQUIRE(phaseDistance(fracPart(x[i] - y[i]), expectedOffset) < kFollowerEps);
+        }
+      }
+    }
+  }
+  
+  SECTION("float4 lanes triggered on different frames match float")
+  {
+    const std::array<int, 4> trigFrames{5, 20, 41, -1};
+    
+    PhasorGen<float> phasor(kFollowerTestFreq);
+    PhasorFollower<float4> follower4;
+    std::array<PhasorFollower<float>, 4> followers;
+    
+    for (int block = 0; block < kFollowerTestBlocks; ++block)
+    {
+      SignalBlock x = phasor();
+      
+      std::array<SignalBlock, 4> trigs;
+      Block<float4> x4;
+      Block<float4> trig4;
+      for (int lane = 0; lane < 4; ++lane)
+      {
+        trigs[lane] = (block == 0) ? makeTrigger(trigFrames[lane]) : SignalBlock{0.f};
+      }
+      for (int i = 0; i < (int)kFramesPerBlock; ++i)
+      {
+        x4[i] = float4(x[i]);
+        trig4[i] = float4(0.f);
+        for (int lane = 0; lane < 4; ++lane)
+        {
+          setFloat4Lane(trig4[i], lane, trigs[lane][i]);
+        }
+      }
+      
+      Block<float4> y4 = follower4(x4, trig4);
+      
+      for (int lane = 0; lane < 4; ++lane)
+      {
+        SignalBlock y = followers[lane](x, trigs[lane]);
+        for (int i = 0; i < (int)kFramesPerBlock; ++i)
+        {
+          float y4Lane = getFloat4Lane(y4[i], lane);
+          REQUIRE(y4Lane >= 0.f);
+          REQUIRE(phaseDistance(y4Lane, y[i]) < kFollowerEps);
+        }
+      }
+    }
+  }
+}

@@ -15,7 +15,6 @@ namespace ml
 template<typename T, typename Derived>
 struct Gen
 {
-  
   Gen() = default;
 
   // Block processing with signal-rate params (one Params per frame)
@@ -58,7 +57,6 @@ struct Gen
     }
     return output;
   }
-  
   
   // Block processing with coefficient interpolation — list of float arguments
   template<typename... Args,
@@ -467,7 +465,7 @@ struct NoiseGen : Gen0<T, NoiseGen<T>>
 };
 
 // ----------------------------------------------------------------
-// PhasorGen: naive (not antialiased) sawtooth / phase ramp on (0, 1).
+// PhasorGen: naive (not antialiased) sawtooth / phase ramp on [0, 1).
 
 template<typename T>
 struct PhasorGen : Gen<T, PhasorGen<T>>
@@ -480,12 +478,12 @@ struct PhasorGen : Gen<T, PhasorGen<T>>
   
   Coeffs coeffs{};
   T omega_{0.f};
-
+  
   PhasorGen() = default;
   PhasorGen(T freq) { coeffs = makeCoeffs(Params{freq}); }
-
+  
   void clear() { omega_ = T{0.f}; }
-
+  
   // just copying param to get the coefficient, needed for template compatibility
   static Coeffs makeCoeffs(Params p) { return Coeffs(p); }
   
