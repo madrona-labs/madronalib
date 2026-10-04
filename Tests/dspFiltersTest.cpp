@@ -13,8 +13,6 @@
 
 #include "ffft/FFTRealFixLen.h"
 
-#include <sstream>
-
 using namespace ml;
 
 // TEMP these tests assume kFramesPerBlock = 64 - revisit
@@ -1109,38 +1107,19 @@ TEST_CASE("madronalib/filters/phasor_follower", "[filters]")
       for (int i = 0; i < (int)kFramesPerBlock; ++i)
       {
         x4[i] = float4(x[i]);
-        trig4[i] = float4(0.f);
-        for (int lane = 0; lane < 4; ++lane)
-        {
-          setFloat4Lane(trig4[i], lane, trigs[lane][i]);
-        }
+        trig4[i] = float4(trigs[0][i], trigs[1][i], trigs[2][i], trigs[3][i]);
       }
       
       Block<float4> y4 = follower4(x4, trig4);
       
-      std::array<SignalBlock, 4> ys;
       for (int lane = 0; lane < 4; ++lane)
       {
-        ys[lane] = followers[lane](x, trigs[lane]);
-      }
-      
-      for (int lane = 0; lane < 4; ++lane)
-      {
+        SignalBlock y = followers[lane](x, trigs[lane]);
         for (int i = 0; i < (int)kFramesPerBlock; ++i)
         {
           float y4Lane = getFloat4Lane(y4[i], lane);
-          if (!(y4Lane >= 0.f) || !(phaseDistance(y4Lane, ys[lane][i]) < kFollowerEps))
-          {
-            // TEMP diagnostic dump for CI
-            std::ostringstream dump;
-            dump << "mismatch at block " << block << " lane " << lane << " frame " << i << "\n";
-            for (int j = 0; j <= std::min(i + 2, (int)kFramesPerBlock - 1); ++j)
-            {
-              dump << j << ": x " << x[j] << " trig4 " << trig4[j] << " y4 " << y4[j] << " y [";
-              for (int l = 0; l < 4; ++l) dump << ys[l][j] << (l < 3 ? ", " : "]\n");
-            }
-            FAIL(dump.str());
-          }
+          REQUIRE(y4Lane >= 0.f);
+          REQUIRE(phaseDistance(y4Lane, y[i]) < kFollowerEps);
         }
       }
     }
