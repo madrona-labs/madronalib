@@ -21,13 +21,8 @@ namespace ml
 
 // Filter cutoffs are set by omega = frequency / sample rate, so a host running
 // at a low sample rate can easily ask for a cutoff above Nyquist. The
-// coefficient math below is only valid for omega < 0.5. Past that the tan()
-// warp used by the shelf and bell filters turns negative, which puts the SVF
-// poles outside the unit circle and makes the state diverge until it
-// overflows to infinity; the sin() form divides by (2 + k*sin(2*pi*omega)),
-// which reaches zero once sin() goes negative. Clamping omega keeps every
-// filter stable whatever rate we are handed. LadderFilter applies its own,
-// tighter bound.
+// coefficient math below is only valid for omega < 0.5. Clamping omega keeps every
+// filter stable whatever rate we are handed.
 constexpr float kOmegaMin{0.00001f};
 constexpr float kOmegaMax{0.49f};
 
@@ -36,7 +31,6 @@ inline T clampOmega(T omega)
 {
   return clamp(omega, T{kOmegaMin}, T{kOmegaMax});
 }
-
 
 template<typename T, typename Derived>
 struct Filter
@@ -121,6 +115,18 @@ struct Filter
     for (size_t t = 0; t < kFramesPerBlock; ++t)
     {
       output[t] = self.nextFrame(input[t], self.coeffs);
+    }
+    return output;
+  }
+
+  // Block processing with two inputs, constant stored coefficients
+  Block<T> operator()(const Block<T>& input, const Block<T>& input2)
+  {
+    auto& self = *static_cast<Derived*>(this);
+    Block<T> output;
+    for (size_t t = 0; t < kFramesPerBlock; ++t)
+    {
+      output[t] = self.nextFrame(input[t], input2[t], self.coeffs);
     }
     return output;
   }
@@ -713,5 +719,61 @@ struct PinkFilter
     return output;
   }
 };
+
+
+// ----------------------------------------------------------------
+// PhasorFollower: follows a phase ramp on [0, 1) with an output ramp on [0, 1),
+// with a phase offset.
+// when the trig input goes high, the phase of the output is reset to 0: the
+// output is exactly 0 on the frame of the rising edge.
+
+template<typename T>
+struct PhasorFollower : Filter<T, PhasorFollower<T>>
+{
+  enum { nParams = 0 };
+  enum { nCoeffs = 0 };
+  
+  using Params = std::array<T, nParams>;
+  using Coeffs = std::array<T, nCoeffs>;
+  
+  Coeffs coeffs{};
+  T xm1_{0.f};
+  T trigm1_{0.f};
+  T omega_{0.f};
+
+  PhasorFollower() = default;
+  
+  void clear()
+  {
+    xm1_ = T{0.f};
+    trigm1_ = T{0.f};
+    omega_ = T{0.f};
+  }
+    
+  T nextFrame(T x, T trig, Coeffs c)
+  {
+    const T trigLevel{0.5f};
+    T dx = x - xm1_;
+    T next = fracPart(omega_ + dx);
+    
+    if constexpr (std::is_same_v<T, float>)
+    {
+      bool doReset = (trig > trigLevel) && (trigm1_ <= trigLevel);
+      omega_ = doReset ? 0.f : next;
+    }
+    else
+    {
+      // fracPart(float4) truncates, so wrap negative lanes back into [0, 1)
+      next = next + andBits(next < T{0.f}, T{1.f});
+      T resetMask = andBits(trig > trigLevel, trigm1_ <= trigLevel);
+      omega_ = select(T{0.f}, next, resetMask);
+    }
+    
+    xm1_ = x;
+    trigm1_ = trig;
+    return omega_;
+  }
+};
+
 }  // namespace ml
 

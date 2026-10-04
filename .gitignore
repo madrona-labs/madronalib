@@ -215,6 +215,7 @@ cmake-build-*
 
 # Claude
 claude/
+.claude/
 # per-developer overrides; .claude/settings.json is shared and tracked
 .claude/settings.local.json
 
