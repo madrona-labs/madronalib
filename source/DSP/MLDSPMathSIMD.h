@@ -44,6 +44,17 @@ inline float4 fracPart(float4 val) {
   return val - intPart(val);
 }
 
+// floor for float4. intPart() truncates toward zero; this rounds toward -inf like floorf.
+inline float4 floor(float4 x) {
+  float4 t = intPart(x);
+  return t - andBits(x < t, float4{1.f});
+}
+
+// a mod b on [0, b) for b > 0, matching ml::modulo(float, float).
+inline float4 modulo(float4 a, float4 b) {
+  return a - b * floor(a / b);
+}
+
 // ----------------------------------------------------------------
 // int4 utilities with scalar equivalents
 

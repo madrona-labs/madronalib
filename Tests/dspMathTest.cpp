@@ -276,6 +276,34 @@ TEST_CASE("madronalib/dsp_math/math_functions", "[dsp_math]")
 // Logical operations tests
 // ================================================================
 
+TEST_CASE("madronalib/dsp_math/float4_floor_modulo", "[dsp_math]")
+{
+  SECTION("floor rounds toward -inf, unlike intPart")
+  {
+    float4 x(-2.5f, -1.0f, -0.3f, 3.999f);
+    REQUIRE(eq(floor(x), float4(-3.0f, -1.0f, -1.0f, 3.0f)));
+    REQUIRE(eq(intPart(x), float4(-2.0f, -1.0f, 0.0f, 3.0f)));
+    float4 y(0.0f, 0.7f, 16.0f, -16.0f);
+    REQUIRE(eq(floor(y), float4(0.0f, 0.0f, 16.0f, -16.0f)));
+    for (int i = 0; i < 4; ++i)
+    {
+      REQUIRE(getFloat4Lane(floor(x), i) == floorf(getFloat4Lane(x, i)));
+    }
+  }
+
+  SECTION("modulo matches the scalar version and lands in [0, b)")
+  {
+    float4 a(-8.0f, -0.5f, 4.0f, 7.5f);
+    float4 b(4.0f, 4.0f, 4.0f, 3.0f);
+    float4 r = modulo(a, b);
+    REQUIRE(eq(r, float4(0.0f, 3.5f, 0.0f, 1.5f)));
+    for (int i = 0; i < 4; ++i)
+    {
+      REQUIRE(getFloat4Lane(r, i) == modulo(getFloat4Lane(a, i), getFloat4Lane(b, i)));
+    }
+  }
+}
+
 TEST_CASE("madronalib/dsp_math/float4_logical", "[dsp_math]")
 {
   int4 ia(0x0F0F0F0F);
