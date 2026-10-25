@@ -36,30 +36,45 @@ enum VoiceOutputSignals
   kNumVoiceOutputRows
 };
 
-// Control-rate voice outputs. See ControlBlock in MLDSPOps.h.
+// Control-rate voice outputs: one float per voice per row per block. See
+// "Control-rate signals" in MLDSPOps.h for the value and gate conventions.
 //
-// A ControlRow is one output (pitch, gate, ...) for all voices of one channel:
-// row[v] is voice v's (start, end) pair for the current block. Pairs are interleaved
-// so a consumer finds a voice's complete pair at one address.
+// The control-rate rows differ from the audio-rate VoiceOutputSignals in one way: the
+// audio-rate kGate row carries gate * velocity, while here the gate is a pure
+// transition code and the velocity is its own row. That makes the gate sample
+// accurate in one float and gives 10 rows.
 //
-// VoiceControls holds every row for one channel. It has the 9 VoiceOutputSignals rows
-// plus one reserved row, making 10, a round number that keeps address arithmetic easy
-// for consumers that lay these out in memory. The audio-rate output count
-// (kNumVoiceOutputRows) is unchanged. These are plain data with a fixed layout so
-// they can be copied as bytes across library boundaries.
+// A ControlRow is one row for all voices of one channel: row[v] is voice v's value,
+// 16 floats. VoiceControls holds every row for one channel. These are plain data with
+// a fixed layout so they can be copied as bytes across library boundaries. The
+// audio-rate outputs are unchanged.
+
+enum ControlSignals
+{
+  kCtlPitch = 0,     // 1.0 per octave
+  kCtlGate,          // transition code: 0 none, +(k+1) rises at frame k, -(k+1) falls at k
+  kCtlVelocity,      // onset velocity, valid from the gate rise on
+  kCtlVoice,         // which number voice is it?
+  kCtlZ,             // modulation signals z, x, y, mod
+  kCtlX,
+  kCtlY,
+  kCtlMod,
+  kCtlElapsedTime,   // time in seconds since note-on
+  kCtlBend,          // the pitch bend amount already included in kCtlPitch
+  kNumControlRows
+};
 
 constexpr size_t kNumControlVoices = 16;
-constexpr size_t kNumControlRows = 10;
 
-using ControlRow = std::array<ControlBlock, kNumControlVoices>;
+using ControlRow = std::array<float, kNumControlVoices>;
 
 struct VoiceControls
 {
   std::array<ControlRow, kNumControlRows> rows;
 };
 
-static_assert(kNumControlRows > kNumVoiceOutputRows, "VoiceControls must hold every output row");
-static_assert(sizeof(ControlRow) == 4 * kNumControlVoices * sizeof(float), "ControlRow must be packed");
+static_assert(kNumControlRows == 10, "ten control rows keep address arithmetic simple");
+static_assert(sizeof(ControlRow) == kNumControlVoices * sizeof(float), "ControlRow must be packed");
 static_assert(sizeof(VoiceControls) == kNumControlRows * sizeof(ControlRow), "VoiceControls must be packed");
 static_assert(std::is_trivially_copyable<VoiceControls>::value, "VoiceControls must be memcpy-able");
 
@@ -199,10 +214,10 @@ class EventsToSignals final
     int pitchGlideTimeInSamples{0};
     bool inhibitPitchGlide{0};
 
-    // frame of a note-on / retrigger or a note-off in the current block, or -1 if none.
-    // Reset by beginProcess(). The control-rate outputs step at these frames.
-    int noteOnFrame{-1};
-    int noteOffFrame{-1};
+    // the gate level a control-rate consumer holds after the most recent block, i.e.
+    // the level after the transition most recently encoded in the control-rate gate
+    // row. Used to detect a transition at frame 0 of the next block.
+    bool controlGateHigh{false};
 
     // drift generates a wandering signal on [0, 1] then is scaled and added to pitch
     // TODO encapsulate this as DrunkenWalkGen
@@ -240,7 +255,7 @@ class EventsToSignals final
 
   // get the control-rate outputs of all voices for the block most recently made by
   // makeSignalBlock(). Voice v here is the same voice as getVoice(v). Voices beyond the
-  // current polyphony are zero.
+  // current polyphony are zero. See ControlSignals for the rows.
   const VoiceControls& getVoiceControls() const { return voiceControls_; }
 
   const SmoothedController& getController(size_t n) const { return controllers[n]; }

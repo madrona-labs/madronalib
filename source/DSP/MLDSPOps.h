@@ -1077,50 +1077,51 @@ inline SignalBlock interpolateBlockLinear(float start, float end)
 }
 
 // ----------------------------------------------------------------
-// ControlBlock: one block's worth of a control-rate signal.
+// Control-rate signals.
 //
-// A SignalBlock holds kFramesPerBlock audio-rate values. A ControlBlock describes a
-// control-rate value over the same block, in one float4 of plain data. Each
-// ControlBlock is a complete description of its block, so a consumer needs no memory
-// of previous blocks. The producer decides what happens within the block:
+// A SignalBlock holds kFramesPerBlock audio-rate values. A control-rate signal has one
+// float per block. For a continuous value that float is the value at the end of the
+// block; a consumer that wants audio rate ramps to it from the previous value it saw,
+// which it keeps as its own state (see interpolateBlockLinear(start, end) above).
 //
-//   ramp: the value moves linearly from start to end, landing on end at the last
-//         frame so successive blocks continue without a repeated sample.
-//   step: the value is start for frames [0, offset) and end from frame offset on.
-//         This gives sample-accurate steps, one per block.
-//
-// All four fields are floats so the struct is exactly one float4 and can live in
-// float buffers without reinterpretation. Small integers are exact in float.
+// A control-rate gate is one float encoding at most one transition per block:
+//   0       no transition: the gate keeps its previous level
+//   +(k+1)  rises to high at frame k
+//   -(k+1)  falls to low at frame k
+// The offset is a small integer stored exactly in the float, so the encoding does not
+// depend on the block size. A consumer keeps the gate level as its state. If two edges
+// fall in one block the producer encodes the first; the next block then begins with
+// the corrected level at frame 0, so a retriggered note's onset is delayed by less
+// than one block.
 
-struct ControlBlock
+constexpr float kNoGateTransition = 0.f;
+
+inline float encodeGateTransition(bool risesToHigh, size_t frame)
 {
-  static constexpr float kRamp = 0.f;
-  static constexpr float kStep = 1.f;
+  return (risesToHigh ? 1.f : -1.f) * static_cast<float>(frame + 1);
+}
 
-  float start{0.f};   // value at frame 0, or before the step
-  float end{0.f};     // value at the last frame, or after the step
-  float offset{0.f};  // step frame, 0..kFramesPerBlock-1. unused for a ramp
-  float kind{kRamp};  // kRamp or kStep
+inline bool gateHasTransition(float g) { return g != kNoGateTransition; }
+inline bool gateLevelAfter(float g, bool levelBefore) { return gateHasTransition(g) ? (g > 0.f) : levelBefore; }
 
-  static ControlBlock ramp(float start, float end) { return {start, end, 0.f, kRamp}; }
-  static ControlBlock step(float before, float after, size_t offsetFrames)
+// frame of the transition. Only meaningful when gateHasTransition(g).
+inline size_t gateFrame(float g) { return static_cast<size_t>(std::fabs(g)) - 1; }
+
+// expand a control-rate gate to a 0/1 audio-rate block, given the gate level before
+// this block. Returns the level after the block.
+inline bool expandGate(float g, bool levelBefore, SignalBlock& out)
+{
+  if (!gateHasTransition(g))
   {
-    return {before, after, static_cast<float>(offsetFrames), kStep};
+    out = SignalBlock(levelBefore ? 1.f : 0.f);
+    return levelBefore;
   }
-
-  bool isStep() const { return kind != kRamp; }
-};
-
-static_assert(sizeof(ControlBlock) == 4 * sizeof(float), "ControlBlock must be one float4");
-
-// expand a ControlBlock to audio rate.
-inline SignalBlock interpolateBlockLinear(const ControlBlock& c)
-{
-  if (!c.isStep()) return interpolateBlockLinear(c.start, c.end);
-  SignalBlock s(c.end);
-  const size_t offset = std::min(static_cast<size_t>(std::max(c.offset, 0.f)), kFramesPerBlock);
-  for (size_t i = 0; i < offset; ++i) s[i] = c.start;
-  return s;
+  const bool after = (g > 0.f);
+  const size_t frame = std::min(gateFrame(g), kFramesPerBlock);
+  const float before = after ? 0.f : 1.f;
+  out = SignalBlock(after ? 1.f : 0.f);
+  for (size_t i = 0; i < frame; ++i) out[i] = before;
+  return after;
 }
 
 // ----------------------------------------------------------------
