@@ -1077,6 +1077,53 @@ inline SignalBlock interpolateBlockLinear(float start, float end)
 }
 
 // ----------------------------------------------------------------
+// ControlBlock: one block's worth of a control-rate signal.
+//
+// A SignalBlock holds kFramesPerBlock audio-rate values. A ControlBlock describes a
+// control-rate value over the same block, in one float4 of plain data. Each
+// ControlBlock is a complete description of its block, so a consumer needs no memory
+// of previous blocks. The producer decides what happens within the block:
+//
+//   ramp: the value moves linearly from start to end, landing on end at the last
+//         frame so successive blocks continue without a repeated sample.
+//   step: the value is start for frames [0, offset) and end from frame offset on.
+//         This gives sample-accurate steps, one per block.
+//
+// All four fields are floats so the struct is exactly one float4 and can live in
+// float buffers without reinterpretation. Small integers are exact in float.
+
+struct ControlBlock
+{
+  static constexpr float kRamp = 0.f;
+  static constexpr float kStep = 1.f;
+
+  float start{0.f};   // value at frame 0, or before the step
+  float end{0.f};     // value at the last frame, or after the step
+  float offset{0.f};  // step frame, 0..kFramesPerBlock-1. unused for a ramp
+  float kind{kRamp};  // kRamp or kStep
+
+  static ControlBlock ramp(float start, float end) { return {start, end, 0.f, kRamp}; }
+  static ControlBlock step(float before, float after, size_t offsetFrames)
+  {
+    return {before, after, static_cast<float>(offsetFrames), kStep};
+  }
+
+  bool isStep() const { return kind != kRamp; }
+};
+
+static_assert(sizeof(ControlBlock) == 4 * sizeof(float), "ControlBlock must be one float4");
+
+// expand a ControlBlock to audio rate.
+inline SignalBlock interpolateBlockLinear(const ControlBlock& c)
+{
+  if (!c.isStep()) return interpolateBlockLinear(c.start, c.end);
+  SignalBlock s(c.end);
+  const size_t offset = std::min(static_cast<size_t>(std::max(c.offset, 0.f)), kFramesPerBlock);
+  for (size_t i = 0; i < offset; ++i) s[i] = c.start;
+  return s;
+}
+
+// ----------------------------------------------------------------
 // float4 range array construction helpers
 
 inline float4 columnToFloat4Fn(size_t i) { return float4(i); }

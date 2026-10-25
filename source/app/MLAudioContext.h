@@ -73,7 +73,8 @@ class AudioContext final
 
   // Optional veto on note-ons, asked before the event reaches a voice: return true to
   // drop it. Set once from the audio thread with a plain function so no allocation is
-  // involved; nullptr removes it. Note-offs and all other events always pass.
+  // involved; nullptr removes it. Note-offs and all other events always pass. It's currently
+  // used with MTS-ESP to prevent unmapped keys from generating notes.
   using NoteOnFilterFn = bool (*)(void* context, const Event& e);
   void setNoteOnFilter(NoteOnFilterFn fn, void* context)
   {
@@ -107,7 +108,12 @@ class AudioContext final
   //
   // get input voice v of event channel c
   const EventsToSignals::Voice& getInputVoice(int n, int c = 0) const;
-  
+
+  // get the control-rate outputs of all voices of event channel c. See VoiceControls.
+  const VoiceControls& getInputVoiceControls(int c = 0) const { return eventsToSignals_[c].getVoiceControls(); }
+
+  size_t getNumEventChannels() const { return eventsToSignals_.size(); }
+
   // get input controller value
   SignalBlock getInputController(size_t n, int channel = 0) const;
 

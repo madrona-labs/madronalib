@@ -120,6 +120,8 @@ void EventsToSignals::Voice::beginProcess()
   }
 
   nextFrameToProcess = 0;
+  noteOnFrame = -1;
+  noteOffFrame = -1;
   driftCounter += kFramesPerBlock;
 
   int driftIntervalSamples = (int)(sr * kDriftTimeSeconds);
@@ -187,6 +189,7 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       creatorChannel_ = e.channel;
       currentPitch = e.value1;
       currentVelocity = e.value2;
+      noteOnFrame = static_cast<int>(destTime);
       break;
     }
     case kNoteRetrig:
@@ -215,6 +218,7 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       creatorChannel_ = e.channel;
       currentPitch = e.value1;
       currentVelocity = e.value2;
+      noteOnFrame = static_cast<int>(destTime);
       break;
     }
     case kNoteSustain:
@@ -229,6 +233,7 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
 
       // set new values
       currentVelocity = 0.;
+      noteOffFrame = static_cast<int>(destTime);
       break;
     }
     default:
@@ -348,7 +353,77 @@ void EventsToSignals::clear()
     v.reset();
   }
 
+  voiceControls_ = VoiceControls{};
   lastFreeVoiceFound_ = 0;
+}
+
+// Derive the control-rate outputs from the finished audio-rate rows. While the
+// audio-rate path is on this is exact and needs no state: a row's value at frame 0
+// and at the last frame are read straight from the signal, and the event frames were
+// recorded by writeNoteEvent().
+//
+// Rows ramp from their first to their last frame, which stays continuous across
+// blocks to within one sample's worth of slope. Steps happen at events:
+//   - a note-on or retrigger steps every row at the event frame, so a fresh note is
+//     sample accurate and never sweeps from the voice's previous values. The one
+//     exception is a gliding pitch, which ramps as the glide dictates.
+//   - a note-off steps the gate row at the event frame. Other rows ramp.
+//   - the voice number row is discrete and always steps.
+// A note-on and a note-off in the same block keep the note-on step; the gate then
+// reaches zero in the following block.
+//
+// TODO: when audio-rate generation becomes optional, compute these directly from event
+// processing instead of reading them back from the signals.
+void EventsToSignals::writeVoiceControls()
+{
+  constexpr size_t last = kFramesPerBlock - 1;
+
+  for (size_t v = 0; v < kNumControlVoices; ++v)
+  {
+    // voices[0] is the MPE main voice; client voice v is voices[v + 1].
+    const bool active = (v < polyphony_) && (v + 1 < voices.size());
+    if (!active)
+    {
+      for (size_t r = 0; r < kNumControlRows; ++r) voiceControls_.rows[r][v] = ControlBlock{};
+      continue;
+    }
+
+    const Voice& voice = voices[v + 1];
+    const bool noteOn = voice.noteOnFrame >= 0;
+    const bool noteOff = voice.noteOffFrame >= 0;
+
+    // polyphonic note-ons always allow glide and rely on a zero glide time for an
+    // instant pitch, so a real glide needs both the permission and a nonzero time.
+    const bool gliding = noteOn && !voice.inhibitPitchGlide && (voice.pitchGlideTimeInSamples > 0);
+
+    for (size_t r = 0; r < kNumControlRows; ++r)
+    {
+      ControlBlock& c = voiceControls_.rows[r][v];
+      if (r >= kNumVoiceOutputRows)
+      {
+        c = ControlBlock{};
+        continue;
+      }
+      const float* row = voice.outputs.rowPtr(r);
+
+      if (noteOn && !(r == kPitch && gliding))
+      {
+        c = ControlBlock::step(row[0], row[last], static_cast<size_t>(voice.noteOnFrame));
+      }
+      else if (noteOff && r == kGate)
+      {
+        c = ControlBlock::step(row[0], row[last], static_cast<size_t>(voice.noteOffFrame));
+      }
+      else if (r == kVoice)
+      {
+        c = ControlBlock::step(row[last], row[last], 0);
+      }
+      else
+      {
+        c = ControlBlock::ramp(row[0], row[last]);
+      }
+    }
+  }
 }
 
 void EventsToSignals::resetTimes()
@@ -476,6 +551,8 @@ void EventsToSignals::makeSignalBlock()
       break;
     }
   }
+
+  writeVoiceControls();
 
   testCounter += kFramesPerBlock;
   const int samples = 48000*5;

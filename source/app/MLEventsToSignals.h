@@ -5,6 +5,9 @@
 
 #pragma once
 
+#include <array>
+#include <type_traits>
+
 #include "mldsp.h"
 #include "MLSymbol.h"
 #include "MLEvent.h"
@@ -15,18 +18,50 @@ namespace ml
 // rows per voice output signal.
 enum VoiceOutputSignals
 {
+  // 1.0 per octave
   kPitch = 0,
+  // gate * onset velocity
   kGate,
+  // which number voice is it?
   kVoice,
+  // modulation signals z, x, y, mod
   kZ,
   kX,
   kY,
   kMod,
+  // time in seconds since note-on
   kElapsedTime,
   // the pitch bend amount already included in kPitch, in the same units
   kBend,
   kNumVoiceOutputRows
 };
+
+// Control-rate voice outputs. See ControlBlock in MLDSPOps.h.
+//
+// A ControlRow is one output (pitch, gate, ...) for all voices of one channel:
+// row[v] is voice v's (start, end) pair for the current block. Pairs are interleaved
+// so a consumer finds a voice's complete pair at one address.
+//
+// VoiceControls holds every row for one channel. It has the 9 VoiceOutputSignals rows
+// plus one reserved row, making 10, a round number that keeps address arithmetic easy
+// for consumers that lay these out in memory. The audio-rate output count
+// (kNumVoiceOutputRows) is unchanged. These are plain data with a fixed layout so
+// they can be copied as bytes across library boundaries.
+
+constexpr size_t kNumControlVoices = 16;
+constexpr size_t kNumControlRows = 10;
+
+using ControlRow = std::array<ControlBlock, kNumControlVoices>;
+
+struct VoiceControls
+{
+  std::array<ControlRow, kNumControlRows> rows;
+};
+
+static_assert(kNumControlRows > kNumVoiceOutputRows, "VoiceControls must hold every output row");
+static_assert(sizeof(ControlRow) == 4 * kNumControlVoices * sizeof(float), "ControlRow must be packed");
+static_assert(sizeof(VoiceControls) == kNumControlRows * sizeof(ControlRow), "VoiceControls must be packed");
+static_assert(std::is_trivially_copyable<VoiceControls>::value, "VoiceControls must be memcpy-able");
 
 struct KeyState
 {
@@ -164,6 +199,11 @@ class EventsToSignals final
     int pitchGlideTimeInSamples{0};
     bool inhibitPitchGlide{0};
 
+    // frame of a note-on / retrigger or a note-off in the current block, or -1 if none.
+    // Reset by beginProcess(). The control-rate outputs step at these frames.
+    int noteOnFrame{-1};
+    int noteOffFrame{-1};
+
     // drift generates a wandering signal on [0, 1] then is scaled and added to pitch
     // TODO encapsulate this as DrunkenWalkGen
     RandomScalarSource driftSource;
@@ -198,6 +238,11 @@ class EventsToSignals final
   // get voice which had a note on event most recently, if any
   int getNewestVoice() const { return newestVoice_ - 1; }
 
+  // get the control-rate outputs of all voices for the block most recently made by
+  // makeSignalBlock(). Voice v here is the same voice as getVoice(v). Voices beyond the
+  // current polyphony are zero.
+  const VoiceControls& getVoiceControls() const { return voiceControls_; }
+
   const SmoothedController& getController(size_t n) const { return controllers[n]; }
 
  private:
@@ -225,6 +270,10 @@ class EventsToSignals final
 
   // output values for continuous controllers.
   std::vector<SmoothedController> controllers;
+
+  // control-rate copies of the voice outputs, rewritten at the end of makeSignalBlock().
+  VoiceControls voiceControls_;
+  void writeVoiceControls();
 
   Symbol protocol_{"MIDI"};
 
