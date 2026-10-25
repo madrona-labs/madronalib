@@ -68,6 +68,13 @@ constexpr size_t kNumControlVoices = 16;
 
 using ControlRow = std::array<float, kNumControlVoices>;
 
+// Control-rate controller values: the most recent raw value of each of 128 continuous
+// controllers for one channel, updated when a controller event arrives and otherwise
+// untouched, so there is no per-block cost. Smoothing is the consumer's job. Channel
+// pressure is not in this table; it is added to the z voice row as before.
+constexpr size_t kNumControllerValues = 128;
+using ControllerValues = std::array<float, kNumControllerValues>;
+
 struct VoiceControls
 {
   std::array<ControlRow, kNumControlRows> rows;
@@ -258,6 +265,9 @@ class EventsToSignals final
   // current polyphony are zero. See ControlSignals for the rows.
   const VoiceControls& getVoiceControls() const { return voiceControls_; }
 
+  // get the raw control-rate values of the 128 continuous controllers.
+  const ControllerValues& getControllerValues() const { return controllerValues_; }
+
   const SmoothedController& getController(size_t n) const { return controllers[n]; }
 
  private:
@@ -289,6 +299,9 @@ class EventsToSignals final
   // control-rate copies of the voice outputs, rewritten at the end of makeSignalBlock().
   VoiceControls voiceControls_;
   void writeVoiceControls();
+
+  // raw controller values, written as controller events arrive.
+  ControllerValues controllerValues_{};
 
   Symbol protocol_{"MIDI"};
 

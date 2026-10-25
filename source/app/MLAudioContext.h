@@ -112,6 +112,9 @@ class AudioContext final
   // get the control-rate outputs of all voices of event channel c. See VoiceControls.
   const VoiceControls& getInputVoiceControls(int c = 0) const { return eventsToSignals_[c].getVoiceControls(); }
 
+  // get the raw control-rate controller values of event channel c. See ControllerValues.
+  const ControllerValues& getInputControllerValues(int c = 0) const { return eventsToSignals_[c].getControllerValues(); }
+
   size_t getNumEventChannels() const { return eventsToSignals_.size(); }
 
   // get input controller value

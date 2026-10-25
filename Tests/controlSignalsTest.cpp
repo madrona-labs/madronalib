@@ -45,7 +45,62 @@ Event pitchBend(float amount)
   e.value1 = amount;
   return e;
 }
+
+Event controller(int number, float value, int time = 0)
+{
+  Event e;
+  e.type = kController;
+  e.channel = 1;
+  e.sourceIdx = number;
+  e.time = time;
+  e.value1 = value;
+  return e;
+}
+
+Event channelPressure(float value)
+{
+  Event e;
+  e.type = kChannelPressure;
+  e.channel = 1;
+  e.value1 = value;
+  return e;
+}
 }  // namespace
+
+TEST_CASE("madronalib/core/events/controller-values", "[control]")
+{
+  EventsToSignals e2s;
+  e2s.setSampleRate(48000);
+  e2s.setPolyphony(2);
+
+  REQUIRE(kNumControllerValues == 128);
+  REQUIRE(sizeof(ControllerValues) == 128 * sizeof(float));
+
+  // nothing yet
+  for (float v : e2s.getControllerValues()) REQUIRE(v == 0.f);
+
+  // a controller event sets its slot and nothing else, and the value persists
+  e2s.addEvent(controller(1, 0.5f));
+  e2s.addEvent(controller(74, 0.25f, 9));
+  e2s.makeSignalBlock();
+  REQUIRE(e2s.getControllerValues()[1] == 0.5f);
+  REQUIRE(e2s.getControllerValues()[74] == 0.25f);
+  REQUIRE(e2s.getControllerValues()[2] == 0.f);
+  e2s.makeSignalBlock();
+  REQUIRE(e2s.getControllerValues()[1] == 0.5f);
+
+  // channel pressure does not land in the table
+  e2s.addEvent(channelPressure(0.9f));
+  e2s.makeSignalBlock();
+  for (size_t i = 0; i < kNumControllerValues; ++i)
+  {
+    if (i != 1 && i != 74) REQUIRE(e2s.getControllerValues()[i] == 0.f);
+  }
+
+  // clear() resets the table
+  e2s.clear();
+  REQUIRE(e2s.getControllerValues()[1] == 0.f);
+}
 
 TEST_CASE("madronalib/core/dsp/gate-transition", "[control]")
 {

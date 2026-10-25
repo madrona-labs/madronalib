@@ -350,6 +350,7 @@ void EventsToSignals::clear()
   }
 
   voiceControls_ = VoiceControls{};
+  controllerValues_.fill(0.f);
   lastFreeVoiceFound_ = 0;
 }
 
@@ -881,6 +882,7 @@ void EventsToSignals::processControllerEvent(const Event& event)
   // store values directly into array so they can be read by clients
   size_t ctrl = clamp(size_t(event.sourceIdx), (size_t)0, kNumControllers - 1);
   controllers[ctrl].inputValue = val;
+  if (ctrl < kNumControllerValues) controllerValues_[ctrl] = val;
 
   // handle special meanings for some MIDI controllers
   if (ctrl == 120)
