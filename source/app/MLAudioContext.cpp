@@ -15,7 +15,7 @@ namespace ml
 // host. In an app, this can be called only when there are time / rate changes.
 
 void AudioContext::ProcessTime::setTimeAndRate(const double ppqPos, const double bpmIn,
-                                               bool isPlaying, double sampleRateIn)
+                                               bool isPlaying)
 {
   // working around a bug I can't reproduce, so I'm covering all the bases.
   if (((ml::isNaN(ppqPos)) || (ml::isInfinite(ppqPos))) ||
@@ -25,7 +25,6 @@ void AudioContext::ProcessTime::setTimeAndRate(const double ppqPos, const double
     return;
   }
 
-  sampleRate = sampleRateIn;
   bpm = bpmIn;
   bool active = (ppqPos1_ != ppqPos) && isPlaying;
   bool justStarted = isPlaying && !playing1_;
@@ -139,10 +138,9 @@ void AudioContext::resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFram
   eventsToSignals_.resize(nEventChannels);
 }
 
-void AudioContext::updateTime(const double ppqPos, const double bpmIn, bool isPlaying,
-                              double sampleRateIn)
+void AudioContext::updateTime(const double ppqPos, const double bpmIn, bool isPlaying)
 {
-  currentTime.setTimeAndRate(ppqPos, bpmIn, isPlaying, sampleRateIn);
+  currentTime.setTimeAndRate(ppqPos, bpmIn, isPlaying);
 }
 
 void AudioContext::clear()

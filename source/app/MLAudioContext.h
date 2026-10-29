@@ -32,8 +32,7 @@ class AudioContext final
     ~ProcessTime() = default;
 
     // Set the time and bpm. The time refers to the start of the current engine processing block.
-    void setTimeAndRate(const double ppqPos, const double bpmIn, bool isPlaying,
-                        double sampleRateIn);
+    void setTimeAndRate(const double ppqPos, const double bpmIn, bool isPlaying);
 
     // clear state
     void clear();
@@ -68,7 +67,7 @@ class AudioContext final
   // default is one event channel -this lets existing code work after adding multiple channels
   void resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames, size_t nEventChannels = 1);
 
-  void updateTime(const double ppqPos, const double bpmIn, bool isPlaying, double sampleRateIn);
+  void updateTime(const double ppqPos, const double bpmIn, bool isPlaying);
   SignalBlock getBeatPhase() { return currentTime.quarterNotesPhase_; }
 
   // Optional veto on note-ons, asked before the event reaches a voice: return true to
