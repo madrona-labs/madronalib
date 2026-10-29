@@ -73,30 +73,30 @@ void study1Process(AudioContext* ctx, Study1* state)
 
 int main()
 {
+  // start the Timers. call this once in an application.
+  bool deferToMainThread = false;
+  SharedResourcePointer<ml::Timers> t;
+  t->start(deferToMainThread);
+
   Study1 state;
   AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask study1Task(&ctx, study1Process, &state);
   state.init(ctx.getSampleRate());
-  
-  // very simple background thread for reading signals from SignalProcessor
-  std::thread ticker([&]() {
-    while (!study1Task.hasQuit())
+
+  // read published signals from the SignalProcessor once a second, on the Timers
+  // thread rather than the audio thread.
+  Timer ticker;
+  ticker.start([&]() {
+    SignalBlock osc1Sig;
+    auto& signals = state.getPublishedSignals();
+    auto framesAvailable = signals["osc"]->getReadAvailable();
+    if(framesAvailable > kFramesPerBlock)
     {
-      SignalBlock osc1Sig;
-      auto& signals = state.getPublishedSignals();
-      auto framesAvailable = signals["osc"]->getReadAvailable();
-      if(framesAvailable > kFramesPerBlock)
-      {
-        auto& buf = signals["osc"]->buffer_;
-        buf.read(osc1Sig.data(), kFramesPerBlock);
-        std::cout << sparkline(osc1Sig) << "\n";
-      }
-      
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+      auto& buf = signals["osc"]->buffer_;
+      buf.read(osc1Sig.data(), kFramesPerBlock);
+      std::cout << sparkline(osc1Sig) << "\n";
     }
-  });
-  
-  auto result = study1Task.runConsoleApp();
-  ticker.join();
-  return result;
+  }, milliseconds(1000));
+
+  return study1Task.runConsoleApp();
 }
