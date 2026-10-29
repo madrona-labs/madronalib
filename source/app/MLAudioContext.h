@@ -4,8 +4,11 @@
 
 #pragma once
 
+#include <memory>
+
 #include "MLDSPOps.h"
 #include "MLEventsToSignals.h"
+#include "MLQueue.h"
 
 using namespace ml;
 namespace ml
@@ -86,7 +89,17 @@ class AudioContext final
   size_t getInputPolyphony(int chan = 0) { return eventsToSignals_[chan].getPolyphony(); }
   
   void clearInputEvents(int chan = 0) { eventsToSignals_[chan].clearEvents(); }
+
+  // Add an event to event channel chan for the next block. Call only from the thread
+  // that calls process(): a plugin adds its host's events this way before processing.
   void addInputEvent(const Event& e, int chan = 0);
+
+  // Post an event to event channel chan from another thread, such as a MIDI input
+  // callback. Events wait in a lock-free queue and process() moves them into the
+  // channel before its first block, where they take effect at frame 0. One posting
+  // thread per channel (the queue is single-producer). Returns false if the queue
+  // was full and the event was dropped.
+  bool postInputEvent(const Event& e, int chan = 0);
 
   void setInputPitchBend(float p, int chan = 0) { eventsToSignals_[chan].setPitchBendInSemitones(p); }
   void setInputMPEPitchBend(float p, int chan = 0) { eventsToSignals_[chan].setMPEPitchBendInSemitones(p); }
@@ -127,6 +140,13 @@ class AudioContext final
   ProcessTime currentTime;
   
   std::vector< ml::EventsToSignals > eventsToSignals_;
+
+  // events posted from other threads, one queue per event channel. Queues hold
+  // atomics so they live behind pointers; the vector is sized in resizeBuffers().
+  static constexpr size_t kPostedEventQueueSize{1024};
+  std::vector< std::unique_ptr< Queue< Event > > > postedEvents_;
+  void drainPostedEvents();
+
   NoteOnFilterFn noteOnFilter_{nullptr};
   void* noteOnFilterContext_{nullptr};
   
