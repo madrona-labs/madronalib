@@ -449,7 +449,10 @@ bool soonerThan(const Event& a, const Event& b)
 void EventsToSignals::addEvent(const Event& e)
 {
   awake_ = true;
-  auto it = std::lower_bound(eventBuffer_.begin(), eventBuffer_.end(), e, soonerThan);
+  // upper_bound inserts after any events that compare equal, so events with the same
+  // time and type keep their arrival order: the last controller value sent wins and
+  // simultaneous notes take voices in the order they were played.
+  auto it = std::upper_bound(eventBuffer_.begin(), eventBuffer_.end(), e, soonerThan);
   eventBuffer_.insert(it, e);
 }
 

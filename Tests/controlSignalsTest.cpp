@@ -279,3 +279,33 @@ TEST_CASE("madronalib/core/events/voice-controls", "[control]")
     REQUIRE(moved);
   }
 }
+
+// Events with the same time and type are processed in arrival order, so the last
+// of several controller values sent together is the one that stands. The type
+// ordering in the sort still keeps a note-off after a note-on at the same time
+// whichever arrived first.
+TEST_CASE("madronalib/core/events/same-time-events-keep-arrival-order", "[control]")
+{
+  EventsToSignals e2s;
+  e2s.setSampleRate(48000);
+  e2s.setPolyphony(1);
+
+  e2s.addEvent(controller(1, 0.1f));
+  e2s.addEvent(controller(1, 0.2f));
+  e2s.addEvent(controller(1, 0.3f));
+  e2s.makeSignalBlock();
+  REQUIRE(e2s.getControllerValues()[1] == Approx(0.3f));
+
+  // note-off arriving before the note-on it ends, both at frame 0: the off is still
+  // processed after the on, so the zero-length note leaves the voice free. Were the
+  // off processed first it would find no note, and the on would leave a stuck voice
+  // whose gate rises in the following block.
+  e2s.addEvent(noteOff(60));
+  e2s.addEvent(noteOn(60, 60.f, 0.5f));
+  const VoiceControls& vc = e2s.getVoiceControls();
+  for (int block = 0; block < 2; ++block)
+  {
+    e2s.makeSignalBlock();
+    REQUIRE_FALSE(gateHasTransition(vc.rows[kCtlGate][0]));
+  }
+}
