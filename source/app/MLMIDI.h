@@ -47,7 +47,9 @@ class MIDIInput
   std::unique_ptr<Impl> pImpl;
 };
 
-// convert a MIDI message into an Event for use with EventsToSignals.
+// convert a MIDI message into an Event for use with EventsToSignals. For note on
+// and off, value1 is the MIDI note number and value2 the velocity in [0, 1], the
+// same layout the plugin wrappers produce.
 Event MIDIMessageToEvent(const MIDIMessage& message);
 
 }  // namespace ml

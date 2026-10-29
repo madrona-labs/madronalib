@@ -126,6 +126,10 @@ float messagePitchBendValue(const MIDIMessage& m)
   return float(bothBytes - offset) * scale;
 }
 
+// Note events follow the convention EventsToSignals and the CLAP wrappers use:
+// sourceIdx and value1 are the MIDI note number, value2 is the velocity in [0, 1].
+// EventsToSignals writes value1 to the kPitch row as is, so consumers convert note
+// numbers to pitch themselves (Scale::noteToLogPitch).
 Event MIDIMessageToEvent(const MIDIMessage& m)
 {
   Event e;
@@ -137,14 +141,16 @@ Event MIDIMessageToEvent(const MIDIMessage& m)
     {
       e.type = kNoteOff;
       e.sourceIdx = messageByte2(m);
-      e.value1 = toValue(messageByte3(m));
+      e.value1 = static_cast<float>(messageByte2(m));  // note number
+      e.value2 = toValue(messageByte3(m));             // release velocity
       break;
     }
     case kMIDINoteOn:
     {
       e.type = kNoteOn;
       e.sourceIdx = messageByte2(m);
-      e.value1 = toValue(messageByte3(m));  // velocity
+      e.value1 = static_cast<float>(messageByte2(m));  // note number
+      e.value2 = toValue(messageByte3(m));             // velocity
       break;
     }
     case kMIDIPolyPressure:
