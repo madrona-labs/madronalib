@@ -5,6 +5,9 @@
 
 #pragma once
 
+#include <array>
+#include <type_traits>
+
 #include "mldsp.h"
 #include "MLSymbol.h"
 #include "MLEvent.h"
@@ -15,18 +18,72 @@ namespace ml
 // rows per voice output signal.
 enum VoiceOutputSignals
 {
+  // 1.0 per octave
   kPitch = 0,
+  // gate * onset velocity
   kGate,
+  // which number voice is it?
   kVoice,
+  // modulation signals z, x, y, mod
   kZ,
   kX,
   kY,
   kMod,
+  // time in seconds since note-on
   kElapsedTime,
   // the pitch bend amount already included in kPitch, in the same units
   kBend,
   kNumVoiceOutputRows
 };
+
+// Control-rate voice outputs: one float per voice per row per block. See
+// "Control-rate signals" in MLDSPOps.h for the value and gate conventions.
+//
+// The control-rate rows differ from the audio-rate VoiceOutputSignals in one way: the
+// audio-rate kGate row carries gate * velocity, while here the gate is a pure
+// transition code and the velocity is its own row. That makes the gate sample
+// accurate in one float and gives 10 rows.
+//
+// A ControlRow is one row for all voices of one channel: row[v] is voice v's value,
+// 16 floats. VoiceControls holds every row for one channel. These are plain data with
+// a fixed layout so they can be copied as bytes across library boundaries. The
+// audio-rate outputs are unchanged.
+
+enum ControlSignals
+{
+  kCtlPitch = 0,     // 1.0 per octave
+  kCtlGate,          // transition code: 0 none, +(k+1) rises at frame k, -(k+1) falls at k
+  kCtlVelocity,      // onset velocity, valid from the gate rise on
+  kCtlVoice,         // which number voice is it?
+  kCtlZ,             // modulation signals z, x, y, mod
+  kCtlX,
+  kCtlY,
+  kCtlMod,
+  kCtlElapsedTime,   // time in seconds since note-on
+  kCtlBend,          // the pitch bend amount already included in kCtlPitch
+  kNumControlRows
+};
+
+constexpr size_t kNumControlVoices = 16;
+
+using ControlRow = std::array<float, kNumControlVoices>;
+
+// Control-rate controller values: the most recent raw value of each of 128 continuous
+// controllers for one channel, updated when a controller event arrives and otherwise
+// untouched, so there is no per-block cost. Smoothing is the consumer's job. Channel
+// pressure is not in this table; it is added to the z voice row as before.
+constexpr size_t kNumControllerValues = 128;
+using ControllerValues = std::array<float, kNumControllerValues>;
+
+struct VoiceControls
+{
+  std::array<ControlRow, kNumControlRows> rows;
+};
+
+static_assert(kNumControlRows == 10, "ten control rows keep address arithmetic simple");
+static_assert(sizeof(ControlRow) == kNumControlVoices * sizeof(float), "ControlRow must be packed");
+static_assert(sizeof(VoiceControls) == kNumControlRows * sizeof(ControlRow), "VoiceControls must be packed");
+static_assert(std::is_trivially_copyable<VoiceControls>::value, "VoiceControls must be memcpy-able");
 
 struct KeyState
 {
@@ -165,6 +222,11 @@ class EventsToSignals final
     int pitchGlideTimeInSamples{0};
     bool inhibitPitchGlide{0};
 
+    // the gate level a control-rate consumer holds after the most recent block, i.e.
+    // the level after the transition most recently encoded in the control-rate gate
+    // row. Used to detect a transition at frame 0 of the next block.
+    bool controlGateHigh{false};
+
     // drift generates a wandering signal on [0, 1] then is scaled and added to pitch
     // TODO encapsulate this as DrunkenWalkGen
     RandomScalarSource driftSource;
@@ -199,6 +261,14 @@ class EventsToSignals final
   // get voice which had a note on event most recently, if any
   int getNewestVoice() const { return newestVoice_ - 1; }
 
+  // get the control-rate outputs of all voices for the block most recently made by
+  // makeSignalBlock(). Voice v here is the same voice as getVoice(v). Voices beyond the
+  // current polyphony are zero. See ControlSignals for the rows.
+  const VoiceControls& getVoiceControls() const { return voiceControls_; }
+
+  // get the raw control-rate values of the 128 continuous controllers.
+  const ControllerValues& getControllerValues() const { return controllerValues_; }
+
   const SmoothedController& getController(size_t n) const { return controllers[n]; }
 
  private:
@@ -226,6 +296,13 @@ class EventsToSignals final
 
   // output values for continuous controllers.
   std::vector<SmoothedController> controllers;
+
+  // control-rate copies of the voice outputs, rewritten at the end of makeSignalBlock().
+  VoiceControls voiceControls_;
+  void writeVoiceControls();
+
+  // raw controller values, written as controller events arrive.
+  ControllerValues controllerValues_{};
 
   Symbol protocol_{"MIDI"};
 

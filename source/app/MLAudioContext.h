@@ -32,8 +32,7 @@ class AudioContext final
     ~ProcessTime() = default;
 
     // Set the time and bpm. The time refers to the start of the current engine processing block.
-    void setTimeAndRate(const double ppqPos, const double bpmIn, bool isPlaying,
-                        double sampleRateIn);
+    void setTimeAndRate(const double ppqPos, const double bpmIn, bool isPlaying);
 
     // clear state
     void clear();
@@ -68,12 +67,13 @@ class AudioContext final
   // default is one event channel -this lets existing code work after adding multiple channels
   void resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFrames, size_t nEventChannels = 1);
 
-  void updateTime(const double ppqPos, const double bpmIn, bool isPlaying, double sampleRateIn);
+  void updateTime(const double ppqPos, const double bpmIn, bool isPlaying);
   SignalBlock getBeatPhase() { return currentTime.quarterNotesPhase_; }
 
   // Optional veto on note-ons, asked before the event reaches a voice: return true to
   // drop it. Set once from the audio thread with a plain function so no allocation is
-  // involved; nullptr removes it. Note-offs and all other events always pass.
+  // involved; nullptr removes it. Note-offs and all other events always pass. It's currently
+  // used with MTS-ESP to prevent unmapped keys from generating notes.
   using NoteOnFilterFn = bool (*)(void* context, const Event& e);
   void setNoteOnFilter(NoteOnFilterFn fn, void* context)
   {
@@ -107,7 +107,15 @@ class AudioContext final
   //
   // get input voice v of event channel c
   const EventsToSignals::Voice& getInputVoice(int n, int c = 0) const;
-  
+
+  // get the control-rate outputs of all voices of event channel c. See VoiceControls.
+  const VoiceControls& getInputVoiceControls(int c = 0) const { return eventsToSignals_[c].getVoiceControls(); }
+
+  // get the raw control-rate controller values of event channel c. See ControllerValues.
+  const ControllerValues& getInputControllerValues(int c = 0) const { return eventsToSignals_[c].getControllerValues(); }
+
+  size_t getNumEventChannels() const { return eventsToSignals_.size(); }
+
   // get input controller value
   SignalBlock getInputController(size_t n, int channel = 0) const;
 
