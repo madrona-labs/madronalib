@@ -2,6 +2,8 @@
 // Copyright (c) 2020-2022 Madrona Labs LLC. http://www.madronalabs.com
 // Distributed under the MIT license: http://madrona-labs.mit-license.org/
 
+#include <atomic>
+#include <thread>
 #include <vector>
 
 #include "catch.hpp"
@@ -199,4 +201,86 @@ TEST_CASE("madronalib/core/audiocontext/note_on_filter_drops_notes", "[audiocont
   runBlock(ctx, {noteEvent(kNoteOff, 62), noteEvent(kNoteOn, 60, 1)});
   REQUIRE(gateEnd(ctx, 0) > 0.f);
   REQUIRE(state.calls == 2);
+}
+
+namespace
+{
+Event noteOnEvent(int key, float velocity)
+{
+  Event e;
+  e.type = kNoteOn;
+  e.channel = 1;
+  e.sourceIdx = key;
+  e.value1 = (float)key;
+  e.value2 = velocity;
+  return e;
+}
+
+Event controllerEvent(int number, float value)
+{
+  Event e;
+  e.type = kController;
+  e.channel = 1;
+  e.sourceIdx = number;
+  e.value1 = value;
+  return e;
+}
+
+// run one block through the context with a process function that does nothing.
+void runOneBlock(AudioContext& ctx)
+{
+  std::vector<float> outL(kFramesPerBlock, 0.f), outR(kFramesPerBlock, 0.f);
+  float* outs[2] = {outL.data(), outR.data()};
+  ctx.process(nullptr, outs, kFramesPerBlock, [](AudioContext*) {});
+}
+}  // namespace
+
+// Events posted from another thread wait in a queue and join the channel at the
+// start of the next process() call, so they are heard in its first block.
+TEST_CASE("madronalib/core/audiocontext/posted_events_arrive_next_block", "[audiocontext]")
+{
+  AudioContext ctx(0, 2);
+  ctx.setSampleRate(48000);
+  ctx.setInputPolyphony(1);
+
+  REQUIRE(ctx.postInputEvent(noteOnEvent(60, 0.5f)));
+  runOneBlock(ctx);
+
+  const VoiceControls& vc = ctx.getInputVoiceControls(0);
+  REQUIRE(gateHasTransition(vc.rows[kCtlGate][0]));
+  REQUIRE(gateLevelAfter(vc.rows[kCtlGate][0], false));
+  REQUIRE(vc.rows[kCtlPitch][0] == Approx(60.f));
+
+  // an out-of-range channel is refused rather than written anywhere
+  REQUIRE_FALSE(ctx.postInputEvent(noteOnEvent(61, 0.5f), 7));
+}
+
+// A producer thread posting controller changes while the audio thread processes
+// must never touch the event buffer itself. The last value posted before the final
+// block is the one the channel holds afterwards.
+TEST_CASE("madronalib/core/audiocontext/posted_events_from_another_thread", "[audiocontext]")
+{
+  AudioContext ctx(0, 2);
+  ctx.setSampleRate(48000);
+  ctx.setInputPolyphony(1);
+
+  constexpr int kEvents = 20000;
+  std::atomic<int> posted{0};
+  std::thread producer([&]() {
+    for (int i = 1; i <= kEvents; ++i)
+    {
+      // spin until the queue has room, as a real producer would drop or wait
+      while (!ctx.postInputEvent(controllerEvent(1, i / float(kEvents))))
+      {
+        std::this_thread::yield();
+      }
+      posted = i;
+    }
+  });
+
+  while (posted < kEvents) runOneBlock(ctx);
+  producer.join();
+  runOneBlock(ctx);
+
+  REQUIRE(ctx.getInputControllerValues(0)[1] == Approx(1.f));
 }

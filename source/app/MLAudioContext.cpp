@@ -136,6 +136,12 @@ void AudioContext::resizeBuffers(size_t nInputs, size_t nOutputs, size_t maxFram
   }
   
   eventsToSignals_.resize(nEventChannels);
+
+  postedEvents_.clear();
+  for (size_t i = 0; i < nEventChannels; ++i)
+  {
+    postedEvents_.push_back(std::make_unique< Queue< Event > >(kPostedEventQueueSize));
+  }
 }
 
 void AudioContext::updateTime(const double ppqPos, const double bpmIn, bool isPlaying)
@@ -172,12 +178,13 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
   size_t nInputs = inputBuffers_.size();
   size_t nOutputs = outputBuffers_.size();
   
-  // TODO n channels of events also
-  size_t nEventInputs = eventsToSignals_.size();
-  
   if (nOutputs < 1) return;
   if (!externalOutputs) return;
   if (externalFrames > (int)maxFramesPerBlock_) return;
+
+  // events posted from other threads join the channels here, on this thread, so
+  // the event buffers are only ever touched from the audio thread.
+  drainPostedEvents();
   
   // write vectors from external inputs (if any) to inputBuffers
   for (int c = 0; c < nInputs; c++)
@@ -252,6 +259,27 @@ void AudioContext::addInputEvent(const Event& e, int chan)
   Event adjusted = e;
   adjusted.time += inputSamplesAccumulated_;
   eventsToSignals_[chan].addEvent(adjusted);
+}
+
+bool AudioContext::postInputEvent(const Event& e, int chan)
+{
+  if (chan < 0 || chan >= (int)postedEvents_.size()) return false;
+  return postedEvents_[chan]->push(e);
+}
+
+// Move posted events into their channels. Their times are relative to the next
+// block, so a posted event's time of 0 lands at frame 0 of the first block of
+// this process() call, as addInputEvent() would place it.
+void AudioContext::drainPostedEvents()
+{
+  for (size_t chan = 0; chan < postedEvents_.size(); ++chan)
+  {
+    Event e;
+    while (postedEvents_[chan]->pop(e))
+    {
+      addInputEvent(e, (int)chan);
+    }
+  }
 }
 
 }  // namespace ml

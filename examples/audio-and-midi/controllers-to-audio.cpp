@@ -60,9 +60,11 @@ int main( int argc, char *argv[] )
   // define the MIDI handling callback.
   // note that message times are all 0, in other words we are not sample-accurate.
   
+  // The handler runs on the MIDI input's thread, not the audio thread, so events are
+  // posted to the context's queue and process() moves them in before its next block.
   const auto& handleMIDI = [&](MIDIMessage m)->void
   {
-    ctx.addInputEvent(MIDIMessageToEvent(m));
+    ctx.postInputEvent(MIDIMessageToEvent(m));
   };
 
   // start the MIDI Input.
