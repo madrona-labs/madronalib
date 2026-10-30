@@ -96,5 +96,5 @@ int main()
   // if not set, parameters begin at their default values.
   proc.setParamFromNormalizedValue(runtimePath("freq2"), 0.6);
 
-  return exampleTask.runConsoleApp();
+  return runConsoleApp(exampleTask);
 }

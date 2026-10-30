@@ -39,10 +39,8 @@ public:
   void startAudioDevice() { devs.startAudioDevice(); }
   void stopAudioDevice() { devs.stopAudioDevice(); }
 
-  int runConsoleApp();
   bool hasQuit() const;
-  
-private:
+
   AudioDevice devs;
   AudioProcessData processData;
 };
