@@ -98,5 +98,5 @@ int main()
     }
   }, milliseconds(1000));
 
-  return study1Task.runConsoleApp();
+  return runConsoleApp(study1Task);
 }

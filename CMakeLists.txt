@@ -484,33 +484,8 @@ function(make_example EXAMPLE_APP_NAME EXAMPLE_SOURCE_FILE)
 
     set_target_properties(${EXAMPLE_APP_NAME}
         PROPERTIES
-        MACOSX_BUNDLE TRUE
-
-        # not working, see below for workaround adding to plist
-        # MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/cmake/MacOSXBundleInfo.plist.in
-
-        MACOSX_BUNDLE_BUNDLE_NAME ${EXAMPLE_APP_NAME}
-        MACOSX_BUNDLE_BUNDLE_VERSION "0.9.0"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
-
-    # get directory of .app package Contents
-    set(PACKAGE_DIR
-        "${CMAKE_BINARY_DIR}/bin/${EXAMPLE_APP_NAME}.app/Contents"
-        )
-
-    # add missing keys to plist for Mac OS
-    if(APPLE)
-        set(ADD_PLIST_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/add-plist-value.sh")
-        set(RATIONALE "This app requires microphone access.")
-        add_custom_command(
-            TARGET ${EXAMPLE_APP_NAME} POST_BUILD
-            COMMAND ${ADD_PLIST_SCRIPT} NSMicrophoneUsageDescription "This app requires microphone access." "${PACKAGE_DIR}/Info.plist"
-            VERBATIM
-        )
-    endif()
 endfunction()
 
 #--------------------------------------------------------------------
