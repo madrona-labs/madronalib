@@ -228,12 +228,18 @@ void AudioContext::process(const float** externalInputs, float** externalOutputs
     inputSamplesAccumulated_ -= kFramesPerBlock;
   }
   
-  // read from outputBuffers to external outputs
+  // read from outputBuffers to external outputs. A channel the host has no
+  // buffer for is dropped, not left in its ring: otherwise the ring fills and,
+  // when the host does supply the channel, it lags the others by the ring size.
   for(int c = 0; c < nOutputs; c++)
   {
     if (externalOutputs[c])
     {
       outputBuffers_[c].read(externalOutputs[c], externalFrames);
+    }
+    else
+    {
+      outputBuffers_[c].discard(externalFrames);
     }
   }
 }

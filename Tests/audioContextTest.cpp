@@ -284,3 +284,39 @@ TEST_CASE("madronalib/core/audiocontext/posted_events_from_another_thread", "[au
 
   REQUIRE(ctx.getInputControllerValues(0)[1] == Approx(1.f));
 }
+
+// A null external output means the host has nothing to receive that channel
+// (a deactivated or narrowed port). The context must keep that channel's ring
+// in step with the others, so when the host later supplies the channel it is
+// aligned with its neighbours rather than lagging by a ring's worth of audio.
+TEST_CASE("madronalib/core/audiocontext/null_output_channel_stays_in_step", "[audiocontext]")
+{
+  AudioContext ctx(2, 2);
+  ctx.setSampleRate(48000);
+
+  // a counter written identically to both channels, so alignment is checkable
+  float counter = 0.f;
+  auto ramp = [&counter](AudioContext* c) {
+    for (int i = 0; i < kFramesPerBlock; ++i) c->outputs[0][i] = c->outputs[1][i] = counter + i;
+    counter += kFramesPerBlock;
+  };
+
+  const int nFrames = 512;
+  std::vector<float> inL(nFrames, 0.f), inR(nFrames, 0.f);
+  std::vector<float> outL(nFrames), outR(nFrames);
+  const float* ins[2] = {inL.data(), inR.data()};
+
+  // long enough to fill any ring the default buffers could hold
+  for (int call = 0; call < 64; ++call)
+  {
+    float* outs[2] = {outL.data(), nullptr};
+    ctx.process(ins, outs, nFrames, ramp);
+  }
+
+  float* outs[2] = {outL.data(), outR.data()};
+  ctx.process(ins, outs, nFrames, ramp);
+  for (int i = 0; i < nFrames; ++i)
+  {
+    REQUIRE(outR[i] == outL[i]);
+  }
+}
