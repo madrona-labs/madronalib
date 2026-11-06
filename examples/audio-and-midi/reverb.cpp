@@ -152,5 +152,5 @@ int main()
   initializeReverb(&ctx, &r);
   
   // run the app.
-  return reverbExample.runConsoleApp();
+  return runConsoleApp(reverbExample);
 }

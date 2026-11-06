@@ -10,6 +10,7 @@
 #include "MLTree.h"
 #include "MLActor.h"
 #include "MLAudioTask.h"
+#include "MLConsoleApp.h"
 #include "MLClock.h"
 #include "MLEventsToSignals.h"
 #include "MLMemoryUtils.h"

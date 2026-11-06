@@ -32,5 +32,5 @@ int main()
   SineExampleState state;
   AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask sineExample(&ctx, sineProcess, &state);
-  return sineExample.runConsoleApp();
+  return runConsoleApp(sineExample);
 }
