@@ -80,5 +80,5 @@ int main( int argc, char *argv[] )
   t->start(deferToMainThread);
 
   // run the audio task
-  return exampleTask.runConsoleApp();
+  return runConsoleApp(exampleTask);
 }

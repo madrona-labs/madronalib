@@ -178,5 +178,5 @@ int main()
   FDTDState state;
   AudioContext ctx(kInputChannels, kOutputChannels);
   AudioTask FDTDExample(&ctx, processFDTD, &state);
-  return FDTDExample.runConsoleApp();
+  return runConsoleApp(FDTDExample);
 }

@@ -107,7 +107,7 @@ int main(int argc, char* argv[])
   }
 
   std::cout << "Listening for OSC messages on port " << port << std::endl;
-  std::cout << "Press any key to quit" << std::endl;
+  std::cout << "Press Ctrl+C to quit" << std::endl;
   std::cout << "---" << std::endl;
 
   // Create audio context and task
@@ -115,7 +115,7 @@ int main(int argc, char* argv[])
   AudioTask task(&ctx, oscListenerProcess, &state);
 
   // Run until user presses a key
-  int result = task.runConsoleApp();
+  int result = runConsoleApp(task);
 
   std::cout << "\nShutting down..." << std::endl;
   state.receiver.close();

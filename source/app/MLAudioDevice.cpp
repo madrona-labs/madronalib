@@ -117,6 +117,7 @@ int AudioDevice::startAudioDevice()
     std::cout << ctrl.getErrorText() << std::endl;
     return 0;
   }
+  return 1;
 }
 
 void AudioDevice::stopAudioDevice()
@@ -124,6 +125,7 @@ void AudioDevice::stopAudioDevice()
   if (!pImpl->deviceController_) return;
   RtAudio& ctrl = *pImpl->deviceController_;
   
+  if (!ctrl.isStreamRunning()) return;
   if (RTAUDIO_NO_ERROR != ctrl.stopStream())
   {
     std::cout << ctrl.getErrorText() << std::endl;

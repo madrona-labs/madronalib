@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
   std::cout << "Sending OSC to " << host << ":" << port << std::endl;
   std::cout << "Address: " << address << std::endl;
   std::cout << "Tempo: " << bpm << " BPM" << std::endl;
-  std::cout << "Press any key to quit" << std::endl;
+  std::cout << "Press Ctrl+C to quit" << std::endl;
   std::cout << "---" << std::endl;
 
   // Create audio context and task
@@ -109,5 +109,5 @@ int main(int argc, char* argv[])
   state.cyclesPerSample = (bpm / 60.0f) / ctx.getSampleRate();
   
   // Run until user presses a key
-  return task.runConsoleApp();
+  return runConsoleApp(task);
 }
