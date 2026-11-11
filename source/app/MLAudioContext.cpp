@@ -70,6 +70,10 @@ void AudioContext::ProcessTime::setTimeAndRate(const double ppqPos, const double
     dpdt_ = 0.;
   }
 
+  // the unwrapped position starts each host buffer at the playhead
+  nextPosition_ = ppqPos;
+  running = active;
+
   ppqPos1_ = ppqPos;
   ppqPhase1_ = ppqPhase;
   active1_ = active;
@@ -82,6 +86,8 @@ void AudioContext::ProcessTime::clear(void)
   dpdt_ = 0.;
   active1_ = false;
   playing1_ = false;
+  running = false;
+  quarterNotesPerSample = 0.;
 }
 
 // generate phasors from the input parameters
@@ -96,6 +102,12 @@ void AudioContext::ProcessTime::makeTimeSignals()
       omega_ -= 1.f;
     }
   }
+  // the unwrapped position moves at the host's tempo. The rate measured for
+  // the phasor is wrong for one buffer whenever the playhead jumps.
+  quarterNotesPosition = nextPosition_;
+  quarterNotesPerSample = (running && (sampleRate > 0.)) ? bpm / (60. * sampleRate) : 0.;
+  nextPosition_ += quarterNotesPerSample * kFramesPerBlock;
+
   samplesSincePreviousTime_ += kFramesPerBlock;
   samplesSinceStart += kFramesPerBlock;
 }

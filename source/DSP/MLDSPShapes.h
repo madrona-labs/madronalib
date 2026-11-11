@@ -420,6 +420,7 @@ class TempoLock
   // phasor on [0. - 1.), changes at rate of input phasor * input ratio
   float _omega{-1.f};  // current output phase
   float _x1v{0};       // input one vector ago
+  double _nextPosition{0};  // where the input position should be next vector
   
 public:
   // phase of -1 means we are stopped.
@@ -513,6 +514,67 @@ public:
         _omega += dydt;
         if (_omega > 1.0f) _omega -= 1.0f;
       }
+    }
+    return y;
+  }
+
+  // Follow an input position that is not wrapped, like a count of beats, in
+  // place of a phasor. There is then one right output phase for any ratio: the
+  // fractional part of position * ratio. So where the phasor version can only
+  // lock at whole-number ratios, and at slow ratios locks to any one of several
+  // phases, this one always arrives at the phase the position gives.
+  //
+  // It keeps the phasor version's manners. When the ratio changes the output
+  // does not jump: it runs between half and double speed until it is back on
+  // the right phase. It does jump when it starts, and when the input position
+  // jumps, as it does when a host loops or the playhead is moved.
+  //
+  // position: the input position at the start of this vector
+  // dpdt: how far the position moves each sample
+  // running: false means the input is stopped: reset and output 0
+  // dydx: the ratio of output cycles to input units
+  // isr: inverse of sample rate
+  SignalBlock operator()(double position, double dpdt, bool running, float dydx, float isr)
+  {
+    SignalBlock y;
+    if (!running)
+    {
+      clear();
+      return SignalBlock(0.f);
+    }
+
+    // the phase the position gives
+    const double ref = position * dydx;
+    const float target = static_cast<float>(ref - floor(ref));
+
+    // a jump of the input is much bigger than its rate can be in error
+    constexpr double kJumpDistance{0.05};
+    const bool jumped = fabs(position - _nextPosition) > kJumpDistance;
+    _nextPosition = position + dpdt * kFramesPerBlock;
+
+    float dydt = static_cast<float>(dpdt * dydx);
+    if ((_omega <= -1.f) || jumped)
+    {
+      _omega = target;
+    }
+    else
+    {
+      // the distance to the nearest place the target phase comes around
+      float error = _omega - target;
+      float errorDiff = roundf(error) - error;
+
+      // as in the phasor version: head for the target in 1/4 second, slowing
+      // as it nears, and never under 0.5x or over 2x speed
+      float correction = errorDiff * isr * 4.0f;
+      correction = clamp(correction, -dydt * 0.5f, dydt * 1.0f);
+      dydt += correction;
+    }
+
+    for (int i = 0; i < kFramesPerBlock; ++i)
+    {
+      y[i] = _omega;
+      _omega += dydt;
+      if (_omega > 1.0f) _omega -= 1.0f;
     }
     return y;
   }

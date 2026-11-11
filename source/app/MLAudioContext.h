@@ -49,6 +49,14 @@ class AudioContext final
     double sampleRate{0};
     uint64_t samplesSinceStart{0};
 
+    // The host's position in quarter notes at the start of the current block,
+    // not wrapped, and how far it moves each sample. These follow the playhead
+    // from the first block of playback, and through loops and jumps. They are
+    // valid while running is true: when the host is playing and its position is moving.
+    double quarterNotesPosition{0};
+    double quarterNotesPerSample{0};
+    bool running{false};
+
    private:
     float omega_{0};
     bool playing1_{false};
@@ -57,6 +65,7 @@ class AudioContext final
     size_t samplesSincePreviousTime_{0};
     double ppqPos1_{-1.};
     double ppqPhase1_{0};
+    double nextPosition_{0};
   };
   
   AudioContext(size_t nInputs, size_t nOutputs, size_t nEventChannels = 1);
