@@ -465,6 +465,37 @@ struct NoiseGen : Gen0<T, NoiseGen<T>>
 };
 
 // ----------------------------------------------------------------
+// repeatableRandomValue: noise as a pure function. The same index, channel and
+// seed always give the same value, so a sequence indexed by position plays
+// back the same way from anywhere. Each channel, and each seed, is its own
+// sequence. The index is whatever the caller counts: blocks, beats, cycles.
+
+// 64 well-mixed bits from an index, a channel and a seed. The channel and seed
+// are mixed before the index is added, so that no channel is a shifted copy of
+// another, and channel 0 is a sequence like the rest.
+inline uint64_t repeatableRandomBits(uint64_t index, uint64_t channel, uint64_t seed = 0)
+{
+  // the finalizer of the SplitMix64 generator
+  auto mix = [](uint64_t z)
+  {
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+    return z ^ (z >> 31);
+  };
+  constexpr uint64_t kGolden{0x9E3779B97F4A7C15ull};
+  const uint64_t stream = mix(mix(seed + kGolden) + channel);
+  return mix(stream + index * kGolden);
+}
+
+// A value on [-1, 1), like NoiseGen's.
+inline float repeatableRandomValue(uint64_t index, uint64_t channel, uint64_t seed = 0)
+{
+  // the top 24 bits, which a float holds exactly
+  const uint64_t bits = repeatableRandomBits(index, channel, seed) >> 40;
+  return static_cast<float>(bits) * (2.f / 16777216.f) - 1.f;
+}
+
+// ----------------------------------------------------------------
 // PhasorGen: naive (not antialiased) sawtooth / phase ramp on [0, 1).
 
 template<typename T>

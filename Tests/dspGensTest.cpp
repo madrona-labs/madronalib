@@ -244,3 +244,61 @@ TEST_CASE("madronalib/dsp/gens", "[dsp_gens]")
     REQUIRE(mean25 / kFramesPerBlock == Approx(0.5f).margin(0.05f));
   }
 }
+
+
+// ================================================================
+//  repeatableRandomValue
+// ================================================================
+
+TEST_CASE("madronalib/dsp/gens/repeatable_random", "[dsp_gens]")
+{
+  // the same inputs always give the same value
+  REQUIRE(repeatableRandomValue(1234, 5) == repeatableRandomValue(1234, 5));
+  REQUIRE(repeatableRandomValue(1234, 5, 6) == repeatableRandomValue(1234, 5, 6));
+
+  // values are on [-1, 1), centered, and spread out
+  constexpr int kValues{100000};
+  for (uint64_t channel : {0ull, 1ull, 2ull, 0xFFFFFFFFFFFFFFFFull})
+  {
+    double sum{0}, sumSquares{0};
+    float lo{1.f}, hi{-1.f};
+    for (int i = 0; i < kValues; ++i)
+    {
+      float v = repeatableRandomValue(i, channel);
+      sum += v;
+      sumSquares += v * v;
+      lo = std::min(lo, v);
+      hi = std::max(hi, v);
+    }
+    REQUIRE(lo >= -1.f);
+    REQUIRE(hi < 1.f);
+    REQUIRE(lo < -0.999f);
+    REQUIRE(hi > 0.999f);
+    REQUIRE(fabs(sum / kValues) < 0.01);
+    // the variance of a uniform value on [-1, 1) is 1/3
+    REQUIRE(sumSquares / kValues == Approx(1. / 3.).epsilon(0.02));
+  }
+
+  // channels, seeds and neighboring indices are different sequences: they
+  // agree no more often than chance, and are not correlated
+  auto correlation = [&](uint64_t channelA, uint64_t seedA, uint64_t offsetA,
+                         uint64_t channelB, uint64_t seedB, uint64_t offsetB)
+  {
+    double sum{0};
+    for (int i = 0; i < kValues; ++i)
+    {
+      sum += repeatableRandomValue(i + offsetA, channelA, seedA) *
+             repeatableRandomValue(i + offsetB, channelB, seedB);
+    }
+    return fabs(sum / kValues * 3.);
+  };
+  REQUIRE(correlation(0, 0, 0, 0, 0, 0) == Approx(1.).epsilon(0.02));
+  REQUIRE(correlation(0, 0, 0, 1, 0, 0) < 0.02);
+  REQUIRE(correlation(1, 0, 0, 2, 0, 0) < 0.02);
+  REQUIRE(correlation(0, 0, 0, 0, 1, 0) < 0.02);
+  REQUIRE(correlation(0, 0, 0, 0, 0, 1) < 0.02);
+  // swapping index and channel is not the same value
+  REQUIRE(correlation(2, 0, 3, 3, 0, 2) < 0.02);
+  REQUIRE(repeatableRandomValue(2, 3) != repeatableRandomValue(3, 2));
+  REQUIRE(repeatableRandomValue(1, 6) != repeatableRandomValue(2, 3));
+}

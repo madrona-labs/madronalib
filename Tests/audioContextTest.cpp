@@ -320,3 +320,135 @@ TEST_CASE("madronalib/core/audiocontext/null_output_channel_stays_in_step", "[au
     REQUIRE(outR[i] == outL[i]);
   }
 }
+
+
+// ================================================================
+//  host position, and TempoLock following it
+// ================================================================
+
+namespace
+{
+constexpr double kTimeSr{48000.};
+constexpr double kTimeBpm{120.};
+constexpr double kBeatsPerBlock{kTimeBpm / 60. / kTimeSr * kFramesPerBlock};
+
+// One block of host time for a playhead at a position in quarter notes.
+void playBlock(AudioContext::ProcessTime& time, double position)
+{
+  time.setTimeAndRate(position, kTimeBpm, true);
+  time.makeTimeSignals();
+}
+
+// The last output of a TempoLock following the playhead from start for a number of blocks.
+float lockedPhase(TempoLock& lock, AudioContext::ProcessTime& time, double start, int blocks,
+                  float ratio)
+{
+  float phase{0.f};
+  for (int b = 0; b < blocks; ++b)
+  {
+    playBlock(time, start + b * kBeatsPerBlock);
+    phase = lock(time.quarterNotesPosition, time.quarterNotesPerSample, time.running, ratio,
+                 1.f / kTimeSr)[kFramesPerBlock - 1];
+  }
+  return phase;
+}
+
+float phaseDistance(float a, float b)
+{
+  float d = fabs(a - b);
+  return std::min(d, 1.f - d);
+}
+}  // namespace
+
+TEST_CASE("madronalib/core/audiocontext/position_follows_the_playhead", "[audiocontext]")
+{
+  AudioContext::ProcessTime time;
+  time.sampleRate = kTimeSr;
+  REQUIRE(!time.running);
+
+  // from the first block of playback, anywhere in the song
+  playBlock(time, 17.25);
+  REQUIRE(time.running);
+  REQUIRE(time.quarterNotesPosition == Approx(17.25));
+  REQUIRE(time.quarterNotesPerSample == Approx(kBeatsPerBlock / kFramesPerBlock));
+
+  // a host buffer of several blocks moves it at the tempo
+  time.setTimeAndRate(17.25 + kBeatsPerBlock, kTimeBpm, true);
+  for (int b = 0; b < 4; ++b) time.makeTimeSignals();
+  REQUIRE(time.quarterNotesPosition == Approx(17.25 + 4 * kBeatsPerBlock));
+
+  // and it follows a jump
+  playBlock(time, 3.5);
+  REQUIRE(time.quarterNotesPosition == Approx(3.5));
+
+  // stopped
+  time.setTimeAndRate(3.5, kTimeBpm, false);
+  time.makeTimeSignals();
+  REQUIRE(!time.running);
+}
+
+TEST_CASE("madronalib/core/audiocontext/tempolock_follows_position", "[audiocontext]")
+{
+  // at a slow ratio the phase depends on the beat of the song, not on where
+  // playback started: one cycle each four beats, a little after beat 6
+  const float ratio = 0.25f;
+  {
+    AudioContext::ProcessTime time;
+    time.sampleRate = kTimeSr;
+    TempoLock lock;
+    const double end = 6. + 10 * kBeatsPerBlock;
+    float phase = lockedPhase(lock, time, 6., 10, ratio);
+    REQUIRE(phaseDistance(phase, static_cast<float>(fmod(end * ratio, 1.))) < 0.001f);
+  }
+
+  // a change of ratio does not jump: the phase moves no faster than double
+  // speed, and arrives at the phase the position gives
+  {
+    AudioContext::ProcessTime time;
+    time.sampleRate = kTimeSr;
+    TempoLock lock;
+    const int blocksBefore = 2000;
+    float before = lockedPhase(lock, time, 0., blocksBefore, 1.f);
+
+    const float newRatio = 0.5f;
+    const float maxStep = static_cast<float>(kBeatsPerBlock * newRatio * 2.) + 1e-5f;
+    float prev = before;
+    double position = blocksBefore * kBeatsPerBlock;
+    for (int b = 0; b < 6000; ++b)
+    {
+      playBlock(time, position);
+      float phase = lock(time.quarterNotesPosition, time.quarterNotesPerSample, time.running,
+                         newRatio, 1.f / kTimeSr)[kFramesPerBlock - 1];
+      REQUIRE(phaseDistance(phase, prev) <= maxStep);
+      prev = phase;
+      position += kBeatsPerBlock;
+    }
+    // the last sample of the last block
+    const double end = position - kBeatsPerBlock / kFramesPerBlock;
+    REQUIRE(phaseDistance(prev, static_cast<float>(fmod(end * newRatio, 1.))) < 0.005f);
+  }
+
+  // a jump of the playhead does jump
+  {
+    AudioContext::ProcessTime time;
+    time.sampleRate = kTimeSr;
+    TempoLock lock;
+    lockedPhase(lock, time, 0., 100, ratio);
+    float phase = lockedPhase(lock, time, 10., 1, ratio);
+    const double end = 10. + kBeatsPerBlock;
+    REQUIRE(phaseDistance(phase, static_cast<float>(fmod(end * ratio, 1.))) < 0.001f);
+  }
+
+  // stopped: no output, and it starts again on the right phase
+  {
+    AudioContext::ProcessTime time;
+    time.sampleRate = kTimeSr;
+    TempoLock lock;
+    lockedPhase(lock, time, 0., 100, ratio);
+    time.setTimeAndRate(1., kTimeBpm, false);
+    time.makeTimeSignals();
+    auto y = lock(time.quarterNotesPosition, time.quarterNotesPerSample, time.running, ratio,
+                  1.f / kTimeSr);
+    REQUIRE(y[kFramesPerBlock - 1] == 0.f);
+  }
+}
