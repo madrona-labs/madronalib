@@ -200,8 +200,11 @@ class EventsToSignals final
     float currentY{0};
     float currentZ{0};
 
-    // physical key or touch # of creator. 0 = undefined.
+    // key (note number) of the note-on that started the voice. 0 = not held.
     size_t creatorKeyIdx_{0};
+
+    // true while the sustain pedal is holding the voice after its key's release
+    bool sustained_{false};
 
     // MIDI channel of the note-on that started the voice (1-based, as Event::channel),
     // kept through the release so a client can keep retuning on it. 0 = none yet.
@@ -320,7 +323,8 @@ class EventsToSignals final
   float pitchBendRangeInSemitones_{7.f};
   float mpePitchBendRangeInSemitones_{24.f};
   bool unison_{false};
-  uint32_t currentNoteOnIndex{0};
+  // starts at 1: the search for the most recent held key treats 0 as "none"
+  uint32_t currentNoteOnIndex{1};
   bool awake_{false};
 
   void dumpVoices();
