@@ -83,6 +83,7 @@ void EventsToSignals::Voice::reset()
 
   currentVelocity = 0;
   currentPitchBend = 0;
+  currentPitchOffset = 0;
   currentMod = 0;
   currentX = 0;
   currentY = 0;
@@ -94,6 +95,7 @@ void EventsToSignals::Voice::reset()
   creatorChannel_ = 0;
 
   pitchBendGlide.setValue(0.f);
+  pitchOffsetGlide.setValue(0.f);
   modGlide.setValue(0.f);
   xGlide.setValue(0.f);
   yGlide.setValue(0.f);
@@ -118,6 +120,7 @@ void EventsToSignals::Voice::beginProcess()
     }
 
     pitchBendGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
+    pitchOffsetGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
     modGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
     xGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
     yGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
@@ -129,6 +132,7 @@ void EventsToSignals::Voice::beginProcess()
   }
 
   nextFrameToProcess = 0;
+  noteStartedThisBlock_ = false;
   driftCounter += kFramesPerBlock;
 
   int driftIntervalSamples = (int)(sr * kDriftTimeSeconds);
@@ -197,6 +201,10 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       sustained_ = false;
       currentPitch = e.value1;
       currentVelocity = e.value2;
+
+      // a new note starts with no pitch offset
+      noteStartedThisBlock_ = true;
+      setPitchOffset(0.f);
       break;
     }
     case kNoteRetrig:
@@ -226,6 +234,10 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       sustained_ = false;
       currentPitch = e.value1;
       currentVelocity = e.value2;
+
+      // a new note starts with no pitch offset
+      noteStartedThisBlock_ = true;
+      setPitchOffset(0.f);
       break;
     }
     case kNoteSustain:
@@ -249,6 +261,42 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
   }
 }
 
+void EventsToSignals::Voice::setPitchOffset(float offset)
+{
+  currentPitchOffset = offset;
+  if (noteStartedThisBlock_) pitchOffsetGlide.setValue(offset);
+}
+
+void EventsToSignals::Voice::setPitchBend(float bend)
+{
+  currentPitchBend = bend;
+  if (noteStartedThisBlock_) pitchBendGlide.setValue(bend);
+}
+
+void EventsToSignals::Voice::setMod(float mod)
+{
+  currentMod = mod;
+  if (noteStartedThisBlock_) modGlide.setValue(mod);
+}
+
+void EventsToSignals::Voice::setX(float x)
+{
+  currentX = x;
+  if (noteStartedThisBlock_) xGlide.setValue(x);
+}
+
+void EventsToSignals::Voice::setY(float y)
+{
+  currentY = y;
+  if (noteStartedThisBlock_) yGlide.setValue(y);
+}
+
+void EventsToSignals::Voice::setZ(float z)
+{
+  currentZ = z;
+  if (noteStartedThisBlock_) zGlide.setValue(z);
+}
+
 // write all voice output signals from the most recent event's time to
 // the end of the buffer.
 void EventsToSignals::Voice::endProcess(float pitchBend)
@@ -268,9 +316,10 @@ void EventsToSignals::Voice::endProcess(float pitchBend)
   }
   outputs.setRow(kZ, zGlide(currentZ));
 
-  // add pitch bend in semitones to pitch output, and write it to its own row
-  // so clients can separate it from the note
-  auto bend = bendGlide * pitchBend * (1.f / 12);
+  // add pitch bend in semitones and the note's own pitch offset to pitch
+  // output, and write their sum to its own row so clients can separate it
+  // from the note
+  auto bend = bendGlide * pitchBend * (1.f / 12) + pitchOffsetGlide(currentPitchOffset);
   outputs.setRow(kBend, bend);
   auto p = outputs.getRow(kPitch);
   outputs.setRow(kPitch, p + bend);
@@ -363,6 +412,7 @@ void EventsToSignals::clear()
 
   voiceControls_ = VoiceControls{};
   controllerValues_.fill(0.f);
+  channelExpression_.fill(ChannelExpression{});
   lastFreeVoiceFound_ = 0;
 }
 
@@ -649,6 +699,11 @@ void EventsToSignals::processEvent(const Event& eventParam)
     case kSustainPedal:
       processSustainPedalEvent(event);
       break;
+    case kNotePitchOffset:
+    case kNoteZ:
+    case kNoteY:
+      processNoteExpressionEvent(event);
+      break;
     case kNull:
     default:
       break;
@@ -677,6 +732,7 @@ void EventsToSignals::processNoteOnEvent(const Event& e)
     for (int v = 1; v < polyphony_ + 1; ++v)
     {
       voices[v].writeNoteEvent(e, keyIdx, !firstNote, firstNote);
+      startVoiceFromChannel(voices[v], e.channel);
     }
   }
   else
@@ -696,6 +752,7 @@ void EventsToSignals::processNoteOnEvent(const Event& e)
     }
     
     voices[v].writeNoteEvent(eventToWrite, keyIdx, true, true);
+    startVoiceFromChannel(voices[v], e.channel);
     newestVoice_ = v;
     
     
@@ -712,6 +769,9 @@ void EventsToSignals::processNoteOnEvent(const Event& e)
 
 void EventsToSignals::processNoteOffEvent(const Event& e)
 {
+  // pressure belongs to the note, so it does not wait on the channel for the next one
+  if (e.channel < kNumChannels) channelExpression_[e.channel].z = 0.f;
+
   int keyIdx = getKeyIndex(e);
   if (sustainPedalActive_)
   {
@@ -796,6 +856,24 @@ void EventsToSignals::processNoteOffEvent(const Event& e)
   }
 }
 
+bool EventsToSignals::isMPEMemberChannel(int channel) const
+{
+  return (protocol_ == "MPE") && (channel > 1) && (channel < (int)kNumChannels);
+}
+
+// MPE: a new note takes the expression its channel holds. Channel 1 is the
+// main channel, which reaches every voice through the main voice instead.
+void EventsToSignals::startVoiceFromChannel(Voice& voice, int channel)
+{
+  if (!isMPEMemberChannel(channel)) return;
+  const ChannelExpression& c = channelExpression_[channel];
+  voice.setPitchBend(c.bend);
+  voice.setMod(c.mod);
+  voice.setX(c.x);
+  voice.setY(c.y);
+  voice.setZ(c.z);
+}
+
 // ?
 void EventsToSignals::processNoteUpdateEvent(const Event& event) {}
 
@@ -818,12 +896,14 @@ void EventsToSignals::processChannelPressureEvent(const Event& event)
       }
       else if (event.channel != 0)
       {
+        if (isMPEMemberChannel(event.channel)) channelExpression_[event.channel].z = event.value1;
+
         // write any voice matching channel
         for (int v = 1; v < polyphony_ + 1; ++v)
         {
           if (voiceFollowsChannel(voices[v], event.channel))
           {
-            voices[v].currentZ = event.value1;
+            voices[v].setZ(event.value1);
           }
         }
       }
@@ -857,6 +937,33 @@ void EventsToSignals::processNotePressureEvent(const Event& event)
   }
 }
 
+// Note expressions are addressed to a key, so they need no protocol: the host
+// has already worked out which note each one belongs to.
+void EventsToSignals::processNoteExpressionEvent(const Event& event)
+{
+  const int channel = (event.channel == 0) ? kAny : (int)event.channel;
+  const int key = getKeyIndex(event);
+  for (int v = 1; v < polyphony_ + 1; ++v)
+  {
+    Voice& voice = voices[v];
+    if (!voiceIsHeld(voice) || !voiceMatches(voice, channel, key)) continue;
+    switch (event.type)
+    {
+      case kNotePitchOffset:
+        voice.setPitchOffset(event.value1);
+        break;
+      case kNoteZ:
+        voice.setZ(event.value1);
+        break;
+      case kNoteY:
+        voice.setY(event.value1);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
 void EventsToSignals::processPitchWheelEvent(const Event& event)
 {
   switch(hash(protocol_))
@@ -878,12 +985,14 @@ void EventsToSignals::processPitchWheelEvent(const Event& event)
       }
       else if (event.channel != 0)
       {
+        if (isMPEMemberChannel(event.channel)) channelExpression_[event.channel].bend = event.value1;
+
         // write any voice matching channel
         for (int v = 1; v < polyphony_ + 1; ++v)
         {
           if (voiceFollowsChannel(voices[v], event.channel))
           {
-            voices[v].currentPitchBend = event.value1;
+            voices[v].setPitchBend(event.value1);
           }
         }
       }
@@ -967,6 +1076,14 @@ void EventsToSignals::processControllerEvent(const Event& event)
         }
         else
         {
+          if (isMPEMemberChannel(event.channel))
+          {
+            ChannelExpression& c = channelExpression_[event.channel];
+            if (ctrl == voiceModCC_) c.mod = val;
+            if (ctrl == 73) c.x = val;
+            else if (ctrl == 74) c.y = val;
+          }
+
           // modulate other voices matching event channel.
           for (int v = 1; v < polyphony_ + 1; ++v)
           {
@@ -974,15 +1091,15 @@ void EventsToSignals::processControllerEvent(const Event& event)
             {
               if (ctrl == voiceModCC_)
               {
-                voices[v].currentMod = val;
+                voices[v].setMod(val);
               }
               if (ctrl == 73)
               {
-                voices[v].currentX = val;
+                voices[v].setX(val);
               }
               else if (ctrl == 74)
               {
-                voices[v].currentY = val;
+                voices[v].setY(val);
               }
             }
           }

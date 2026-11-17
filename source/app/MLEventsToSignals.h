@@ -195,6 +195,9 @@ class EventsToSignals final
     float currentVelocity{0};
     float currentPitch{0};
     float currentPitchBend{0};
+
+    // per-note pitch offset from a kNotePitchOffset event, in pitch units
+    float currentPitchOffset{0};
     float currentMod{0};
     float currentX{0};
     float currentY{0};
@@ -205,6 +208,19 @@ class EventsToSignals final
 
     // true while the sustain pedal is holding the voice after its key's release
     bool sustained_{false};
+
+    // true from a note-on to the end of its block. A pitch offset arriving then
+    // is the note's starting pitch, so it is not glided to.
+    bool noteStartedThisBlock_{false};
+
+    // Set the note's own expression values. In the block where the note starts
+    // these are its starting values, so the glides jump to them.
+    void setPitchOffset(float offset);
+    void setPitchBend(float bend);
+    void setMod(float mod);
+    void setX(float x);
+    void setY(float y);
+    void setZ(float z);
 
     // MIDI channel of the note-on that started the voice (1-based, as Event::channel),
     // kept through the release so a client can keep retuning on it. 0 = none yet.
@@ -217,6 +233,7 @@ class EventsToSignals final
     // pitch glide
     SampleAccurateLinearGlide pitchGlide;
     LinearGlide pitchBendGlide;
+    LinearGlide pitchOffsetGlide;
     LinearGlide modGlide;
     LinearGlide xGlide;
     LinearGlide yGlide;
@@ -289,6 +306,7 @@ class EventsToSignals final
   void processPitchWheelEvent(const Event& event);
   void processNotePressureEvent(const Event& event);
   void processChannelPressureEvent(const Event& event);
+  void processNoteExpressionEvent(const Event& event);
   void processSustainPedalEvent(const Event& event);
   int findFreeVoice();
   int findNearestVoice(int note);
@@ -313,6 +331,23 @@ class EventsToSignals final
   int voiceModCC_{16};
 
   std::array<KeyState, kMaxPhysicalKeys> keyStates_;
+
+  // MPE: the expression most recently sent on each member channel. A controller
+  // sends a note's starting bend, timbre and pressure before its note-on, and a
+  // key struck hard may send nothing more for a while, so a new note starts
+  // from what its channel holds. Indexed by 1-based channel.
+  struct ChannelExpression
+  {
+    float bend{0};
+    float mod{0};
+    float x{0};
+    float y{0};
+    float z{0};
+  };
+  static constexpr size_t kNumChannels{17};
+  std::array<ChannelExpression, kNumChannels> channelExpression_{};
+  bool isMPEMemberChannel(int channel) const;
+  void startVoiceFromChannel(Voice& voice, int channel);
   std::vector<Event> eventBuffer_;
 
   size_t polyphony_{0};
