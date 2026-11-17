@@ -8,6 +8,7 @@ namespace ml
 {
 
 const char* Event::typeNames[kNumEventTypes] = {"NUL", "ON ", "RET", "SUS", "OFF", "PED",
-                                                "CC ", "BND", "NPR", "CPR", "PGM"};
+                                                "CC ", "BND", "NPR", "CPR", "PGM",
+                                                "NPO", "NZ ", "NY "};
 
 }  // namespace ml

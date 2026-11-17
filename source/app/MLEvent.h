@@ -23,6 +23,13 @@ enum EventType
   kNotePressure,
   kChannelPressure,
   kProgramChange,
+
+  // Note expressions: per-note changes addressed to a key, for hosts that send
+  // them directly instead of as MPE. sourceIdx is the key and channel is the
+  // note's channel, or 0 for any channel. They apply in every protocol.
+  kNotePitchOffset,  // value1 is added to the note's pitch, in the units of the note-on's value1
+  kNoteZ,            // value1 is the note's pressure, [0, 1]
+  kNoteY,            // value1 is the note's timbre, [0, 1]
   kNumEventTypes
 };
 

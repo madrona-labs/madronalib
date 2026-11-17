@@ -83,6 +83,7 @@ void EventsToSignals::Voice::reset()
 
   currentVelocity = 0;
   currentPitchBend = 0;
+  currentPitchOffset = 0;
   currentMod = 0;
   currentX = 0;
   currentY = 0;
@@ -94,6 +95,7 @@ void EventsToSignals::Voice::reset()
   creatorChannel_ = 0;
 
   pitchBendGlide.setValue(0.f);
+  pitchOffsetGlide.setValue(0.f);
   modGlide.setValue(0.f);
   xGlide.setValue(0.f);
   yGlide.setValue(0.f);
@@ -118,6 +120,7 @@ void EventsToSignals::Voice::beginProcess()
     }
 
     pitchBendGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
+    pitchOffsetGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
     modGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
     xGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
     yGlide.setGlideTimeInSamples(sr * kGlideTimeSeconds);
@@ -129,6 +132,7 @@ void EventsToSignals::Voice::beginProcess()
   }
 
   nextFrameToProcess = 0;
+  noteStartedThisBlock_ = false;
   driftCounter += kFramesPerBlock;
 
   int driftIntervalSamples = (int)(sr * kDriftTimeSeconds);
@@ -197,6 +201,10 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       sustained_ = false;
       currentPitch = e.value1;
       currentVelocity = e.value2;
+
+      // a new note starts with no pitch offset
+      noteStartedThisBlock_ = true;
+      setPitchOffset(0.f);
       break;
     }
     case kNoteRetrig:
@@ -226,6 +234,10 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       sustained_ = false;
       currentPitch = e.value1;
       currentVelocity = e.value2;
+
+      // a new note starts with no pitch offset
+      noteStartedThisBlock_ = true;
+      setPitchOffset(0.f);
       break;
     }
     case kNoteSustain:
@@ -249,6 +261,15 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
   }
 }
 
+void EventsToSignals::Voice::setPitchOffset(float offset)
+{
+  currentPitchOffset = offset;
+  if (noteStartedThisBlock_)
+  {
+    pitchOffsetGlide.setValue(offset);
+  }
+}
+
 // write all voice output signals from the most recent event's time to
 // the end of the buffer.
 void EventsToSignals::Voice::endProcess(float pitchBend)
@@ -268,9 +289,10 @@ void EventsToSignals::Voice::endProcess(float pitchBend)
   }
   outputs.setRow(kZ, zGlide(currentZ));
 
-  // add pitch bend in semitones to pitch output, and write it to its own row
-  // so clients can separate it from the note
-  auto bend = bendGlide * pitchBend * (1.f / 12);
+  // add pitch bend in semitones and the note's own pitch offset to pitch
+  // output, and write their sum to its own row so clients can separate it
+  // from the note
+  auto bend = bendGlide * pitchBend * (1.f / 12) + pitchOffsetGlide(currentPitchOffset);
   outputs.setRow(kBend, bend);
   auto p = outputs.getRow(kPitch);
   outputs.setRow(kPitch, p + bend);
@@ -649,6 +671,11 @@ void EventsToSignals::processEvent(const Event& eventParam)
     case kSustainPedal:
       processSustainPedalEvent(event);
       break;
+    case kNotePitchOffset:
+    case kNoteZ:
+    case kNoteY:
+      processNoteExpressionEvent(event);
+      break;
     case kNull:
     default:
       break;
@@ -853,6 +880,33 @@ void EventsToSignals::processNotePressureEvent(const Event& event)
     {
       // note pressure is ignored in MPE mode as per the spec.
       break;
+    }
+  }
+}
+
+// Note expressions are addressed to a key, so they need no protocol: the host
+// has already worked out which note each one belongs to.
+void EventsToSignals::processNoteExpressionEvent(const Event& event)
+{
+  const int channel = (event.channel == 0) ? kAny : (int)event.channel;
+  const int key = getKeyIndex(event);
+  for (int v = 1; v < polyphony_ + 1; ++v)
+  {
+    Voice& voice = voices[v];
+    if (!voiceIsHeld(voice) || !voiceMatches(voice, channel, key)) continue;
+    switch (event.type)
+    {
+      case kNotePitchOffset:
+        voice.setPitchOffset(event.value1);
+        break;
+      case kNoteZ:
+        voice.currentZ = event.value1;
+        break;
+      case kNoteY:
+        voice.currentY = event.value1;
+        break;
+      default:
+        break;
     }
   }
 }

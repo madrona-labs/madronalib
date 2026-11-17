@@ -195,6 +195,9 @@ class EventsToSignals final
     float currentVelocity{0};
     float currentPitch{0};
     float currentPitchBend{0};
+
+    // per-note pitch offset from a kNotePitchOffset event, in pitch units
+    float currentPitchOffset{0};
     float currentMod{0};
     float currentX{0};
     float currentY{0};
@@ -205,6 +208,13 @@ class EventsToSignals final
 
     // true while the sustain pedal is holding the voice after its key's release
     bool sustained_{false};
+
+    // true from a note-on to the end of its block. A pitch offset arriving then
+    // is the note's starting pitch, so it is not glided to.
+    bool noteStartedThisBlock_{false};
+
+    // set the per-note pitch offset
+    void setPitchOffset(float offset);
 
     // MIDI channel of the note-on that started the voice (1-based, as Event::channel),
     // kept through the release so a client can keep retuning on it. 0 = none yet.
@@ -217,6 +227,7 @@ class EventsToSignals final
     // pitch glide
     SampleAccurateLinearGlide pitchGlide;
     LinearGlide pitchBendGlide;
+    LinearGlide pitchOffsetGlide;
     LinearGlide modGlide;
     LinearGlide xGlide;
     LinearGlide yGlide;
@@ -289,6 +300,7 @@ class EventsToSignals final
   void processPitchWheelEvent(const Event& event);
   void processNotePressureEvent(const Event& event);
   void processChannelPressureEvent(const Event& event);
+  void processNoteExpressionEvent(const Event& event);
   void processSustainPedalEvent(const Event& event);
   int findFreeVoice();
   int findNearestVoice(int note);

@@ -661,3 +661,98 @@ TEST_CASE("madronalib/core/events/mpe_sustain_same_key_on_two_channels", "[event
   REQUIRE(t.gateEnd(0) == 0.f);
   REQUIRE(t.gateEnd(1) > 0.f);
 }
+
+// ---- note expressions ----
+// Per-note changes addressed to a key, as a host sends them when it does the
+// per-note work itself. Every note can be on one channel.
+
+static Event makeNoteExpression(int type, int channel, int key, float value, int time = 0)
+{
+  Event e;
+  e.type = type;
+  e.channel = channel;
+  e.sourceIdx = key;
+  e.time = time;
+  e.value1 = value;
+  return e;
+}
+
+static float yEnd(TestFixture& t, int voice)
+{
+  return t.ctx.getInputVoice(voice).outputs.constRow(kY)[kFramesPerBlock - 1];
+}
+
+TEST_CASE("madronalib/core/events/note_expressions_follow_the_key", "[events]")
+{
+  for (const char* protocol : {"MIDI", "MPE"})
+  {
+    TestFixture t;
+    t.ctx.setInputProtocol(protocol);
+
+    t.callback(kFramesPerBlock, {makeNoteOnOnChannel(1, 60)});
+    t.callback(kFramesPerBlock, {makeNoteOnOnChannel(1, 64)});
+
+    t.callback(kFramesPerBlock, {makeNoteExpression(kNotePitchOffset, 1, 64, 0.5f),
+                                 makeNoteExpression(kNoteZ, 1, 64, 0.75f),
+                                 makeNoteExpression(kNoteY, 1, 64, 0.25f)});
+    runPastBendGlide(t);
+
+    // only the voice playing key 64 moves
+    REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(60.f));
+    REQUIRE(bendEnd(t, 0) == 0.f);
+    REQUIRE(zEnd(t, 0) == 0.f);
+    REQUIRE(yEnd(t, 0) == 0.f);
+    REQUIRE(t.pitchAt(1, kFramesPerBlock - 1) == Approx(64.5f));
+    REQUIRE(bendEnd(t, 1) == Approx(0.5f));
+    REQUIRE(zEnd(t, 1) == Approx(0.75f));
+    REQUIRE(yEnd(t, 1) == Approx(0.25f));
+  }
+}
+
+TEST_CASE("madronalib/core/events/note_expression_channels", "[events]")
+{
+  TestFixture t;
+
+  // the same key on two channels
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(2, 60)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(3, 60)});
+
+  // a channel picks one of them
+  t.callback(kFramesPerBlock, {makeNoteExpression(kNoteZ, 3, 60, 0.5f)});
+  runPastBendGlide(t);
+  REQUIRE(zEnd(t, 0) == 0.f);
+  REQUIRE(zEnd(t, 1) == Approx(0.5f));
+
+  // channel 0 is any channel
+  t.callback(kFramesPerBlock, {makeNoteExpression(kNoteZ, 0, 60, 0.25f)});
+  runPastBendGlide(t);
+  REQUIRE(zEnd(t, 0) == Approx(0.25f));
+  REQUIRE(zEnd(t, 1) == Approx(0.25f));
+}
+
+TEST_CASE("madronalib/core/events/note_pitch_offset_starts_with_the_note", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputPolyphony(1);
+
+  // an offset in the note-on's block is the note's starting pitch: no glide
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(1, 60), makeNoteExpression(kNotePitchOffset, 1, 60, 0.5f)});
+  REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(60.5f));
+
+  // a later offset glides
+  t.callback(kFramesPerBlock, {makeNoteExpression(kNotePitchOffset, 1, 60, 1.f)});
+  REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) < 61.f);
+  runPastBendGlide(t);
+  REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(61.f));
+
+  // the next note starts with no offset
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(1, 60)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(1, 62)});
+  REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(62.f));
+
+  // and a released note no longer follows its key
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(1, 62)});
+  t.callback(kFramesPerBlock, {makeNoteExpression(kNotePitchOffset, 1, 62, 1.f)});
+  runPastBendGlide(t);
+  REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(62.f));
+}
