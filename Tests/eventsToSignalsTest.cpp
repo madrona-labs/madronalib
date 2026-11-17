@@ -333,8 +333,8 @@ TEST_CASE("madronalib/core/events/out_of_range_key", "[events]")
   REQUIRE(t.gateEnd(1) == 0.f);
 }
 
-// the MPE path indexes keyStates_ by channel instead, so a wildcard channel
-// reaches the same array by a different route.
+// under MPE the channel only routes expression and is never an index, so a
+// wildcard channel must be harmless there too.
 TEST_CASE("madronalib/core/events/out_of_range_channel", "[events]")
 {
   TestFixture t;
@@ -524,4 +524,140 @@ TEST_CASE("madronalib/core/events/bend_row_mpe_sums_main_and_note_bend", "[event
   const float expected = 0.5f * 24.f / 12.f + 0.25f * 12.f / 12.f;
   REQUIRE(bendEnd(t, v) == Approx(expected));
   REQUIRE(t.pitchAt(v, kFramesPerBlock - 1) == Approx(60.f + expected));
+}
+
+// ---- MPE: a key is a note, the channel routes expression ----
+// Several notes can share a channel: a plain keyboard into MPE mode, a host
+// that sends every note on one channel, or an MPE controller out of channels.
+// A note-off must end only its own note.
+
+static Event makeNoteOffOnChannel(int channel, int key)
+{
+  Event e = makeNoteOff(key, (float)key);
+  e.channel = channel;
+  return e;
+}
+
+static Event makeChannelPressure(int channel, float value)
+{
+  Event e;
+  e.type = kChannelPressure;
+  e.channel = channel;
+  e.value1 = value;
+  return e;
+}
+
+static Event makeSustainPedal(float value)
+{
+  Event e;
+  e.type = kSustainPedal;
+  e.channel = 1;
+  e.value1 = value;
+  return e;
+}
+
+static float zEnd(TestFixture& t, int voice)
+{
+  return t.ctx.getInputVoice(voice).outputs.constRow(kZ)[kFramesPerBlock - 1];
+}
+
+TEST_CASE("madronalib/core/events/mpe_notes_sharing_a_channel", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputProtocol("MPE");
+
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(1, 60)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(1, 64)});
+  REQUIRE(t.gateEnd(0) > 0.f);
+  REQUIRE(t.gateEnd(1) > 0.f);
+
+  // releasing the first note leaves the second sounding
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(1, 60)});
+  t.callback(kFramesPerBlock);
+  REQUIRE(t.gateEnd(0) == 0.f);
+  REQUIRE(t.gateEnd(1) > 0.f);
+
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(1, 64)});
+  t.callback(kFramesPerBlock);
+  REQUIRE(t.gateEnd(1) == 0.f);
+}
+
+TEST_CASE("madronalib/core/events/mpe_same_key_on_two_channels", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputProtocol("MPE");
+
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(2, 60)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(3, 60)});
+
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(2, 60)});
+  t.callback(kFramesPerBlock);
+  REQUIRE(t.gateEnd(0) == 0.f);
+  REQUIRE(t.gateEnd(1) > 0.f);
+}
+
+TEST_CASE("madronalib/core/events/mpe_unison_notes_sharing_a_channel", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputProtocol("MPE");
+  t.ctx.setInputUnison(true);
+
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(1, 60)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(1, 64)});
+
+  // one key is still down, so the voices keep playing, back on the held note
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(1, 64)});
+  t.callback(kFramesPerBlock);
+  REQUIRE(t.gateEnd(0) > 0.f);
+  REQUIRE(t.ctx.getInputVoice(0).currentPitch == 60.f);
+
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(1, 60)});
+  t.callback(kFramesPerBlock);
+  REQUIRE(t.gateEnd(0) == 0.f);
+}
+
+TEST_CASE("madronalib/core/events/mpe_expression_follows_the_channel", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputProtocol("MPE");
+  t.ctx.setInputMPEPitchBend(24.f);
+
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(2, 60)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(3, 64)});
+
+  // bend and pressure on channel 2 move only the channel 2 voice
+  t.callback(kFramesPerBlock, {makePitchBend(2, 0.5f), makeChannelPressure(2, 0.75f)});
+  runPastBendGlide(t);
+  REQUIRE(bendEnd(t, 0) == Approx(0.5f * 24.f / 12.f));
+  REQUIRE(zEnd(t, 0) == Approx(0.75f));
+  REQUIRE(bendEnd(t, 1) == 0.f);
+  REQUIRE(zEnd(t, 1) == 0.f);
+
+  // after its note-off the voice stops following the channel
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(2, 60)});
+  t.callback(kFramesPerBlock, {makePitchBend(2, -0.5f)});
+  runPastBendGlide(t);
+  REQUIRE(bendEnd(t, 0) == Approx(0.5f * 24.f / 12.f));
+}
+
+TEST_CASE("madronalib/core/events/mpe_sustain_same_key_on_two_channels", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputProtocol("MPE");
+
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(2, 60)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(3, 60)});
+
+  // the pedal holds the released note
+  t.callback(kFramesPerBlock, {makeSustainPedal(1.f)});
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(2, 60)});
+  t.callback(kFramesPerBlock);
+  REQUIRE(t.gateEnd(0) > 0.f);
+  REQUIRE(t.gateEnd(1) > 0.f);
+
+  // pedal up ends it, and leaves the key still down on channel 3
+  t.callback(kFramesPerBlock, {makeSustainPedal(0.f)});
+  t.callback(kFramesPerBlock);
+  REQUIRE(t.gateEnd(0) == 0.f);
+  REQUIRE(t.gateEnd(1) > 0.f);
 }

@@ -18,32 +18,37 @@ float samplesToSeconds(uint32_t samples, float sr)
   return (float)seconds;
 }
 
-int getKeyIndex(const Event& e, Symbol protocol)
+// A key is the note number in every protocol. Under MPE the channel says where
+// a note's expression comes from, but several notes can share a channel, so
+// the channel can not stand in for the key.
+int getKeyIndex(const Event& e)
 {
-  int instigator{0};
-  switch(hash(protocol))
-  {
-    case(hash("MIDI")):
-    {
-      instigator = e.sourceIdx;
-      break;
-    }
-    case(hash("MPE")):
-    {
-      instigator = e.channel;
-      break;
-    }
-    default:
-    {
-      break;
-    }
-  }
-
   // keyStates_ is indexed with this result directly, so it can never be allowed
   // out of range. Note that a caller passing a negative key does not arrive
-  // here as a negative number: sourceIdx is uint16_t and channel is uint8_t, so
-  // CLAP's -1 wildcard shows up as 65535 or 255. Clamping is the only backstop.
-  return ml::clamp(instigator, 0, (int)EventsToSignals::kMaxPhysicalKeys - 1);
+  // here as a negative number: sourceIdx is uint16_t, so CLAP's -1 wildcard
+  // shows up as 65535. Clamping is the only backstop.
+  return ml::clamp((int)e.sourceIdx, 0, (int)EventsToSignals::kMaxPhysicalKeys - 1);
+}
+
+// Voice matching. A voice remembers the key and the channel of the note-on that
+// started it; kAny for either matches all.
+constexpr int kAny = -1;
+
+static bool voiceMatches(const EventsToSignals::Voice& v, int channel, int key)
+{
+  if ((channel != kAny) && ((int)v.creatorChannel_ != channel)) return false;
+  if ((key != kAny) && ((int)v.creatorKeyIdx_ != key)) return false;
+  return true;
+}
+
+// a voice is held from its note-on to its note-off, including while sustained.
+static bool voiceIsHeld(const EventsToSignals::Voice& v) { return v.creatorKeyIdx_ != 0; }
+
+// MPE: is this voice playing a note that takes its expression from the channel?
+// A released voice stops following its channel.
+static bool voiceFollowsChannel(const EventsToSignals::Voice& v, int channel)
+{
+  return voiceIsHeld(v) && voiceMatches(v, channel, kAny);
 }
 
 #pragma mark -
@@ -83,6 +88,7 @@ void EventsToSignals::Voice::reset()
   currentY = 0;
   currentZ = 0;
   controlGateHigh = false;
+  sustained_ = false;
 
   creatorKeyIdx_ = 0;
   creatorChannel_ = 0;
@@ -188,6 +194,7 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       // set new values
       creatorKeyIdx_ = keyIdx;
       creatorChannel_ = e.channel;
+      sustained_ = false;
       currentPitch = e.value1;
       currentVelocity = e.value2;
       break;
@@ -216,18 +223,21 @@ void EventsToSignals::Voice::writeNoteEvent(const Event& e, int keyIdx, bool doG
       // set new values
       creatorKeyIdx_ = keyIdx;
       creatorChannel_ = e.channel;
+      sustained_ = false;
       currentPitch = e.value1;
       currentVelocity = e.value2;
       break;
     }
     case kNoteSustain:
     {
+      sustained_ = true;
       writeOutputSignals(destTime);
       break;
     }
     case kNoteOff:
     {
       creatorKeyIdx_ = 0;
+      sustained_ = false;
       writeOutputSignals(destTime);
 
       // set new values
@@ -649,7 +659,7 @@ void EventsToSignals::processEvent(const Event& eventParam)
 // a note with the given pitch and velocity.
 void EventsToSignals::processNoteOnEvent(const Event& e)
 {
-  int keyIdx = getKeyIndex(e, protocol_);
+  int keyIdx = getKeyIndex(e);
   keyStates_[keyIdx].state = KeyState::kOn;
   keyStates_[keyIdx].noteOnIndex = currentNoteOnIndex++;
   keyStates_[keyIdx].pitch = e.value1;
@@ -702,7 +712,7 @@ void EventsToSignals::processNoteOnEvent(const Event& e)
 
 void EventsToSignals::processNoteOffEvent(const Event& e)
 {
-  int keyIdx = getKeyIndex(e, protocol_);
+  int keyIdx = getKeyIndex(e);
   if (sustainPedalActive_)
   {
     keyStates_[keyIdx].state = KeyState::kSustained;
@@ -764,9 +774,13 @@ void EventsToSignals::processNoteOffEvent(const Event& e)
   {
     Event eventToWrite = e;
     eventToWrite.type = sustainPedalActive_ ? kNoteSustain : kNoteOff;
+
+    // under MPE the same key can be down on two channels, so the note-off
+    // must match the channel too.
+    const int channel = (protocol_ == "MPE") ? (int)e.channel : kAny;
     for (int v = 1; v < polyphony_ + 1; ++v)
     {
-      if (voices[v].creatorKeyIdx_ == keyIdx)
+      if (voiceMatches(voices[v], channel, keyIdx))
       {
         voices[v].writeNoteEvent(eventToWrite, keyIdx, true, true);
 
@@ -807,7 +821,7 @@ void EventsToSignals::processChannelPressureEvent(const Event& event)
         // write any voice matching channel
         for (int v = 1; v < polyphony_ + 1; ++v)
         {
-          if (voices[v].creatorKeyIdx_ == event.channel)
+          if (voiceFollowsChannel(voices[v], event.channel))
           {
             voices[v].currentZ = event.value1;
           }
@@ -867,7 +881,7 @@ void EventsToSignals::processPitchWheelEvent(const Event& event)
         // write any voice matching channel
         for (int v = 1; v < polyphony_ + 1; ++v)
         {
-          if (voices[v].creatorKeyIdx_ == event.channel)
+          if (voiceFollowsChannel(voices[v], event.channel))
           {
             voices[v].currentPitchBend = event.value1;
           }
@@ -956,7 +970,7 @@ void EventsToSignals::processControllerEvent(const Event& event)
           // modulate other voices matching event channel.
           for (int v = 1; v < polyphony_ + 1; ++v)
           {
-            if (voices[v].creatorKeyIdx_ == event.channel)
+            if (voiceFollowsChannel(voices[v], event.channel))
             {
               if (ctrl == voiceModCC_)
               {
@@ -988,7 +1002,7 @@ void EventsToSignals::processSustainPedalEvent(const Event& event)
     for (int i = 1; i < polyphony_ + 1; ++i)
     {
       Voice& v = voices[i];
-      if (keyStates_[v.creatorKeyIdx_].state == KeyState::kSustained)
+      if (v.sustained_)
       {
         Event newEvent;
         newEvent.type = kNoteOff;
