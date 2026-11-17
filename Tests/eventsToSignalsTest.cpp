@@ -756,3 +756,89 @@ TEST_CASE("madronalib/core/events/note_pitch_offset_starts_with_the_note", "[eve
   runPastBendGlide(t);
   REQUIRE(t.pitchAt(0, kFramesPerBlock - 1) == Approx(62.f));
 }
+
+// ---- MPE: expression sent before the note-on ----
+// An MPE controller sends a note's starting bend, timbre and pressure on its
+// channel just before the note-on. A key struck hard sends pressure 1 and then
+// nothing more until the pressure falls, so the value sent before the note is
+// the only one the note gets.
+
+static Event makeChannelController(int channel, int cc, float value, int time = 0)
+{
+  Event e = makeController(cc, value, time);
+  e.channel = channel;
+  return e;
+}
+
+static float xEnd(TestFixture& t, int voice)
+{
+  return t.ctx.getInputVoice(voice).outputs.constRow(kX)[kFramesPerBlock - 1];
+}
+
+TEST_CASE("madronalib/core/events/mpe_expression_before_note_on", "[events]")
+{
+  // the expression arrives a block early, a few samples early, or at the
+  // note-on's own time
+  struct Timing { int exprBlock; int exprTime; int noteTime; };
+  for (Timing timing : {Timing{0, 10, 10}, Timing{0, 5, 10}, Timing{-1, 10, 10}})
+  {
+    TestFixture t;
+    t.ctx.setInputPolyphony(2);
+    t.ctx.setInputProtocol("MPE");
+    t.ctx.setInputMPEPitchBend(24.f);
+
+    // an earlier note on the channel, ended as a controller ends it
+    t.callback(kFramesPerBlock, {makeNoteOnOnChannel(6, 50)});
+    t.callback(kFramesPerBlock, {makeChannelPressure(6, 0.f), makeNoteOffOnChannel(6, 50)});
+    runPastBendGlide(t);
+
+    std::vector<Event> expr = {makeChannelPressure(6, 1.f), makeChannelController(6, 74, 0.75f),
+                               makeChannelController(6, 73, 0.25f), makePitchBend(6, 0.5f)};
+    for (auto& e : expr) e.time = timing.exprTime;
+    Event note = makeNoteOnOnChannel(6, 53, timing.noteTime);
+
+    if (timing.exprBlock < 0)
+    {
+      t.callback(kFramesPerBlock, expr);
+      t.callback(kFramesPerBlock, {note});
+    }
+    else
+    {
+      expr.push_back(note);
+      t.callback(kFramesPerBlock, expr);
+    }
+
+    // the note starts with all of it, with no glide up from the last note's values
+    int v = t.ctx.getNewestInputVoice();
+    REQUIRE(t.gateEnd(v) > 0.f);
+    REQUIRE(zEnd(t, v) == Approx(1.f));
+    REQUIRE(yEnd(t, v) == Approx(0.75f));
+    REQUIRE(xEnd(t, v) == Approx(0.25f));
+    REQUIRE(bendEnd(t, v) == Approx(0.5f * 24.f / 12.f));
+
+    // and keeps it while nothing more is sent
+    runPastBendGlide(t);
+    REQUIRE(zEnd(t, v) == Approx(1.f));
+  }
+}
+
+TEST_CASE("madronalib/core/events/mpe_channel_state_is_per_channel", "[events]")
+{
+  TestFixture t;
+  t.ctx.setInputProtocol("MPE");
+
+  // pressure waiting on channel 6 does not reach a note on channel 7
+  t.callback(kFramesPerBlock, {makeChannelPressure(6, 1.f)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(7, 60)});
+  runPastBendGlide(t);
+  REQUIRE(zEnd(t, t.ctx.getNewestInputVoice()) == 0.f);
+
+  // a note's pressure does not carry over to the next note on its channel
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(6, 62)});
+  int v = t.ctx.getNewestInputVoice();
+  REQUIRE(zEnd(t, v) == Approx(1.f));
+  t.callback(kFramesPerBlock, {makeNoteOffOnChannel(6, 62)});
+  t.callback(kFramesPerBlock, {makeNoteOnOnChannel(6, 64)});
+  runPastBendGlide(t);
+  REQUIRE(zEnd(t, t.ctx.getNewestInputVoice()) == 0.f);
+}
